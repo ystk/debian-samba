@@ -1,0 +1,30 @@
+Description: Upstream changes introduced in version 2:3.5.6~dfsg-3squeeze2
+ This patch has been created by dpkg-source during the package build.
+ Here's the last changelog entry, hopefully it gives details on why
+ those changes were made:
+ .
+ samba (2:3.5.6~dfsg-3squeeze2) stable-security; urgency=high
+ .
+   * Security update, fixing the following issue:
+     - CVE-2011-0719: denial of service by memory corruption
+ .
+ The person named in the Author field signed this changelog entry.
+Author: Christian Perrier <bubulle@debian.org>
+
+---
+The information above should follow the Patch Tagging Guidelines, please
+checkout http://dep.debian.net/deps/dep3/ to learn about the format. Here
+are templates for supplementary fields that you might want to add:
+
+Origin: <vendor|upstream|other>, <url of original patch>
+Bug: <url in upstream bugtracker>
+Bug-Debian: http://bugs.debian.org/<bugnumber>
+Bug-Ubuntu: https://launchpad.net/bugs/<bugnumber>
+Forwarded: <no|not-needed|url proving that it has been forwarded>
+Reviewed-By: <name and email of someone who approved the patch>
+Last-Update: <YYYY-MM-DD>
+
+--- /dev/null
++++ samba-3.5.6~dfsg/nohup.out
+@@ -0,0 +1 @@
++À la révision 3679.
