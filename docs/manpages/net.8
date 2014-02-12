@@ -1,161 +1,13 @@
+'\" t
 .\"     Title: net
 .\"    Author: [see the "AUTHOR" section]
-.\" Generator: DocBook XSL Stylesheets v1.74.0 <http://docbook.sf.net/>
-.\"      Date: 06/18/2010
+.\" Generator: DocBook XSL Stylesheets v1.75.2 <http://docbook.sf.net/>
+.\"      Date: 06/22/2012
 .\"    Manual: System Administration tools
-.\"    Source: Samba 3.5
+.\"    Source: Samba 3.6
 .\"  Language: English
 .\"
-.TH "NET" "8" "06/18/2010" "Samba 3\&.5" "System Administration tools"
-.\" -----------------------------------------------------------------
-.\" * (re)Define some macros
-.\" -----------------------------------------------------------------
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.\" toupper - uppercase a string (locale-aware)
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.de toupper
-.tr aAbBcCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWxXyYzZ
-\\$*
-.tr aabbccddeeffgghhiijjkkllmmnnooppqqrrssttuuvvwwxxyyzz
-..
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.\" SH-xref - format a cross-reference to an SH section
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.de SH-xref
-.ie n \{\
-.\}
-.toupper \\$*
-.el \{\
-\\$*
-.\}
-..
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.\" SH - level-one heading that works better for non-TTY output
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.de1 SH
-.\" put an extra blank line of space above the head in non-TTY output
-.if t \{\
-.sp 1
-.\}
-.sp \\n[PD]u
-.nr an-level 1
-.set-an-margin
-.nr an-prevailing-indent \\n[IN]
-.fi
-.in \\n[an-margin]u
-.ti 0
-.HTML-TAG ".NH \\n[an-level]"
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-\." make the size of the head bigger
-.ps +3
-.ft B
-.ne (2v + 1u)
-.ie n \{\
-.\" if n (TTY output), use uppercase
-.toupper \\$*
-.\}
-.el \{\
-.nr an-break-flag 0
-.\" if not n (not TTY), use normal case (not uppercase)
-\\$1
-.in \\n[an-margin]u
-.ti 0
-.\" if not n (not TTY), put a border/line under subheading
-.sp -.6
-\l'\n(.lu'
-.\}
-..
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.\" SS - level-two heading that works better for non-TTY output
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.de1 SS
-.sp \\n[PD]u
-.nr an-level 1
-.set-an-margin
-.nr an-prevailing-indent \\n[IN]
-.fi
-.in \\n[IN]u
-.ti \\n[SN]u
-.it 1 an-trap
-.nr an-no-space-flag 1
-.nr an-break-flag 1
-.ps \\n[PS-SS]u
-\." make the size of the head bigger
-.ps +2
-.ft B
-.ne (2v + 1u)
-.if \\n[.$] \&\\$*
-..
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.\" BB/BE - put background/screen (filled box) around block of text
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.de BB
-.if t \{\
-.sp -.5
-.br
-.in +2n
-.ll -2n
-.gcolor red
-.di BX
-.\}
-..
-.de EB
-.if t \{\
-.if "\\$2"adjust-for-leading-newline" \{\
-.sp -1
-.\}
-.br
-.di
-.in
-.ll
-.gcolor
-.nr BW \\n(.lu-\\n(.i
-.nr BH \\n(dn+.5v
-.ne \\n(BHu+.5v
-.ie "\\$2"adjust-for-leading-newline" \{\
-\M[\\$1]\h'1n'\v'+.5v'\D'P \\n(BWu 0 0 \\n(BHu -\\n(BWu 0 0 -\\n(BHu'\M[]
-.\}
-.el \{\
-\M[\\$1]\h'1n'\v'-.5v'\D'P \\n(BWu 0 0 \\n(BHu -\\n(BWu 0 0 -\\n(BHu'\M[]
-.\}
-.in 0
-.sp -.5v
-.nf
-.BX
-.in
-.sp .5v
-.fi
-.\}
-..
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.\" BM/EM - put colored marker in margin next to block of text
-.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-.de BM
-.if t \{\
-.br
-.ll -2n
-.gcolor red
-.di BX
-.\}
-..
-.de EM
-.if t \{\
-.br
-.di
-.ll
-.gcolor
-.nr BH \\n(dn
-.ne \\n(BHu
-\M[\\$1]\D'P -.75n 0 0 \\n(BHu -(\\n[.i]u - \\n(INu - .75n) 0 0 -\\n(BHu'\M[]
-.in 0
-.nf
-.BX
-.in
-.fi
-.\}
-..
+.TH "NET" "8" "06/22/2012" "Samba 3\&.6" "System Administration tools"
 .\" -----------------------------------------------------------------
 .\" * set default formatting
 .\" -----------------------------------------------------------------
@@ -166,13 +18,11 @@
 .\" -----------------------------------------------------------------
 .\" * MAIN CONTENT STARTS HERE *
 .\" -----------------------------------------------------------------
-.SH "Name"
+.SH "NAME"
 net \- Tool for administration of Samba and remote CIFS servers\&.
-.SH "Synopsis"
-.fam C
+.SH "SYNOPSIS"
 .HP \w'\ 'u
-\FCnet\F[] {<ads|rap|rpc>} [\-h] [\-w\ workgroup] [\-W\ myworkgroup] [\-U\ user] [\-I\ ip\-address] [\-p\ port] [\-n\ myname] [\-s\ conffile] [\-S\ server] [\-l] [\-P] [\-d\ debuglevel] [\-V] [\-\-request\-timeout\ seconds]
-.fam
+net {<ads|rap|rpc>} [\-h] [\-w\ workgroup] [\-W\ myworkgroup] [\-U\ user] [\-I\ ip\-address] [\-p\ port] [\-n\ myname] [\-s\ conffile] [\-S\ server] [\-l] [\-P] [\-d\ debuglevel] [\-V] [\-\-request\-timeout\ seconds]
 .SH "DESCRIPTION"
 .PP
 This tool is part of the
@@ -185,6 +35,11 @@ The Samba net utility is meant to work just like the net utility available for w
 \-h|\-\-help
 .RS 4
 Print a summary of command line options\&.
+.RE
+.PP
+\-k|\-\-kerberos
+.RS 4
+Try to authenticate with kerberos\&. Only useful in an Active Directory environment\&.
 .RE
 .PP
 \-w target\-workgroup
@@ -217,15 +72,15 @@ Port on the target server to connect to (usually 139 or 445)\&. Defaults to tryi
 This option allows you to override the NetBIOS name that Samba uses for itself\&. This is identical to setting the
 \m[blue]\fB\%smb.conf.5.html#\fR\m[]
 parameter in the
-\FCsmb\&.conf\F[]
+smb\&.conf
 file\&. However, a command line setting will take precedence over settings in
-\FCsmb\&.conf\F[]\&.
+smb\&.conf\&.
 .RE
 .PP
 \-s|\-\-configfile <configuration file>
 .RS 4
 The file specified contains the configuration details required by the server\&. The information in this file includes server\-specific information such as what printcap file to use, as well as descriptions of all the services that the server is to provide\&. See
-\FCsmb\&.conf\F[]
+smb\&.conf
 for more information\&. The default configuration file name is determined at compile time\&.
 .RE
 .PP
@@ -261,7 +116,7 @@ Levels above 1 will generate considerable amounts of log data, and should only b
 Note that specifying this parameter here will override the
 \m[blue]\fB\%smb.conf.5.html#\fR\m[]
 parameter in the
-\FCsmb\&.conf\F[]
+smb\&.conf
 file\&.
 .RE
 .SH "COMMANDS"
@@ -271,21 +126,21 @@ This command allows the Samba machine account password to be set from an externa
 .SS "TIME"
 .PP
 The
-\FCNET TIME\F[]
+NET TIME
 command allows you to view the time on a remote server or synchronise the time on the local server with the time on the remote server\&.
 .SS "TIME"
 .PP
 Without any options, the
-\FCNET TIME\F[]
+NET TIME
 command displays the time on the remote server\&.
 .SS "TIME SYSTEM"
 .PP
 Displays the time on the remote server in a format ready for
-\FC/bin/date\F[]\&.
+/bin/date\&.
 .SS "TIME SET"
 .PP
 Tries to set the date and time of the local server to that on the remote server using
-\FC/bin/date\F[]\&.
+/bin/date\&.
 .SS "TIME ZONE"
 .PP
 Displays the timezone in hours from GMT on the remote computer\&.
@@ -354,7 +209,7 @@ Print information on specified
 .PP
 List files opened by specified
 \fIuser\fR\&. Please note that
-\FCnet rap file user\F[]
+net rap file user
 does not work against Samba servers\&.
 .SS "SESSION"
 .SS "RAP SESSION"
@@ -388,7 +243,6 @@ Validate whether the specified user can log in to the remote server\&. If the pa
 .sp
 .\}
 .RS 4
-.BM yellow
 .it 1 an-trap
 .nr an-no-space-flag 1
 .nr an-break-flag 1
@@ -400,7 +254,6 @@ Validate whether the specified user can log in to the remote server\&. If the pa
 .PP
 Currently NOT implemented\&.
 .sp .5v
-.EM yellow
 .RE
 .SS "RAP GROUPMEMBER"
 .SS "RAP GROUPMEMBER LIST GROUP"
@@ -421,7 +274,6 @@ on the remote server\&. Only works with OS/2 servers\&.
 .sp
 .\}
 .RS 4
-.BM yellow
 .it 1 an-trap
 .nr an-no-space-flag 1
 .nr an-break-flag 1
@@ -433,7 +285,6 @@ on the remote server\&. Only works with OS/2 servers\&.
 .PP
 Currently NOT implemented\&.
 .sp .5v
-.EM yellow
 .RE
 .SS "RAP SERVICE"
 .SS "RAP SERVICE START NAME [arguments...]"
@@ -443,7 +294,6 @@ Start the specified service on the remote server\&. Not implemented yet\&.
 .sp
 .\}
 .RS 4
-.BM yellow
 .it 1 an-trap
 .nr an-no-space-flag 1
 .nr an-break-flag 1
@@ -455,7 +305,6 @@ Start the specified service on the remote server\&. Not implemented yet\&.
 .PP
 Currently NOT implemented\&.
 .sp .5v
-.EM yellow
 .RE
 .SS "RAP SERVICE STOP"
 .PP
@@ -464,7 +313,6 @@ Stop the specified service on the remote server\&.
 .sp
 .\}
 .RS 4
-.BM yellow
 .it 1 an-trap
 .nr an-no-space-flag 1
 .nr an-break-flag 1
@@ -476,7 +324,6 @@ Stop the specified service on the remote server\&.
 .PP
 Currently NOT implemented\&.
 .sp .5v
-.EM yellow
 .RE
 .SS "RAP PASSWORD \fIUSER\fR \fIOLDPASS\fR \fINEWPASS\fR"
 .PP
@@ -625,6 +472,7 @@ type \- Type of the group; either \'domain\', \'local\', or \'builtin\'
 .IP \(bu 2.3
 .\}
 comment \- Freeform text description of the group
+.RE
 .sp
 .RE
 .SS "GROUPMAP ADD"
@@ -634,24 +482,10 @@ Add a new group mapping entry:
 .if n \{\
 .RS 4
 .\}
-.fam C
-.ps -1
 .nf
-.if t \{\
-.sp -1
-.\}
-.BB lightgray adjust-for-leading-newline
-.sp -1
-
 net groupmap add {rid=int|sid=string} unixgroup=string \e
 	[type={domain|local}] [ntgroup=string] [comment=string]
-.EB lightgray adjust-for-leading-newline
-.if t \{\
-.sp 1
-.\}
 .fi
-.fam
-.ps +1
 .if n \{\
 .RE
 .\}
@@ -671,24 +505,10 @@ Update en existing group entry\&.
 .if n \{\
 .RS 4
 .\}
-.fam C
-.ps -1
 .nf
-.if t \{\
-.sp -1
-.\}
-.BB lightgray adjust-for-leading-newline
-.sp -1
-
 net groupmap modify {ntgroup=string|sid=SID} [unixgroup=string] \e
        [comment=string] [type={domain|local}]
-.EB lightgray adjust-for-leading-newline
-.if t \{\
-.sp 1
-.\}
 .fi
-.fam
-.ps +1
 .if n \{\
 .RE
 .\}
@@ -720,12 +540,12 @@ Add a interdomain trust account for
 with the account flag
 \fB\'I\'\fR
 (interdomain trust account)\&. This is required for incoming trusts to work\&. It makes Samba be a trusted domain of the foreign (trusting) domain\&. Users of the Samba domain will be made available in the foreign domain\&. If the command is used against localhost it has the same effect as
-\FCsmbpasswd \-a \-i DOMAIN\F[]\&. Please note that both commands expect a appropriate UNIX account\&.
+smbpasswd \-a \-i DOMAIN\&. Please note that both commands expect a appropriate UNIX account\&.
 .SS "RPC TRUSTDOM DEL DOMAIN"
 .PP
 Remove interdomain trust account for
 \fIDOMAIN\fR\&. If it is used against localhost it has the same effect as
-\FCsmbpasswd \-x DOMAIN$\F[]\&.
+smbpasswd \-x DOMAIN$\&.
 .SS "RPC TRUSTDOM ESTABLISH DOMAIN"
 .PP
 Establish a trust relationship to a trusted domain\&. Interdomain account must already be created on the remote PDC\&. This is required for outgoing trusts to work\&. It makes Samba be a trusting domain of a foreign (trusted) domain\&. Users of the foreign domain will be made available in our domain\&. You\'ll need winbind and a working idmap config to make them appear in your system\&.
@@ -735,6 +555,139 @@ Abandon relationship to trusted domain
 .SS "RPC TRUSTDOM LIST"
 .PP
 List all interdomain trust relationships\&.
+.SS "RPC TRUSTDOM LIST"
+.PP
+List all interdomain trust relationships\&.
+.SS "RPC TRUST"
+.SS "RPC TRUST CREATE"
+.PP
+Create a trust trust object by calling lsaCreateTrustedDomainEx2\&. The can be done on a single server or on two servers at once with the possibility to use a random trust password\&.
+.PP
+\fBOptions:\fR
+.PP
+otherserver
+.RS 4
+Domain controller of the second domain
+.RE
+.PP
+otheruser
+.RS 4
+Admin user in the second domain
+.RE
+.PP
+otherdomainsid
+.RS 4
+SID of the second domain
+.RE
+.PP
+other_netbios_domain
+.RS 4
+NetBIOS (short) name of the second domain
+.RE
+.PP
+otherdomain
+.RS 4
+DNS (full) name of the second domain
+.RE
+.PP
+trustpw
+.RS 4
+Trust password
+.RE
+.PP
+\fBExamples:\fR
+.PP
+Create a trust object on srv1\&.dom1\&.dom for the domain dom2
+.RS 4
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+net rpc trust create \e
+    otherdomainsid=S\-x\-x\-xx\-xxxxxxxxxx\-xxxxxxxxxx\-xxxxxxxxx \e
+    other_netbios_domain=dom2 \e
+    otherdomain=dom2\&.dom \e
+    trustpw=12345678 \e
+    \-S srv1\&.dom1\&.dom
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+Create a trust relationship between dom1 and dom2
+.RS 4
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+net rpc trust create \e
+    otherserver=srv2\&.dom2\&.test \e
+    otheruser=dom2adm \e
+    \-S srv1\&.dom1\&.dom
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.SS "RPC TRUST DELETE"
+.PP
+Delete a trust trust object by calling lsaDeleteTrustedDomain\&. The can be done on a single server or on two servers at once\&.
+.PP
+\fBOptions:\fR
+.PP
+otherserver
+.RS 4
+Domain controller of the second domain
+.RE
+.PP
+otheruser
+.RS 4
+Admin user in the second domain
+.RE
+.PP
+otherdomainsid
+.RS 4
+SID of the second domain
+.RE
+.PP
+\fBExamples:\fR
+.PP
+Delete a trust object on srv1\&.dom1\&.dom for the domain dom2
+.RS 4
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+net rpc trust delete \e
+    otherdomainsid=S\-x\-x\-xx\-xxxxxxxxxx\-xxxxxxxxxx\-xxxxxxxxx \e
+    \-S srv1\&.dom1\&.dom
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.PP
+Delete a trust relationship between dom1 and dom2
+.RS 4
+.sp
+.if n \{\
+.RS 4
+.\}
+.nf
+net rpc trust delete \e
+    otherserver=srv2\&.dom2\&.test \e
+    otheruser=dom2adm \e
+    \-S srv1\&.dom1\&.dom
+.fi
+.if n \{\
+.RE
+.\}
+.RE
+.SS ""
 .SS "RPC RIGHTS"
 .PP
 This subcommand is used to view and manage Samba\'s rights assignments (also referred to as privileges)\&. There are three options currently available:
@@ -782,14 +735,14 @@ Dump remote SAM database to local LDIF file or standard output\&.
 .SS "RPC GETSID"
 .PP
 Fetch domain SID and store it in the local
-\FCsecrets\&.tdb\F[]\&.
+secrets\&.tdb\&.
 .SS "ADS LEAVE"
 .PP
 Make the remote host leave the domain it is part of\&.
 .SS "ADS STATUS"
 .PP
 Print out status of machine account of the local machine in ADS\&. Prints out quite some debug info\&. Aimed at developers, regular users should use
-\FCNET ADS TESTJOIN\F[]\&.
+NET ADS TESTJOIN\&.
 .SS "ADS PRINTER"
 .SS "ADS PRINTER INFO [PRINTER] [SERVER]"
 .PP
@@ -911,9 +864,78 @@ Dumps the mappings contained in the local tdb file specified\&. This command is 
 .SS "IDMAP RESTORE [input file]"
 .PP
 Restore the mappings from the specified file or stdin\&.
-.SS "IDMAP SECRET <DOMAIN>|ALLOC <secret>"
+.SS "IDMAP SECRET <DOMAIN> <secret>"
 .PP
 Store a secret for the specified domain, used primarily for domains that use idmap_ldap as a backend\&. In this case the secret is used as the password for the user DN used to bind to the ldap server\&.
+.SS "IDMAP DELETE [\-f] [\-\-db=<DB>] <ID>"
+.PP
+Delete a mapping sid <\-> gid or sid <\-> uid from the IDMAP database\&. The mapping is given by <ID> which may either be a sid: S\-x\-\&.\&.\&., a gid: "GID number" or a uid: "UID number"\&. Use \-f to delete an invalid partial mapping <ID> \-> xx
+.PP
+Use "smbcontrol all idmap \&.\&.\&." to notify running smbd instances\&. See the
+\fBsmbcontrol\fR(1)
+manpage for details\&.
+.SS "IDMAP CHECK [\-v] [\-r] [\-a] [\-T] [\-f] [\-l] [\-\-db=<DB>]"
+.PP
+Check and repair the IDMAP database\&. If no option is given a read only check of the database is done\&. Among others an interactive or automatic repair mode may be chosen with one of the following options:
+.PP
+\-r|\-\-repair
+.RS 4
+Interactive repair mode, ask a lot of questions\&.
+.RE
+.PP
+\-a|\-\-auto
+.RS 4
+Noninteractive repair mode, use default answers\&.
+.RE
+.PP
+\-v|\-\-verbose
+.RS 4
+Produce more output\&.
+.RE
+.PP
+\-f|\-\-force
+.RS 4
+Try to apply changes, even if they do not apply cleanly\&.
+.RE
+.PP
+\-T|\-\-test
+.RS 4
+Dry run, show what changes would be made but don\'t touch anything\&.
+.RE
+.PP
+\-l|\-\-lock
+.RS 4
+Lock the database while doing the check\&.
+.RE
+.PP
+\-\-db <DB>
+.RS 4
+Check the specified database\&.
+.RE
+.PP
+.RS 4
+.RE
+It reports about the finding of the following errors:
+.PP
+Missing reverse mapping:
+.RS 4
+A record with mapping A\->B where there is no B\->A\&. Default action in repair mode is to "fix" this by adding the reverse mapping\&.
+.RE
+.PP
+Invalid mapping:
+.RS 4
+A record with mapping A\->B where B\->C\&. Default action is to "delete" this record\&.
+.RE
+.PP
+Missing or invalid HWM:
+.RS 4
+A high water mark is not at least equal to the largest ID in the database\&. Default action is to "fix" this by setting it to the largest ID found +1\&.
+.RE
+.PP
+Invalid record:
+.RS 4
+Something we failed to parse\&. Default action is to "edit" it in interactive and "delete" it in automatic mode\&.
+.RE
 .SS "USERSHARE"
 .PP
 Starting with version 3\&.0\&.23, a Samba server now supports the ability for non\-root users to add user defined shares to be exported using the "net usershare" commands\&.
@@ -1075,6 +1097,157 @@ Set the list of includes for the provided section (global or share) to the given
 .SS "CONF DELINCLUDES section"
 .PP
 Delete the list of includes from the provided section (global or share)\&.
+.SS "REGISTRY"
+.PP
+Manipulate Samba\'s registry\&.
+.PP
+The registry commands are:
+.RS 4
+net registry enumerate   \- Enumerate registry keys and values\&.
+.RE
+.RS 4
+net registry enumerate_recursive \- Enumerate registry key and its subkeys\&.
+.RE
+.RS 4
+net registry createkey   \- Create a new registry key\&.
+.RE
+.RS 4
+net registry deletekey   \- Delete a registry key\&.
+.RE
+.RS 4
+net registry deletekey_recursive \- Delete a registry key with subkeys\&.
+.RE
+.RS 4
+net registry getvalue    \- Print a registry value\&.
+.RE
+.RS 4
+net registry getvalueraw \- Print a registry value (raw format)\&.
+.RE
+.RS 4
+net registry setvalue    \- Set a new registry value\&.
+.RE
+.RS 4
+net registry increment   \- Increment a DWORD registry value under a lock\&.
+.RE
+.RS 4
+net registry deletevalue \- Delete a registry value\&.
+.RE
+.RS 4
+net registry getsd       \- Get security descriptor\&.
+.RE
+.RS 4
+net registry getsd_sdd1  \- Get security descriptor in sddl format\&.
+.RE
+.RS 4
+net registry setsd_sdd1  \- Set security descriptor from sddl format
+string\&.
+.RE
+.RS 4
+net registry import      \- Import a registration entries (\&.reg) file\&.
+.RE
+.RS 4
+net registry export      \- Export a registration entries (\&.reg) file\&.
+.RE
+.RS 4
+net registry convert     \- Convert a registration entries (\&.reg) file\&.
+.RE
+.SS "REGISTRY ENUMERATE key "
+.PP
+Enumerate subkeys and values of
+\fIkey\fR\&.
+.SS "REGISTRY ENUMERATE_RECURSIVE key "
+.PP
+Enumerate values of
+\fIkey\fR
+and its subkeys\&.
+.SS "REGISTRY CREATEKEY key "
+.PP
+Create a new
+\fIkey\fR
+if not yet existing\&.
+.SS "REGISTRY DELETEKEY key "
+.PP
+Delete the given
+\fIkey\fR
+and its values from the registry, if it has no subkeys\&.
+.SS "REGISTRY DELETEKEY_RECURSIVE key "
+.PP
+Delete the given
+\fIkey\fR
+and all of its subkeys and values from the registry\&.
+.SS "REGISTRY GETVALUE key name"
+.PP
+Output type and actual value of the value
+\fIname\fR
+of the given
+\fIkey\fR\&.
+.SS "REGISTRY GETVALUERAW key name"
+.PP
+Output the actual value of the value
+\fIname\fR
+of the given
+\fIkey\fR\&.
+.SS "REGISTRY SETVALUE key name type value ..."
+.PP
+Set the value
+\fIname\fR
+of an existing
+\fIkey\fR\&.
+\fItype\fR
+may be one of
+\fIsz\fR,
+\fImulti_sz\fR
+or
+\fIdword\fR\&. In case of
+\fImulti_sz\fR
+\fIvalue\fR
+may be given multiple times\&.
+.SS "REGISTRY INCREMENT key name [inc]"
+.PP
+Increment the DWORD value
+\fIname\fR
+of
+\fIkey\fR
+by
+\fIinc\fR
+while holding a g_lock\&.
+\fIinc\fR
+defaults to 1\&.
+.SS "REGISTRY DELETEVALUE key name"
+.PP
+Delete the value
+\fIname\fR
+of the given
+\fIkey\fR\&.
+.SS "REGISTRY GETSD key"
+.PP
+Get the security descriptor of the given
+\fIkey\fR\&.
+.SS "REGISTRY GETSD_SDDL key"
+.PP
+Get the security descriptor of the given
+\fIkey\fR
+as a Security Descriptor Definition Language (SDDL) string\&.
+.SS "REGISTRY SETSD_SDDL keysd"
+.PP
+Set the security descriptor of the given
+\fIkey\fR
+from a Security Descriptor Definition Language (SDDL) string
+\fIsd\fR\&.
+.SS "REGISTRY IMPORT file[opt]"
+.PP
+Import a registration entries (\&.reg)
+\fIfile\fR\&.
+.SS "REGISTRY EXPORT keyfile[opt]"
+.PP
+Export a
+\fIkey\fR
+to a registration entries (\&.reg)
+\fIfile\fR\&.
+.SS "REGISTRY CONVERT in out [[inopt] outopt]"
+.PP
+Convert a registration entries (\&.reg) file
+\fIin\fR\&.
 .SS "EVENTLOG"
 .PP
 Starting with version 3\&.4\&.0 net can read, dump, import and export native win32 eventlog files (usually *\&.evt)\&. evt files are used by the native Windows eventviewer tools\&.
@@ -1171,7 +1344,7 @@ parameter cannot be NULL\&.
 \fIOU\fR
 can be set to a RFC 1779 LDAP DN, like
 \fIou=mymachines,cn=Users,dc=example,dc=com\fR
-in order to create the machine account in a non\-default LDAP containter\&. This optional parameter is only supported when joining Active Directory Domains\&.
+in order to create the machine account in a non\-default LDAP container\&. This optional parameter is only supported when joining Active Directory Domains\&.
 .RE
 .sp
 .RS 4
@@ -1209,6 +1382,7 @@ defines the password for the domain account defined with
 .\}
 \fIREBOOT\fR
 is an optional parameter that can be set to reboot the remote machine after successful join to the domain\&.
+.RE
 .sp
 .RE
 .PP
@@ -1256,6 +1430,7 @@ defines the password for the domain account defined with
 .\}
 \fIREBOOT\fR
 is an optional parameter that can be set to reboot the remote machine after successful unjoin from the domain\&.
+.RE
 .sp
 .RE
 .PP
@@ -1315,6 +1490,7 @@ defines the password for the domain account defined with
 .\}
 \fIREBOOT\fR
 is an optional parameter that can be set to reboot the remote machine after successful rename in the domain\&.
+.RE
 .sp
 .RE
 .PP
@@ -1329,7 +1505,7 @@ Manage global locks\&.
 .SS "G_LOCK DO lockname timeout command"
 .PP
 Execute a shell command under a global lock\&. This might be useful to define the order in which several shell commands will be executed\&. The locking information is stored in a file called
-\FCg_lock\&.tdb\F[]\&. In setups with CTDB running, the locking information will be available on all cluster nodes\&.
+g_lock\&.tdb\&. In setups with CTDB running, the locking information will be available on all cluster nodes\&.
 .sp
 .RS 4
 .ie n \{\
@@ -1365,6 +1541,7 @@ defines the timeout\&.
 .\}
 \fICOMMAND\fR
 defines the shell command to execute\&.
+.RE
 .SS "G_LOCK LOCKS"
 .PP
 Print a list of all currently existing locknames\&.

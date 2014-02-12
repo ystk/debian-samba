@@ -15,7 +15,7 @@ use strict;
 use Parse::Pidl::Typelist qw(hasType getType mapTypeName typeHasBody);
 use Parse::Pidl::Util qw(has_property ParseExpr ParseExprExt print_uuid unmake_str);
 use Parse::Pidl::CUtil qw(get_pointer_to get_value_of get_array_element);
-use Parse::Pidl::NDR qw(GetPrevLevel GetNextLevel ContainsDeferred is_charset_array);
+use Parse::Pidl::NDR qw(GetPrevLevel GetNextLevel ContainsDeferred ContainsPipe is_charset_array);
 use Parse::Pidl::Samba4 qw(is_intree choose_header ArrayDynamicallyAllocated);
 use Parse::Pidl::Samba4::Header qw(GenerateFunctionInEnv GenerateFunctionOutEnv EnvSubstituteValue GenerateStructEnv);
 use Parse::Pidl qw(warning);
@@ -206,11 +206,11 @@ sub ParseArrayPushHeader($$$$$$)
 	if ((!$l->{IS_SURROUNDING}) and $l->{IS_CONFORMANT}) {
 		$self->pidl("NDR_CHECK(ndr_push_uint3264($ndr, NDR_SCALARS, $size));");
 	}
-	
+
 	if ($l->{IS_VARYING}) {
 		$self->pidl("NDR_CHECK(ndr_push_uint3264($ndr, NDR_SCALARS, 0));");  # array offset
 		$self->pidl("NDR_CHECK(ndr_push_uint3264($ndr, NDR_SCALARS, $length));");
-	} 
+	}
 
 	return $length;
 }
@@ -315,25 +315,83 @@ sub check_null_pointer($$$$)
 	}
 }
 
+sub ParseArrayPullGetSize($$$$$$)
+{
+	my ($self,$e,$l,$ndr,$var_name,$env) = @_;
+
+	my $size;
+
+	if ($l->{IS_CONFORMANT}) {
+		$size = "ndr_get_array_size($ndr, " . get_pointer_to($var_name) . ")";
+	} elsif ($l->{IS_ZERO_TERMINATED} and $l->{SIZE_IS} == 0 and $l->{LENGTH_IS} == 0) { # Noheader arrays
+		$size = "ndr_get_string_size($ndr, sizeof(*$var_name))";
+	} else {
+		$size = ParseExprExt($l->{SIZE_IS}, $env, $e->{ORIGINAL},
+			check_null_pointer($e, $env, sub { $self->pidl(shift); },
+					   "return ndr_pull_error($ndr, NDR_ERR_INVALID_POINTER, \"NULL Pointer for size_is()\");"),
+			check_fully_dereferenced($e, $env));
+	}
+
+	$self->pidl("size_$e->{NAME}_$l->{LEVEL_INDEX} = $size;");
+	my $array_size = "size_$e->{NAME}_$l->{LEVEL_INDEX}";
+
+	if (my $range = has_property($e, "range")) {
+		my ($low, $high) = split(/,/, $range, 2);
+		if ($low < 0) {
+			warning(0, "$low is invalid for the range of an array size");
+		}
+		if ($low == 0) {
+			$self->pidl("if ($array_size > $high) {");
+		} else {
+			$self->pidl("if ($array_size < $low || $array_size > $high) {");
+		}
+		$self->pidl("\treturn ndr_pull_error($ndr, NDR_ERR_RANGE, \"value out of range\");");
+		$self->pidl("}");
+	}
+
+	return $array_size;
+}
+
+#####################################################################
+# parse an array - pull side
+sub ParseArrayPullGetLength($$$$$$;$)
+{
+	my ($self,$e,$l,$ndr,$var_name,$env,$array_size) = @_;
+
+	if (not defined($array_size)) {
+		$array_size = $self->ParseArrayPullGetSize($e, $l, $ndr, $var_name, $env);
+	}
+
+	if (not $l->{IS_VARYING}) {
+		return $array_size;
+	}
+
+	my $length = "ndr_get_array_length($ndr, " . get_pointer_to($var_name) .")";
+	$self->pidl("length_$e->{NAME}_$l->{LEVEL_INDEX} = $length;");
+	my $array_length = "length_$e->{NAME}_$l->{LEVEL_INDEX}";
+
+	if (my $range = has_property($e, "range")) {
+		my ($low, $high) = split(/,/, $range, 2);
+		if ($low < 0) {
+			warning(0, "$low is invalid for the range of an array size");
+		}
+		if ($low == 0) {
+			$self->pidl("if ($array_length > $high) {");
+		} else {
+			$self->pidl("if ($array_length < $low || $array_length > $high) {");
+		}
+		$self->pidl("\treturn ndr_pull_error($ndr, NDR_ERR_RANGE, \"value out of range\");");
+		$self->pidl("}");
+	}
+
+	return $array_length;
+}
+
 #####################################################################
 # parse an array - pull side
 sub ParseArrayPullHeader($$$$$$)
 {
 	my ($self,$e,$l,$ndr,$var_name,$env) = @_;
-
-	my $length;
-	my $size;
-
-	if ($l->{IS_CONFORMANT}) {
-		$length = $size = "ndr_get_array_size($ndr, " . get_pointer_to($var_name) . ")";
-	} elsif ($l->{IS_ZERO_TERMINATED} and $l->{SIZE_IS} == 0 and $l->{LENGTH_IS} == 0) { # Noheader arrays
-		$length = $size = "ndr_get_string_size($ndr, sizeof(*$var_name))";
-	} else {
-		$length = $size = ParseExprExt($l->{SIZE_IS}, $env, $e->{ORIGINAL},
-			check_null_pointer($e, $env, sub { $self->pidl(shift); },
-					   "return ndr_pull_error($ndr, NDR_ERR_INVALID_POINTER, \"NULL Pointer for size_is()\");"),
-			check_fully_dereferenced($e, $env));
-	}
 
 	if ((!$l->{IS_SURROUNDING}) and $l->{IS_CONFORMANT}) {
 		$self->pidl("NDR_CHECK(ndr_pull_array_size($ndr, " . get_pointer_to($var_name) . "));");
@@ -341,13 +399,15 @@ sub ParseArrayPullHeader($$$$$$)
 
 	if ($l->{IS_VARYING}) {
 		$self->pidl("NDR_CHECK(ndr_pull_array_length($ndr, " . get_pointer_to($var_name) . "));");
-		$length = "ndr_get_array_length($ndr, " . get_pointer_to($var_name) .")";
 	}
 
-	if ($length ne $size) {
-		$self->pidl("if ($length > $size) {");
+	my $array_size = $self->ParseArrayPullGetSize($e, $l, $ndr, $var_name, $env);
+	my $array_length = $self->ParseArrayPullGetLength($e, $l, $ndr, $var_name, $env, $array_size);
+
+	if ($array_length ne $array_size) {
+		$self->pidl("if ($array_length > $array_size) {");
 		$self->indent;
-		$self->pidl("return ndr_pull_error($ndr, NDR_ERR_ARRAY_SIZE, \"Bad array size %u should exceed array length %u\", $size, $length);");
+		$self->pidl("return ndr_pull_error($ndr, NDR_ERR_ARRAY_SIZE, \"Bad array size %u should exceed array length %u\", $array_size, $array_length);");
 		$self->deindent;
 		$self->pidl("}");
 	}
@@ -377,10 +437,10 @@ sub ParseArrayPullHeader($$$$$$)
 	}
 
 	if (ArrayDynamicallyAllocated($e,$l) and not is_charset_array($e,$l)) {
-		$self->AllocateArrayLevel($e,$l,$ndr,$var_name,$size);
+		$self->AllocateArrayLevel($e,$l,$ndr,$var_name,$array_size);
 	}
 
-	return $length;
+	return $array_length;
 }
 
 sub compression_alg($$)
@@ -574,6 +634,9 @@ sub ParseElementPushLevel
 			if ($l->{POINTER_TYPE} eq "relative") {
 				$self->pidl("NDR_CHECK(ndr_push_relative_ptr2_start($ndr, $rel_var_name));");
 			}
+			if ($l->{POINTER_TYPE} eq "relative_short") {
+				$self->pidl("NDR_CHECK(ndr_push_short_relative_ptr2($ndr, $var_name));");
+			}
 		}
 		$var_name = get_value_of($var_name);
 		$self->ParseElementPushLevel($e, GetNextLevel($e, $l), $ndr, $var_name, $env, 1, 1);
@@ -627,6 +690,8 @@ sub ParseElementPush($$$$$$)
 
 	my $var_name = $env->{$e->{NAME}};
 
+	return if ContainsPipe($e, $e->{LEVELS}[0]);
+
 	return unless $primitives or ($deferred and ContainsDeferred($e, $e->{LEVELS}[0]));
 
 	# Representation type is different from transmit_as
@@ -674,6 +739,8 @@ sub ParsePtrPush($$$$$)
 		}
 	} elsif ($l->{POINTER_TYPE} eq "relative") {
 		$self->pidl("NDR_CHECK(ndr_push_relative_ptr1($ndr, $var_name));");
+	} elsif ($l->{POINTER_TYPE} eq "relative_short") {
+		$self->pidl("NDR_CHECK(ndr_push_short_relative_ptr1($ndr, $var_name));");
 	} elsif ($l->{POINTER_TYPE} eq "unique") {
 		$self->pidl("NDR_CHECK(ndr_push_unique_ptr($ndr, $var_name));");
 	} elsif ($l->{POINTER_TYPE} eq "full") {
@@ -786,9 +853,6 @@ sub ParseElementPrint($$$$$)
 				$self->pidl("$ndr->depth++;");
 				$self->pidl("for ($counter=0;$counter<$length;$counter++) {");
 				$self->indent;
-				$self->pidl("char *idx_$l->{LEVEL_INDEX}=NULL;");
-				$self->pidl("if (asprintf(&idx_$l->{LEVEL_INDEX}, \"[\%d]\", $counter) != -1) {");
-				$self->indent;
 
 				$var_name = get_array_element($var_name, $counter);
 			}
@@ -811,9 +875,6 @@ sub ParseElementPrint($$$$$)
 		} elsif (($l->{TYPE} eq "ARRAY")
 			and not is_charset_array($e,$l)
 			and not has_fast_array($e,$l)) {
-			$self->pidl("free(idx_$l->{LEVEL_INDEX});");
-			$self->deindent;
-			$self->pidl("}");
 			$self->deindent;
 			$self->pidl("}");
 			$self->pidl("$ndr->depth--;");
@@ -865,7 +926,10 @@ sub ParseDataPull($$$$$$$)
 
 		$self->pidl("NDR_CHECK(".TypeFunctionName("ndr_pull", $l->{DATA_TYPE})."($ndr, $ndr_flags, $var_name));");
 
-		if (my $range = has_property($e, "range")) {
+		my $pl = GetPrevLevel($e, $l);
+
+		my $range = has_property($e, "range");
+		if ($range and $pl->{TYPE} ne "ARRAY") {
 			$var_name = get_value_of($var_name);
 			my $signed = Parse::Pidl::Typelist::is_signed($l->{DATA_TYPE});
 			my ($low, $high) = split(/,/, $range, 2);
@@ -943,12 +1007,11 @@ sub ParseMemCtxPullFlags($$$$)
 
 	if (($l->{TYPE} eq "POINTER") and ($l->{POINTER_TYPE} eq "ref")) {
 		my $nl = GetNextLevel($e, $l);
-		my $next_is_array = ($nl->{TYPE} eq "ARRAY");
-		my $next_is_string = (($nl->{TYPE} eq "DATA") and 
-					($nl->{DATA_TYPE} eq "string"));
-		if ($next_is_array or $next_is_string) {
-			return undef;
-		} elsif ($l->{LEVEL} eq "TOP") {
+		return undef if ($nl->{TYPE} eq "PIPE");
+		return undef if ($nl->{TYPE} eq "ARRAY");
+		return undef if (($nl->{TYPE} eq "DATA") and ($nl->{DATA_TYPE} eq "string"));
+
+		if ($l->{LEVEL} eq "TOP") {
 			$mem_flags = "LIBNDR_FLAG_REF_ALLOC";
 		}
 	}
@@ -996,6 +1059,7 @@ sub ParseElementPullLevel
 	my($self,$e,$l,$ndr,$var_name,$env,$primitives,$deferred) = @_;
 
 	my $ndr_flags = CalcNdrFlags($l, $primitives, $deferred);
+	my $array_length = undef;
 
 	if ($l->{TYPE} eq "ARRAY" and ($l->{IS_VARYING} or $l->{IS_CONFORMANT})) {
 		$var_name = get_pointer_to($var_name);
@@ -1009,6 +1073,7 @@ sub ParseElementPullLevel
 			$self->ParseSubcontextPullEnd($e, $l, $ndr, $env);
 		} elsif ($l->{TYPE} eq "ARRAY") {
 			my $length = $self->ParseArrayPullHeader($e, $l, $ndr, $var_name, $env);
+			$array_length = $length;
 
 			my $nl = GetNextLevel($e, $l);
 
@@ -1016,7 +1081,11 @@ sub ParseElementPullLevel
 				if ($l->{IS_ZERO_TERMINATED}) {
 					$self->CheckStringTerminator($ndr, $e, $l, $length);
 				}
-				$self->pidl("NDR_CHECK(ndr_pull_charset($ndr, $ndr_flags, ".get_pointer_to($var_name).", $length, sizeof(" . mapTypeName($nl->{DATA_TYPE}) . "), CH_$e->{PROPERTIES}->{charset}));");
+				if ($l->{IS_TO_NULL}) {
+					$self->pidl("NDR_CHECK(ndr_pull_charset_to_null($ndr, $ndr_flags, ".get_pointer_to($var_name).", $length, sizeof(" . mapTypeName($nl->{DATA_TYPE}) . "), CH_$e->{PROPERTIES}->{charset}));");
+				} else {
+					$self->pidl("NDR_CHECK(ndr_pull_charset($ndr, $ndr_flags, ".get_pointer_to($var_name).", $length, sizeof(" . mapTypeName($nl->{DATA_TYPE}) . "), CH_$e->{PROPERTIES}->{charset}));");
+				}
 				return;
 			} elsif (has_fast_array($e, $l)) {
 				if ($l->{IS_ZERO_TERMINATED}) {
@@ -1042,7 +1111,7 @@ sub ParseElementPullLevel
 			$self->pidl("if ($var_name) {");
 			$self->indent;
 
-			if ($l->{POINTER_TYPE} eq "relative") {
+			if ($l->{POINTER_TYPE} eq "relative" or $l->{POINTER_TYPE} eq "relative_short") {
 				$self->pidl("uint32_t _relative_save_offset;");
 				$self->pidl("_relative_save_offset = $ndr->offset;");
 				$self->pidl("NDR_CHECK(ndr_pull_relative_ptr2($ndr, $var_name));");
@@ -1057,7 +1126,12 @@ sub ParseElementPullLevel
 		$self->ParseMemCtxPullEnd($e, $l, $ndr);
 
 		if ($l->{POINTER_TYPE} ne "ref") {
-    			if ($l->{POINTER_TYPE} eq "relative") {
+			if ($l->{POINTER_TYPE} eq "relative") {
+				$self->pidl("if ($ndr->offset > $ndr->relative_highest_offset) {");
+				$self->indent;
+				$self->pidl("$ndr->relative_highest_offset = $ndr->offset;");
+				$self->deindent;
+				$self->pidl("}");
 				$self->pidl("$ndr->offset = _relative_save_offset;");
 			}
 			$self->deindent;
@@ -1065,12 +1139,12 @@ sub ParseElementPullLevel
 		}
 	} elsif ($l->{TYPE} eq "ARRAY" and 
 			not has_fast_array($e,$l) and not is_charset_array($e, $l)) {
-		my $length = ParseExpr($l->{LENGTH_IS}, $env, $e->{ORIGINAL});
+		my $length = $array_length;
 		my $counter = "cntr_$e->{NAME}_$l->{LEVEL_INDEX}";
 		my $array_name = $var_name;
 
-		if ($l->{IS_VARYING}) {
-			$length = "ndr_get_array_length($ndr, " . get_pointer_to($var_name) .")";
+		if (not defined($length)) {
+			$length = $self->ParseArrayPullGetLength($e, $l, $ndr, $var_name, $env);
 		}
 
 		$var_name = get_array_element($var_name, $counter);
@@ -1115,6 +1189,8 @@ sub ParseElementPull($$$$$$)
 	my $var_name = $env->{$e->{NAME}};
 	my $represent_name;
 	my $transmit_name;
+
+	return if ContainsPipe($e, $e->{LEVELS}[0]);
 
 	return unless $primitives or ($deferred and ContainsDeferred($e, $e->{LEVELS}[0]));
 
@@ -1161,7 +1237,7 @@ sub ParsePtrPull($$$$$)
 			$self->pidl("\tNDR_PULL_ALLOC($ndr, $var_name);"); 
 			$self->pidl("}");
 		}
-		
+
 		return;
 	} elsif ($l->{POINTER_TYPE} eq "ref" and $l->{LEVEL} eq "EMBEDDED") {
 		$self->pidl("NDR_CHECK(ndr_pull_ref_ptr($ndr, &_ptr_$e->{NAME}));");
@@ -1169,6 +1245,8 @@ sub ParsePtrPull($$$$$)
 		 ($l->{POINTER_TYPE} eq "relative") or
 		 ($l->{POINTER_TYPE} eq "full")) {
 		$self->pidl("NDR_CHECK(ndr_pull_generic_ptr($ndr, &_ptr_$e->{NAME}));");
+	} elsif ($l->{POINTER_TYPE} eq "relative_short") {
+		$self->pidl("NDR_CHECK(ndr_pull_relative_ptr_short($ndr, &_ptr_$e->{NAME}));");
 	} else {
 		die("Unhandled pointer type $l->{POINTER_TYPE}");
 	}
@@ -1189,7 +1267,7 @@ sub ParsePtrPull($$$$$)
 	}
 
 	#$self->pidl("memset($var_name, 0, sizeof($var_name));");
-	if ($l->{POINTER_TYPE} eq "relative") {
+	if ($l->{POINTER_TYPE} eq "relative" or $l->{POINTER_TYPE} eq "relative_short") {
 		$self->pidl("NDR_CHECK(ndr_pull_relative_ptr1($ndr, $var_name, _ptr_$e->{NAME}));");
 	}
 	$self->deindent;
@@ -1454,6 +1532,7 @@ sub ParseStructPrint($$$$$)
 	$self->DeclareArrayVariables($_) foreach (@{$struct->{ELEMENTS}});
 
 	$self->pidl("ndr_print_struct($ndr, name, \"$name\");");
+	$self->pidl("if (r == NULL) { ndr_print_null($ndr); return; }");
 
 	$self->start_flags($struct, $ndr);
 
@@ -1470,24 +1549,33 @@ sub DeclarePtrVariables($$)
 {
 	my ($self,$e) = @_;
 	foreach my $l (@{$e->{LEVELS}}) {
+		my $size = 32;
 		if ($l->{TYPE} eq "POINTER" and 
 			not ($l->{POINTER_TYPE} eq "ref" and $l->{LEVEL} eq "TOP")) {
-			$self->pidl("uint32_t _ptr_$e->{NAME};");
+			if ($l->{POINTER_TYPE} eq "relative_short") {
+				$size = 16;
+			}
+			$self->pidl("uint${size}_t _ptr_$e->{NAME};");
 			last;
 		}
 	}
 }
 
-sub DeclareArrayVariables($$)
+sub DeclareArrayVariables($$;$)
 {
-	my ($self,$e) = @_;
+	my ($self,$e,$pull) = @_;
 
 	foreach my $l (@{$e->{LEVELS}}) {
+		next if ($l->{TYPE} ne "ARRAY");
+		if (defined($pull)) {
+			$self->pidl("uint32_t size_$e->{NAME}_$l->{LEVEL_INDEX} = 0;");
+			if ($l->{IS_VARYING}) {
+				$self->pidl("uint32_t length_$e->{NAME}_$l->{LEVEL_INDEX} = 0;");
+			}
+		}
 		next if has_fast_array($e,$l);
 		next if is_charset_array($e,$l);
-		if ($l->{TYPE} eq "ARRAY") {
-			$self->pidl("uint32_t cntr_$e->{NAME}_$l->{LEVEL_INDEX};");
-		}
+		$self->pidl("uint32_t cntr_$e->{NAME}_$l->{LEVEL_INDEX};");
 	}
 }
 
@@ -1496,15 +1584,14 @@ sub DeclareArrayVariablesNoZero($$$)
 	my ($self,$e,$env) = @_;
 
 	foreach my $l (@{$e->{LEVELS}}) {
+		next if ($l->{TYPE} ne "ARRAY");
 		next if has_fast_array($e,$l);
 		next if is_charset_array($e,$l);
-		if ($l->{TYPE} eq "ARRAY") {
-		    my $length = ParseExpr($l->{LENGTH_IS}, $env, $e->{ORIGINAL});
-		    if ($length eq "0") {
+		my $length = ParseExpr($l->{LENGTH_IS}, $env, $e->{ORIGINAL});
+		if ($length eq "0") {
 			warning($e->{ORIGINAL}, "pointless array cntr: 'cntr_$e->{NAME}_$l->{LEVEL_INDEX}': length=$length");
-		    } else {
+		} else {
 			$self->pidl("uint32_t cntr_$e->{NAME}_$l->{LEVEL_INDEX};");
-		    }
 		}
 	}
 }
@@ -1570,7 +1657,7 @@ sub ParseStructPull($$$$)
 	# declare any internal pointers we need
 	foreach my $e (@{$struct->{ELEMENTS}}) {
 		$self->DeclarePtrVariables($e);
-		$self->DeclareArrayVariables($e);
+		$self->DeclareArrayVariables($e, "pull");
 		$self->DeclareMemCtxVariables($e);
 	}
 
@@ -1602,7 +1689,7 @@ sub ParseStructNdrSize($$$$)
 	if (my $flags = has_property($t, "flag")) {
 		$self->pidl("flags |= $flags;");
 	}
-	$self->pidl("return ndr_size_struct($varname, flags, (ndr_push_flags_fn_t)ndr_push_$name, ic);");
+	$self->pidl("return ndr_size_struct($varname, flags, (ndr_push_flags_fn_t)ndr_push_$name);");
 }
 
 sub DeclStruct($$$$)
@@ -1614,7 +1701,7 @@ sub DeclStruct($$$$)
 sub ArgsStructNdrSize($$$)
 {
 	my ($d, $name, $varname) = @_;
-	return "const struct $name *$varname, struct smb_iconv_convenience *ic, int flags";
+	return "const struct $name *$varname, int flags";
 }
 
 $typefamily{STRUCT} = {
@@ -1637,7 +1724,7 @@ sub ParseUnionNdrSize($$$)
 		$self->pidl("flags |= $flags;");
 	}
 
-	$self->pidl("return ndr_size_union($varname, flags, level, (ndr_push_flags_fn_t)ndr_push_$name, ic);");
+	$self->pidl("return ndr_size_union($varname, flags, level, (ndr_push_flags_fn_t)ndr_push_$name);");
 }
 
 sub ParseUnionPushPrimitives($$$$)
@@ -1646,14 +1733,23 @@ sub ParseUnionPushPrimitives($$$$)
 
 	my $have_default = 0;
 
-	$self->pidl("int level = ndr_push_get_switch_value($ndr, $varname);");
+	$self->pidl("uint32_t level = ndr_push_get_switch_value($ndr, $varname);");
 
 	if (defined($e->{SWITCH_TYPE})) {
+		if (defined($e->{ALIGN})) {
+			$self->pidl("NDR_CHECK(ndr_push_union_align($ndr, $e->{ALIGN}));");
+		}
+
 		$self->pidl("NDR_CHECK(ndr_push_$e->{SWITCH_TYPE}($ndr, NDR_SCALARS, level));");
 	}
 
 	if (defined($e->{ALIGN})) {
-		$self->pidl("NDR_CHECK(ndr_push_union_align($ndr, $e->{ALIGN}));");
+		if ($e->{IS_MS_UNION}) {
+			$self->pidl("/* ms_union is always aligned to the largest union arm*/");
+			$self->pidl("NDR_CHECK(ndr_push_align($ndr, $e->{ALIGN}));");
+		} else {
+			$self->pidl("NDR_CHECK(ndr_push_union_align($ndr, $e->{ALIGN}));");
+		}
 	}
 
 	$self->pidl("switch (level) {");
@@ -1693,7 +1789,7 @@ sub ParseUnionPushDeferred($$$$)
 
 	my $have_default = 0;
 
-	$self->pidl("int level = ndr_push_get_switch_value($ndr, $varname);");
+	$self->pidl("uint32_t level = ndr_push_get_switch_value($ndr, $varname);");
 	if (defined($e->{PROPERTIES}{relative_base})) {
 		# retrieve the current offset as base for relative pointers
 		# based on the toplevel struct/union
@@ -1752,7 +1848,7 @@ sub ParseUnionPrint($$$$$)
 	my ($self,$e,$ndr,$name,$varname) = @_;
 	my $have_default = 0;
 
-	$self->pidl("int level;");
+	$self->pidl("uint32_t level;");
 	foreach my $el (@{$e->{ELEMENTS}}) {
 		$self->DeclareArrayVariables($el);
 	}
@@ -1793,7 +1889,12 @@ sub ParseUnionPullPrimitives($$$$$)
 	my ($self,$e,$ndr,$varname,$switch_type) = @_;
 	my $have_default = 0;
 
+
 	if (defined($switch_type)) {
+		if (defined($e->{ALIGN})) {
+			$self->pidl("NDR_CHECK(ndr_pull_union_align($ndr, $e->{ALIGN}));");
+		}
+
 		$self->pidl("NDR_CHECK(ndr_pull_$switch_type($ndr, NDR_SCALARS, &_level));");
 		$self->pidl("if (_level != level) {"); 
 		$self->pidl("\treturn ndr_pull_error($ndr, NDR_ERR_BAD_SWITCH, \"Bad switch value %u for $varname at \%s\", _level, __location__);");
@@ -1801,7 +1902,12 @@ sub ParseUnionPullPrimitives($$$$$)
 	}
 
 	if (defined($e->{ALIGN})) {
-		$self->pidl("NDR_CHECK(ndr_pull_union_align($ndr, $e->{ALIGN}));");
+		if ($e->{IS_MS_UNION}) {
+			$self->pidl("/* ms_union is always aligned to the largest union arm*/");
+			$self->pidl("NDR_CHECK(ndr_pull_align($ndr, $e->{ALIGN}));");
+		} else {
+			$self->pidl("NDR_CHECK(ndr_pull_union_align($ndr, $e->{ALIGN}));");
+		}
 	}
 
 	$self->pidl("switch (level) {");
@@ -1814,8 +1920,6 @@ sub ParseUnionPullPrimitives($$$$$)
 
 		if ($el->{TYPE} ne "EMPTY") {
 			$self->indent;
-			$self->DeclarePtrVariables($el);
-			$self->DeclareArrayVariables($el);
 			if (defined($e->{PROPERTIES}{relative_base})) {
 				$self->pidl("NDR_CHECK(ndr_pull_align($ndr, $el->{ALIGN}));");
 				# set the current offset as base for relative pointers
@@ -1879,7 +1983,7 @@ sub ParseUnionPull($$$$)
 	my ($self,$e,$ndr,$varname) = @_;
 	my $switch_type = $e->{SWITCH_TYPE};
 
-	$self->pidl("int level;");
+	$self->pidl("uint32_t level;");
 	if (defined($switch_type)) {
 		if (Parse::Pidl::Typelist::typeIs($switch_type, "ENUM")) {
 			$switch_type = Parse::Pidl::Typelist::enum_type_fn(getType($switch_type)->{DATA});
@@ -1892,6 +1996,8 @@ sub ParseUnionPull($$$$)
 		next if ($el->{TYPE} eq "EMPTY");
 		next if ($double_cases{"$el->{NAME}"});
 		$self->DeclareMemCtxVariables($el);
+		$self->DeclarePtrVariables($el);
+		$self->DeclareArrayVariables($el, "pull");
 		$double_cases{"$el->{NAME}"} = 1;
 	}
 
@@ -1925,7 +2031,7 @@ sub DeclUnion($$$$)
 sub ArgsUnionNdrSize($$)
 {
 	my ($d,$name) = @_;
-	return "const union $name *r, uint32_t level, struct smb_iconv_convenience *ic, int flags";
+	return "const union $name *r, uint32_t level, int flags";
 }
 
 $typefamily{UNION} = {
@@ -2003,6 +2109,99 @@ $typefamily{TYPEDEF} = {
 	SIZE_FN_BODY => \&ParseTypedefNdrSize,
 };
 
+sub ParsePipePushChunk($$)
+{
+	my ($self, $t) = @_;
+
+	my $pipe = $t;
+	$pipe = $t->{DATA} if ($t->{TYPE} eq "TYPEDEF");
+	my $struct = $pipe->{DATA};
+
+	my $name = "$struct->{NAME}";
+	my $ndr = "ndr";
+	my $varname = "r";
+
+	my $args = $typefamily{$struct->{TYPE}}->{DECL}->($struct, "push", $name, $varname);
+
+	$self->fn_declare("push", $struct, "enum ndr_err_code ndr_push_$name(struct ndr_push *$ndr, int ndr_flags, $args)") or return;
+
+	return if has_property($t, "nopush");
+
+	$self->pidl("{");
+	$self->indent;
+
+	$self->ParseStructPush($struct, $ndr, $varname);
+	$self->pidl("");
+
+	$self->pidl("NDR_CHECK(ndr_push_pipe_chunk_trailer(ndr, ndr_flags, $varname->count));");
+	$self->pidl("");
+
+	$self->pidl("return NDR_ERR_SUCCESS;");
+	$self->deindent;
+	$self->pidl("}");
+	$self->pidl("");
+}
+
+sub ParsePipePullChunk($$)
+{
+	my ($self, $t) = @_;
+
+	my $pipe = $t;
+	$pipe = $t->{DATA} if ($t->{TYPE} eq "TYPEDEF");
+	my $struct = $pipe->{DATA};
+
+	my $name = "$struct->{NAME}";
+	my $ndr = "ndr";
+	my $varname = "r";
+
+	my $args = $typefamily{$struct->{TYPE}}->{DECL}->($struct, "pull", $name, $varname);
+
+	$self->fn_declare("pull", $struct, "enum ndr_err_code ndr_pull_$name(struct ndr_pull *$ndr, int ndr_flags, $args)") or return;
+
+	return if has_property($struct, "nopull");
+
+	$self->pidl("{");
+	$self->indent;
+
+	$self->ParseStructPull($struct, $ndr, $varname);
+	$self->pidl("");
+
+	$self->pidl("NDR_CHECK(ndr_check_pipe_chunk_trailer($ndr, ndr_flags, $varname->count));");
+	$self->pidl("");
+
+	$self->pidl("return NDR_ERR_SUCCESS;");
+	$self->deindent;
+	$self->pidl("}");
+	$self->pidl("");
+}
+
+sub ParsePipePrintChunk($$)
+{
+	my ($self, $t) = @_;
+
+	my $pipe = $t;
+	$pipe = $t->{DATA} if ($t->{TYPE} eq "TYPEDEF");
+	my $struct = $pipe->{DATA};
+
+	my $name = "$struct->{NAME}";
+	my $ndr = "ndr";
+	my $varname = "r";
+
+	my $args = $typefamily{$struct->{TYPE}}->{DECL}->($struct, "print", $name, $varname);
+
+	$self->pidl_hdr("void ndr_print_$name(struct ndr_print *ndr, const char *name, $args);");
+
+	return if (has_property($t, "noprint"));
+
+	$self->pidl("_PUBLIC_ void ndr_print_$name(struct ndr_print *$ndr, const char *name, $args)");
+	$self->pidl("{");
+	$self->indent;
+	$self->ParseTypePrint($struct, $ndr, $varname);
+	$self->deindent;
+	$self->pidl("}");
+	$self->pidl("");
+}
+
 #####################################################################
 # parse a function - print side
 sub ParseFunctionPrint($$)
@@ -2023,6 +2222,7 @@ sub ParseFunctionPrint($$)
 	}
 
 	$self->pidl("ndr_print_struct($ndr, name, \"$fn->{NAME}\");");
+	$self->pidl("if (r == NULL) { ndr_print_null($ndr); return; }");
 	$self->pidl("$ndr->depth++;");
 
 	$self->pidl("if (flags & NDR_SET_VALUES) {");
@@ -2163,7 +2363,7 @@ sub ParseFunctionPull($$)
 	# declare any internal pointers we need
 	foreach my $e (@{$fn->{ELEMENTS}}) { 
 		$self->DeclarePtrVariables($e);
-		$self->DeclareArrayVariables($e);
+		$self->DeclareArrayVariables($e, "pull");
 	}
 
 	my %double_cases = ();
@@ -2204,6 +2404,7 @@ sub ParseFunctionPull($$)
 		             $e->{LEVELS}[0]->{POINTER_TYPE} eq "ref");
 		next if (($e->{LEVELS}[1]->{TYPE} eq "DATA") and 
 				 ($e->{LEVELS}[1]->{DATA_TYPE} eq "string"));
+		next if ($e->{LEVELS}[1]->{TYPE} eq "PIPE");
 		next if (($e->{LEVELS}[1]->{TYPE} eq "ARRAY") 
 			and   $e->{LEVELS}[1]->{IS_ZERO_TERMINATED});
 
@@ -2218,6 +2419,12 @@ sub ParseFunctionPull($$)
 				$self->pidl("memcpy(r->out.$e->{NAME}, r->in.$e->{NAME}, ($size) * sizeof(*r->in.$e->{NAME}));");
 			} else {
 				$self->pidl("memset(r->out.$e->{NAME}, 0, ($size) * sizeof(*r->out.$e->{NAME}));");
+			}
+		} elsif ($e->{LEVELS}[1]->{TYPE} eq "ARRAY") {
+			if (grep(/in/, @{$e->{DIRECTION}})) {
+				$self->pidl("r->out.$e->{NAME} = r->in.$e->{NAME};");
+			} else {
+				$self->pidl("r->out.$e->{NAME} = NULL;");
 			}
 		} else {
 			$self->pidl("NDR_PULL_ALLOC($ndr, r->out.$e->{NAME});");
@@ -2277,17 +2484,102 @@ sub AuthServiceStruct($$$)
 	$self->pidl("");
 }
 
+sub ParseGeneratePipeArray($$$)
+{
+	my ($self, $fn, $direction) = @_;
+
+	$self->pidl("static const struct ndr_interface_call_pipe $fn->{NAME}\_$direction\_pipes[] = {");
+	$self->indent;
+
+	foreach my $e (@{$fn->{ELEMENTS}}) {
+		next unless ContainsPipe($e, $e->{LEVELS}[0]);
+		next unless (grep(/$direction/, @{$e->{DIRECTION}}));
+
+		my $cname = "$e->{TYPE}_chunk";
+
+		$self->pidl("{");
+		$self->indent;
+		$self->pidl("\"$direction.$e->{NAME}\",");
+		$self->pidl("\"$cname\",");
+		$self->pidl("sizeof(struct $cname),");
+		$self->pidl("(ndr_push_flags_fn_t) ndr_push_$cname,");
+		$self->pidl("(ndr_pull_flags_fn_t) ndr_pull_$cname,");
+		$self->pidl("(ndr_print_fn_t) ndr_print_$cname,");
+		$self->deindent;
+		$self->pidl("},");
+	}
+	$self->pidl("{ NULL, NULL, 0, NULL, NULL, NULL }");
+	$self->deindent;
+	$self->pidl("};");
+	$self->pidl("");
+}
+
+sub FunctionCallPipes($$)
+{
+	my ($self, $d) = @_;
+	return if not defined($d->{OPNUM});
+
+	my $in_pipes = 0;
+	my $out_pipes = 0;
+
+	foreach my $e (@{$d->{ELEMENTS}}) {
+		next unless ContainsPipe($e, $e->{LEVELS}[0]);
+
+		if (grep(/in/, @{$e->{DIRECTION}})) {
+			$in_pipes++;
+		}
+		if (grep(/out/, @{$e->{DIRECTION}})) {
+			$out_pipes++;
+		}
+	}
+
+	if ($in_pipes) {
+		$self->ParseGeneratePipeArray($d, "in");
+	}
+
+	if ($out_pipes) {
+		$self->ParseGeneratePipeArray($d, "out");
+	}
+}
+
 sub FunctionCallEntry($$)
 {
 	my ($self, $d) = @_;
 	return 0 if not defined($d->{OPNUM});
+
+	my $in_pipes = 0;
+	my $out_pipes = 0;
+
+	foreach my $e (@{$d->{ELEMENTS}}) {
+		next unless ContainsPipe($e, $e->{LEVELS}[0]);
+
+		if (grep(/in/, @{$e->{DIRECTION}})) {
+			$in_pipes++;
+		}
+		if (grep(/out/, @{$e->{DIRECTION}})) {
+			$out_pipes++;
+		}
+	}
+
+	my $in_pipes_ptr = "NULL";
+	my $out_pipes_ptr = "NULL";
+
+	if ($in_pipes) {
+		$in_pipes_ptr = "$d->{NAME}_in_pipes";
+	}
+
+	if ($out_pipes) {
+		$out_pipes_ptr = "$d->{NAME}_out_pipes";
+	}
+
 	$self->pidl("\t{");
 	$self->pidl("\t\t\"$d->{NAME}\",");
 	$self->pidl("\t\tsizeof(struct $d->{NAME}),");
 	$self->pidl("\t\t(ndr_push_flags_fn_t) ndr_push_$d->{NAME},");
 	$self->pidl("\t\t(ndr_pull_flags_fn_t) ndr_pull_$d->{NAME},");
 	$self->pidl("\t\t(ndr_print_function_t) ndr_print_$d->{NAME},");
-	$self->pidl("\t\t".($d->{ASYNC}?"true":"false").",");
+	$self->pidl("\t\t{ $in_pipes, $in_pipes_ptr },");
+	$self->pidl("\t\t{ $out_pipes, $out_pipes_ptr },");
 	$self->pidl("\t},");
 	return 1;
 }
@@ -2303,12 +2595,16 @@ sub FunctionTable($$)
 	return if ($#{$interface->{FUNCTIONS}}+1 == 0);
 	return unless defined ($interface->{PROPERTIES}->{uuid});
 
+	foreach my $d (@{$interface->{INHERITED_FUNCTIONS}},@{$interface->{FUNCTIONS}}) {
+		$self->FunctionCallPipes($d);
+	}
+
 	$self->pidl("static const struct ndr_interface_call $interface->{NAME}\_calls[] = {");
 
 	foreach my $d (@{$interface->{INHERITED_FUNCTIONS}},@{$interface->{FUNCTIONS}}) {
 		$count += $self->FunctionCallEntry($d);
 	}
-	$self->pidl("\t{ NULL, 0, NULL, NULL, NULL, false }");
+	$self->pidl("\t{ NULL, 0, NULL, NULL, NULL }");
 	$self->pidl("};");
 	$self->pidl("");
 
@@ -2556,6 +2852,20 @@ sub ParseInterface($$$)
 
 	# Typedefs
 	foreach my $d (@{$interface->{TYPES}}) {
+		if (Parse::Pidl::Typelist::typeIs($d, "PIPE")) {
+			($needed->{TypeFunctionName("ndr_push", $d)}) &&
+				$self->ParsePipePushChunk($d);
+			($needed->{TypeFunctionName("ndr_pull", $d)}) &&
+				$self->ParsePipePullChunk($d);
+			($needed->{TypeFunctionName("ndr_print", $d)}) &&
+				$self->ParsePipePrintChunk($d);
+
+			$needed->{TypeFunctionName("ndr_pull", $d)} = 0;
+			$needed->{TypeFunctionName("ndr_push", $d)} = 0;
+			$needed->{TypeFunctionName("ndr_print", $d)} = 0;
+			next;
+		}
+
 		next unless(typeHasBody($d));
 
 		($needed->{TypeFunctionName("ndr_push", $d)}) && $self->ParseTypePushFunction($d, "r");
@@ -2575,10 +2885,6 @@ sub ParseInterface($$$)
 		($needed->{"ndr_push_$d->{NAME}"}) && $self->ParseFunctionPush($d);
 		($needed->{"ndr_pull_$d->{NAME}"}) && $self->ParseFunctionPull($d);
 		($needed->{"ndr_print_$d->{NAME}"}) && $self->ParseFunctionPrint($d);
-
-		# Make sure we don't generate a function twice...
-		$needed->{"ndr_push_$d->{NAME}"} = $needed->{"ndr_pull_$d->{NAME}"} = 
-			$needed->{"ndr_print_$d->{NAME}"} = 0;
 	}
 
 	$self->FunctionTable($interface);
@@ -2701,6 +3007,7 @@ sub NeededType($$$)
 	my ($t,$needed,$req) = @_;
 
 	NeededType($t->{DATA}, $needed, $req) if ($t->{TYPE} eq "TYPEDEF");
+	NeededType($t->{DATA}, $needed, $req) if ($t->{TYPE} eq "PIPE");
 
 	if ($t->{TYPE} eq "STRUCT" or $t->{TYPE} eq "UNION") {
 		return unless defined($t->{ELEMENTS});
@@ -2722,6 +3029,7 @@ sub NeededInterface($$)
 	my ($interface,$needed) = @_;
 	NeededFunction($_, $needed) foreach (@{$interface->{FUNCTIONS}});
 	foreach (reverse @{$interface->{TYPES}}) {
+
 		if (has_property($_, "public")) {
 			$needed->{TypeFunctionName("ndr_pull", $_)} = $needed->{TypeFunctionName("ndr_push", $_)} = 
 				$needed->{TypeFunctionName("ndr_print", $_)} = 1;

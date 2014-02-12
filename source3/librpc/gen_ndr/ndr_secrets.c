@@ -3,6 +3,7 @@
 #include "includes.h"
 #include "librpc/gen_ndr/ndr_secrets.h"
 
+#include "librpc/gen_ndr/ndr_security.h"
 _PUBLIC_ enum ndr_err_code ndr_push_TRUSTED_DOM_PASS(struct ndr_push *ndr, int ndr_flags, const struct TRUSTED_DOM_PASS *r)
 {
 	{
@@ -24,7 +25,6 @@ _PUBLIC_ enum ndr_err_code ndr_push_TRUSTED_DOM_PASS(struct ndr_push *ndr, int n
 			NDR_CHECK(ndr_push_trailer_align(ndr, 4));
 		}
 		if (ndr_flags & NDR_BUFFERS) {
-			NDR_CHECK(ndr_push_dom_sid(ndr, NDR_BUFFERS, &r->domain_sid));
 		}
 		ndr->flags = _flags_save_STRUCT;
 	}
@@ -33,13 +33,15 @@ _PUBLIC_ enum ndr_err_code ndr_push_TRUSTED_DOM_PASS(struct ndr_push *ndr, int n
 
 _PUBLIC_ enum ndr_err_code ndr_pull_TRUSTED_DOM_PASS(struct ndr_pull *ndr, int ndr_flags, struct TRUSTED_DOM_PASS *r)
 {
+	uint32_t size_uni_name_0 = 0;
 	{
 		uint32_t _flags_save_STRUCT = ndr->flags;
 		ndr_set_flags(&ndr->flags, LIBNDR_FLAG_NOALIGN);
 		if (ndr_flags & NDR_SCALARS) {
 			NDR_CHECK(ndr_pull_align(ndr, 4));
 			NDR_CHECK(ndr_pull_uint32(ndr, NDR_SCALARS, &r->uni_name_len));
-			NDR_CHECK(ndr_pull_charset(ndr, NDR_SCALARS, &r->uni_name, 32, sizeof(uint16_t), CH_UTF16));
+			size_uni_name_0 = 32;
+			NDR_CHECK(ndr_pull_charset(ndr, NDR_SCALARS, &r->uni_name, size_uni_name_0, sizeof(uint16_t), CH_UTF16));
 			NDR_CHECK(ndr_pull_uint32(ndr, NDR_SCALARS, &r->pass_len));
 			{
 				uint32_t _flags_save_string = ndr->flags;
@@ -52,7 +54,6 @@ _PUBLIC_ enum ndr_err_code ndr_pull_TRUSTED_DOM_PASS(struct ndr_pull *ndr, int n
 			NDR_CHECK(ndr_pull_trailer_align(ndr, 4));
 		}
 		if (ndr_flags & NDR_BUFFERS) {
-			NDR_CHECK(ndr_pull_dom_sid(ndr, NDR_BUFFERS, &r->domain_sid));
 		}
 		ndr->flags = _flags_save_STRUCT;
 	}
@@ -62,6 +63,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_TRUSTED_DOM_PASS(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_TRUSTED_DOM_PASS(struct ndr_print *ndr, const char *name, const struct TRUSTED_DOM_PASS *r)
 {
 	ndr_print_struct(ndr, name, "TRUSTED_DOM_PASS");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	{
 		uint32_t _flags_save_STRUCT = ndr->flags;
 		ndr_set_flags(&ndr->flags, LIBNDR_FLAG_NOALIGN);

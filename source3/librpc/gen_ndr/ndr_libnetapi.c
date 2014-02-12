@@ -3,6 +3,7 @@
 #include "includes.h"
 #include "librpc/gen_ndr/ndr_libnetapi.h"
 
+#include "librpc/gen_ndr/ndr_misc.h"
 _PUBLIC_ enum ndr_err_code ndr_push_NET_API_STATUS(struct ndr_push *ndr, int ndr_flags, enum NET_API_STATUS r)
 {
 	NDR_CHECK(ndr_push_enum_uint32(ndr, NDR_SCALARS, r));
@@ -47,17 +48,21 @@ _PUBLIC_ enum ndr_err_code ndr_push_domsid(struct ndr_push *ndr, int ndr_flags, 
 
 _PUBLIC_ enum ndr_err_code ndr_pull_domsid(struct ndr_pull *ndr, int ndr_flags, struct domsid *r)
 {
+	uint32_t size_id_auth_0 = 0;
+	uint32_t size_sub_auths_0 = 0;
 	uint32_t cntr_sub_auths_0;
 	TALLOC_CTX *_mem_save_sub_auths_0;
 	if (ndr_flags & NDR_SCALARS) {
 		NDR_CHECK(ndr_pull_align(ndr, 4));
 		NDR_CHECK(ndr_pull_uint8(ndr, NDR_SCALARS, &r->sid_rev_num));
 		NDR_CHECK(ndr_pull_uint8(ndr, NDR_SCALARS, &r->num_auths));
-		NDR_CHECK(ndr_pull_array_uint8(ndr, NDR_SCALARS, r->id_auth, 6));
-		NDR_PULL_ALLOC_N(ndr, r->sub_auths, MAXSUBAUTHS);
+		size_id_auth_0 = 6;
+		NDR_CHECK(ndr_pull_array_uint8(ndr, NDR_SCALARS, r->id_auth, size_id_auth_0));
+		size_sub_auths_0 = MAXSUBAUTHS;
+		NDR_PULL_ALLOC_N(ndr, r->sub_auths, size_sub_auths_0);
 		_mem_save_sub_auths_0 = NDR_PULL_GET_MEM_CTX(ndr);
 		NDR_PULL_SET_MEM_CTX(ndr, r->sub_auths, 0);
-		for (cntr_sub_auths_0 = 0; cntr_sub_auths_0 < MAXSUBAUTHS; cntr_sub_auths_0++) {
+		for (cntr_sub_auths_0 = 0; cntr_sub_auths_0 < size_sub_auths_0; cntr_sub_auths_0++) {
 			NDR_CHECK(ndr_pull_uint32(ndr, NDR_SCALARS, &r->sub_auths[cntr_sub_auths_0]));
 		}
 		NDR_PULL_SET_MEM_CTX(ndr, _mem_save_sub_auths_0, 0);
@@ -72,6 +77,7 @@ _PUBLIC_ void ndr_print_domsid(struct ndr_print *ndr, const char *name, const st
 {
 	uint32_t cntr_sub_auths_0;
 	ndr_print_struct(ndr, name, "domsid");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint8(ndr, "sid_rev_num", r->sid_rev_num);
 	ndr_print_uint8(ndr, "num_auths", r->num_auths);
@@ -79,11 +85,7 @@ _PUBLIC_ void ndr_print_domsid(struct ndr_print *ndr, const char *name, const st
 	ndr->print(ndr, "%s: ARRAY(%d)", "sub_auths", (int)MAXSUBAUTHS);
 	ndr->depth++;
 	for (cntr_sub_auths_0=0;cntr_sub_auths_0<MAXSUBAUTHS;cntr_sub_auths_0++) {
-		char *idx_0=NULL;
-		if (asprintf(&idx_0, "[%d]", cntr_sub_auths_0) != -1) {
-			ndr_print_uint32(ndr, "sub_auths", r->sub_auths[cntr_sub_auths_0]);
-			free(idx_0);
-		}
+		ndr_print_uint32(ndr, "sub_auths", r->sub_auths[cntr_sub_auths_0]);
 	}
 	ndr->depth--;
 	ndr->depth--;
@@ -151,6 +153,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_100(struct ndr_pull *ndr, int nd
 _PUBLIC_ void ndr_print_SERVER_INFO_100(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_100 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_100");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv100_platform_id", r->sv100_platform_id);
 	ndr_print_string(ndr, "sv100_name", r->sv100_name);
@@ -194,6 +197,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_101(struct ndr_pull *ndr, int nd
 _PUBLIC_ void ndr_print_SERVER_INFO_101(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_101 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_101");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv101_platform_id", r->sv101_platform_id);
 	ndr_print_string(ndr, "sv101_name", r->sv101_name);
@@ -255,6 +259,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_102(struct ndr_pull *ndr, int nd
 _PUBLIC_ void ndr_print_SERVER_INFO_102(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_102 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_102");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv102_platform_id", r->sv102_platform_id);
 	ndr_print_string(ndr, "sv102_name", r->sv102_name);
@@ -359,6 +364,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_402(struct ndr_pull *ndr, int nd
 _PUBLIC_ void ndr_print_SERVER_INFO_402(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_402 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_402");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv402_ulist_mtime", r->sv402_ulist_mtime);
 	ndr_print_uint32(ndr, "sv402_glist_mtime", r->sv402_glist_mtime);
@@ -487,6 +493,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_403(struct ndr_pull *ndr, int nd
 _PUBLIC_ void ndr_print_SERVER_INFO_403(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_403 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_403");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv403_ulist_mtime", r->sv403_ulist_mtime);
 	ndr_print_uint32(ndr, "sv403_glist_mtime", r->sv403_glist_mtime);
@@ -586,6 +593,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_502(struct ndr_pull *ndr, int nd
 _PUBLIC_ void ndr_print_SERVER_INFO_502(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_502 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_502");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv502_sessopens", r->sv502_sessopens);
 	ndr_print_uint32(ndr, "sv502_sessvcs", r->sv502_sessvcs);
@@ -717,6 +725,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_503(struct ndr_pull *ndr, int nd
 _PUBLIC_ void ndr_print_SERVER_INFO_503(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_503 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_503");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv503_sessopens", r->sv503_sessopens);
 	ndr_print_uint32(ndr, "sv503_sessvcs", r->sv503_sessvcs);
@@ -900,6 +909,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_599(struct ndr_pull *ndr, int nd
 _PUBLIC_ void ndr_print_SERVER_INFO_599(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_599 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_599");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv599_sessopens", r->sv599_sessopens);
 	ndr_print_uint32(ndr, "sv599_sessvcs", r->sv599_sessvcs);
@@ -1009,7 +1019,6 @@ _PUBLIC_ enum ndr_err_code ndr_push_SERVER_INFO_598(struct ndr_push *ndr, int nd
 		NDR_CHECK(ndr_push_trailer_align(ndr, 4));
 	}
 	if (ndr_flags & NDR_BUFFERS) {
-		NDR_CHECK(ndr_push_GUID(ndr, NDR_BUFFERS, &r->sv598_serverguid));
 	}
 	return NDR_ERR_SUCCESS;
 }
@@ -1063,7 +1072,6 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_598(struct ndr_pull *ndr, int nd
 		NDR_CHECK(ndr_pull_trailer_align(ndr, 4));
 	}
 	if (ndr_flags & NDR_BUFFERS) {
-		NDR_CHECK(ndr_pull_GUID(ndr, NDR_BUFFERS, &r->sv598_serverguid));
 	}
 	return NDR_ERR_SUCCESS;
 }
@@ -1071,6 +1079,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_598(struct ndr_pull *ndr, int nd
 _PUBLIC_ void ndr_print_SERVER_INFO_598(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_598 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_598");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv598_maxrawworkitems", r->sv598_maxrawworkitems);
 	ndr_print_uint32(ndr, "sv598_maxthreadsperqueue", r->sv598_maxthreadsperqueue);
@@ -1144,6 +1153,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1005(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1005(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1005 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1005");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "sv1005_comment", r->sv1005_comment);
 	ndr->depth--;
@@ -1176,6 +1186,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1107(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1107(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1107 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1107");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1107_users", r->sv1107_users);
 	ndr->depth--;
@@ -1208,6 +1219,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1010(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1010(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1010 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1010");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_int32(ndr, "sv1010_disc", r->sv1010_disc);
 	ndr->depth--;
@@ -1240,6 +1252,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1016(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1016(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1016 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1016");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint8(ndr, "sv1016_hidden", r->sv1016_hidden);
 	ndr->depth--;
@@ -1272,6 +1285,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1017(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1017(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1017 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1017");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1017_announce", r->sv1017_announce);
 	ndr->depth--;
@@ -1304,6 +1318,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1018(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1018(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1018 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1018");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1018_anndelta", r->sv1018_anndelta);
 	ndr->depth--;
@@ -1336,6 +1351,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1501(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1501(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1501 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1501");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1501_sessopens", r->sv1501_sessopens);
 	ndr->depth--;
@@ -1368,6 +1384,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1502(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1502(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1502 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1502");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1502_sessvcs", r->sv1502_sessvcs);
 	ndr->depth--;
@@ -1400,6 +1417,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1503(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1503(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1503 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1503");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1503_opensearch", r->sv1503_opensearch);
 	ndr->depth--;
@@ -1432,6 +1450,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1506(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1506(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1506 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1506");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1506_maxworkitems", r->sv1506_maxworkitems);
 	ndr->depth--;
@@ -1464,6 +1483,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1509(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1509(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1509 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1509");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1509_maxrawbuflen", r->sv1509_maxrawbuflen);
 	ndr->depth--;
@@ -1496,6 +1516,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1510(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1510(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1510 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1510");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1510_sessusers", r->sv1510_sessusers);
 	ndr->depth--;
@@ -1528,6 +1549,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1511(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1511(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1511 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1511");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1511_sessconns", r->sv1511_sessconns);
 	ndr->depth--;
@@ -1560,6 +1582,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1512(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1512(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1512 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1512");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1512_maxnonpagedmemoryusage", r->sv1512_maxnonpagedmemoryusage);
 	ndr->depth--;
@@ -1592,6 +1615,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1513(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1513(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1513 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1513");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1513_maxpagedmemoryusage", r->sv1513_maxpagedmemoryusage);
 	ndr->depth--;
@@ -1624,6 +1648,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1514(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1514(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1514 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1514");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint8(ndr, "sv1514_enablesoftcompat", r->sv1514_enablesoftcompat);
 	ndr->depth--;
@@ -1656,6 +1681,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1515(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1515(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1515 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1515");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint8(ndr, "sv1515_enableforcedlogoff", r->sv1515_enableforcedlogoff);
 	ndr->depth--;
@@ -1688,6 +1714,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1516(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1516(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1516 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1516");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint8(ndr, "sv1516_timesource", r->sv1516_timesource);
 	ndr->depth--;
@@ -1720,6 +1747,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1518(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1518(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1518 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1518");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint8(ndr, "sv1518_lmannounce", r->sv1518_lmannounce);
 	ndr->depth--;
@@ -1752,6 +1780,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1520(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1520(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1520 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1520");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1520_maxcopyreadlen", r->sv1520_maxcopyreadlen);
 	ndr->depth--;
@@ -1784,6 +1813,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1521(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1521(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1521 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1521");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1521_maxcopywritelen", r->sv1521_maxcopywritelen);
 	ndr->depth--;
@@ -1816,6 +1846,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1522(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1522(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1522 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1522");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1522_minkeepsearch", r->sv1522_minkeepsearch);
 	ndr->depth--;
@@ -1848,6 +1879,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1523(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1523(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1523 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1523");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1523_maxkeepsearch", r->sv1523_maxkeepsearch);
 	ndr->depth--;
@@ -1880,6 +1912,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1524(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1524(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1524 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1524");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1524_minkeepcomplsearch", r->sv1524_minkeepcomplsearch);
 	ndr->depth--;
@@ -1912,6 +1945,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1525(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1525(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1525 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1525");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1525_maxkeepcomplsearch", r->sv1525_maxkeepcomplsearch);
 	ndr->depth--;
@@ -1944,6 +1978,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1528(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1528(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1528 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1528");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1528_scavtimeout", r->sv1528_scavtimeout);
 	ndr->depth--;
@@ -1976,6 +2011,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1529(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1529(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1529 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1529");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1529_minrcvqueue", r->sv1529_minrcvqueue);
 	ndr->depth--;
@@ -2008,6 +2044,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1530(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1530(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1530 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1530");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1530_minfreeworkitems", r->sv1530_minfreeworkitems);
 	ndr->depth--;
@@ -2040,6 +2077,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1533(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1533(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1533 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1533");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1533_maxmpxct", r->sv1533_maxmpxct);
 	ndr->depth--;
@@ -2072,6 +2110,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1534(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1534(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1534 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1534");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1534_oplockbreakwait", r->sv1534_oplockbreakwait);
 	ndr->depth--;
@@ -2104,6 +2143,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1535(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1535(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1535 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1535");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1535_oplockbreakresponsewait", r->sv1535_oplockbreakresponsewait);
 	ndr->depth--;
@@ -2136,6 +2176,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1536(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1536(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1536 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1536");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint8(ndr, "sv1536_enableoplocks", r->sv1536_enableoplocks);
 	ndr->depth--;
@@ -2168,6 +2209,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1537(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1537(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1537 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1537");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint8(ndr, "sv1537_enableoplockforceclose", r->sv1537_enableoplockforceclose);
 	ndr->depth--;
@@ -2200,6 +2242,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1538(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1538(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1538 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1538");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint8(ndr, "sv1538_enablefcbopens", r->sv1538_enablefcbopens);
 	ndr->depth--;
@@ -2232,6 +2275,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1539(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1539(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1539 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1539");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint8(ndr, "sv1539_enableraw", r->sv1539_enableraw);
 	ndr->depth--;
@@ -2264,6 +2308,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1540(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1540(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1540 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1540");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint8(ndr, "sv1540_enablesharednetdrives", r->sv1540_enablesharednetdrives);
 	ndr->depth--;
@@ -2296,6 +2341,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1541(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1541(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1541 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1541");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint8(ndr, "sv1541_minfreeconnections", r->sv1541_minfreeconnections);
 	ndr->depth--;
@@ -2328,6 +2374,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1542(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1542(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1542 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1542");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint8(ndr, "sv1542_maxfreeconnections", r->sv1542_maxfreeconnections);
 	ndr->depth--;
@@ -2360,6 +2407,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1543(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1543(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1543 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1543");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1543_initsesstable", r->sv1543_initsesstable);
 	ndr->depth--;
@@ -2392,6 +2440,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1544(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1544(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1544 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1544");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1544_initconntable", r->sv1544_initconntable);
 	ndr->depth--;
@@ -2424,6 +2473,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1545(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1545(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1545 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1545");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1545_initfiletable", r->sv1545_initfiletable);
 	ndr->depth--;
@@ -2456,6 +2506,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1546(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1546(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1546 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1546");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1546_initsearchtable", r->sv1546_initsearchtable);
 	ndr->depth--;
@@ -2488,6 +2539,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1547(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1547(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1547 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1547");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1547_alertschedule", r->sv1547_alertschedule);
 	ndr->depth--;
@@ -2520,6 +2572,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1548(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1548(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1548 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1548");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1548_errorthreshold", r->sv1548_errorthreshold);
 	ndr->depth--;
@@ -2552,6 +2605,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1549(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1549(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1549 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1549");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1549_networkerrorthreshold", r->sv1549_networkerrorthreshold);
 	ndr->depth--;
@@ -2584,6 +2638,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1550(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1550(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1550 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1550");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1550_diskspacethreshold", r->sv1550_diskspacethreshold);
 	ndr->depth--;
@@ -2616,6 +2671,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1552(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1552(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1552 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1552");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1552_maxlinkdelay", r->sv1552_maxlinkdelay);
 	ndr->depth--;
@@ -2648,6 +2704,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1553(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1553(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1553 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1553");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1553_minlinkthroughput", r->sv1553_minlinkthroughput);
 	ndr->depth--;
@@ -2680,6 +2737,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1554(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1554(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1554 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1554");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1554_linkinfovalidtime", r->sv1554_linkinfovalidtime);
 	ndr->depth--;
@@ -2712,6 +2770,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1555(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1555(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1555 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1555");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1555_scavqosinfoupdatetime", r->sv1555_scavqosinfoupdatetime);
 	ndr->depth--;
@@ -2744,6 +2803,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1556(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1556(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1556 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1556");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1556_maxworkitemidletime", r->sv1556_maxworkitemidletime);
 	ndr->depth--;
@@ -2776,6 +2836,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1557(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1557(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1557 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1557");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1557_maxrawworkitems", r->sv1557_maxrawworkitems);
 	ndr->depth--;
@@ -2808,6 +2869,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1560(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1560(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1560 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1560");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1560_producttype", r->sv1560_producttype);
 	ndr->depth--;
@@ -2840,6 +2902,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1561(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1561(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1561 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1561");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1561_serversize", r->sv1561_serversize);
 	ndr->depth--;
@@ -2872,6 +2935,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1562(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1562(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1562 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1562");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1562_connectionlessautodisc", r->sv1562_connectionlessautodisc);
 	ndr->depth--;
@@ -2904,6 +2968,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1563(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1563(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1563 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1563");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1563_sharingviolationretries", r->sv1563_sharingviolationretries);
 	ndr->depth--;
@@ -2936,6 +3001,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1564(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1564(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1564 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1564");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1564_sharingviolationdelay", r->sv1564_sharingviolationdelay);
 	ndr->depth--;
@@ -2968,6 +3034,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1565(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1565(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1565 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1565");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1565_maxglobalopensearch", r->sv1565_maxglobalopensearch);
 	ndr->depth--;
@@ -3000,6 +3067,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1566(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1566(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1566 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1566");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint8(ndr, "sv1566_removeduplicatesearches", r->sv1566_removeduplicatesearches);
 	ndr->depth--;
@@ -3032,6 +3100,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1567(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1567(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1567 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1567");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1567_lockviolationretries", r->sv1567_lockviolationretries);
 	ndr->depth--;
@@ -3064,6 +3133,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1568(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1568(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1568 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1568");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1568_lockviolationoffset", r->sv1568_lockviolationoffset);
 	ndr->depth--;
@@ -3096,6 +3166,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1569(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1569(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1569 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1569");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1569_lockviolationdelay", r->sv1569_lockviolationdelay);
 	ndr->depth--;
@@ -3128,6 +3199,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1570(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1570(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1570 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1570");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1570_mdlreadswitchover", r->sv1570_mdlreadswitchover);
 	ndr->depth--;
@@ -3160,6 +3232,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1571(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1571(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1571 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1571");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1571_cachedopenlimit", r->sv1571_cachedopenlimit);
 	ndr->depth--;
@@ -3192,6 +3265,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1572(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1572(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1572 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1572");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1572_criticalthreads", r->sv1572_criticalthreads);
 	ndr->depth--;
@@ -3224,6 +3298,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1573(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1573(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1573 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1573");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1573_restrictnullsessaccess", r->sv1573_restrictnullsessaccess);
 	ndr->depth--;
@@ -3256,6 +3331,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1574(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1574(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1574 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1574");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1574_enablewfw311directipx", r->sv1574_enablewfw311directipx);
 	ndr->depth--;
@@ -3288,6 +3364,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1575(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1575(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1575 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1575");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1575_otherqueueaffinity", r->sv1575_otherqueueaffinity);
 	ndr->depth--;
@@ -3320,6 +3397,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1576(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1576(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1576 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1576");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1576_queuesamplesecs", r->sv1576_queuesamplesecs);
 	ndr->depth--;
@@ -3352,6 +3430,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1577(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1577(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1577 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1577");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1577_balancecount", r->sv1577_balancecount);
 	ndr->depth--;
@@ -3384,6 +3463,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1578(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1578(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1578 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1578");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1578_preferredaffinity", r->sv1578_preferredaffinity);
 	ndr->depth--;
@@ -3416,6 +3496,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1579(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1579(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1579 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1579");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1579_maxfreerfcbs", r->sv1579_maxfreerfcbs);
 	ndr->depth--;
@@ -3448,6 +3529,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1580(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1580(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1580 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1580");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1580_maxfreemfcbs", r->sv1580_maxfreemfcbs);
 	ndr->depth--;
@@ -3480,6 +3562,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1581(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1581(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1581 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1581");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1581_maxfreemlcbs", r->sv1581_maxfreemlcbs);
 	ndr->depth--;
@@ -3512,6 +3595,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1582(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1582(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1582 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1582");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1582_maxfreepagedpoolchunks", r->sv1582_maxfreepagedpoolchunks);
 	ndr->depth--;
@@ -3544,6 +3628,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1583(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1583(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1583 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1583");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1583_minpagedpoolchunksize", r->sv1583_minpagedpoolchunksize);
 	ndr->depth--;
@@ -3576,6 +3661,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1584(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1584(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1584 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1584");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1584_maxpagedpoolchunksize", r->sv1584_maxpagedpoolchunksize);
 	ndr->depth--;
@@ -3608,6 +3694,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1585(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1585(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1585 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1585");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint8(ndr, "sv1585_sendsfrompreferredprocessor", r->sv1585_sendsfrompreferredprocessor);
 	ndr->depth--;
@@ -3640,6 +3727,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1586(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1586(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1586 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1586");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1586_maxthreadsperqueue", r->sv1586_maxthreadsperqueue);
 	ndr->depth--;
@@ -3672,6 +3760,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1587(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1587(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1587 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1587");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1587_cacheddirectorylimit", r->sv1587_cacheddirectorylimit);
 	ndr->depth--;
@@ -3704,6 +3793,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1588(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1588(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1588 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1588");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1588_maxcopylength", r->sv1588_maxcopylength);
 	ndr->depth--;
@@ -3736,6 +3826,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1590(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1590(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1590 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1590");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1590_enablecompression", r->sv1590_enablecompression);
 	ndr->depth--;
@@ -3768,6 +3859,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1591(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1591(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1591 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1591");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1591_autosharewks", r->sv1591_autosharewks);
 	ndr->depth--;
@@ -3800,6 +3892,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1592(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1592(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1592 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1592");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1592_autosharewks", r->sv1592_autosharewks);
 	ndr->depth--;
@@ -3832,6 +3925,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1593(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1593(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1593 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1593");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1593_enablesecuritysignature", r->sv1593_enablesecuritysignature);
 	ndr->depth--;
@@ -3864,6 +3958,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1594(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1594(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1594 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1594");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1594_requiresecuritysignature", r->sv1594_requiresecuritysignature);
 	ndr->depth--;
@@ -3896,6 +3991,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1595(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1595(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1595 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1595");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1595_minclientbuffersize", r->sv1595_minclientbuffersize);
 	ndr->depth--;
@@ -3928,6 +4024,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1596(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1596(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1596 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1596");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1596_ConnectionNoSessionsTimeout", r->sv1596_ConnectionNoSessionsTimeout);
 	ndr->depth--;
@@ -3960,6 +4057,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1597(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1597(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1597 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1597");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1597_IdleThreadTimeOut", r->sv1597_IdleThreadTimeOut);
 	ndr->depth--;
@@ -3992,6 +4090,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1598(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1598(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1598 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1598");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1598_enableW9xsecuritysignature", r->sv1598_enableW9xsecuritysignature);
 	ndr->depth--;
@@ -4024,6 +4123,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1599(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1599(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1599 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1599");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint8(ndr, "sv1598_enforcekerberosreauthentication", r->sv1598_enforcekerberosreauthentication);
 	ndr->depth--;
@@ -4056,6 +4156,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1600(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1600(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1600 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1600");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint8(ndr, "sv1598_disabledos", r->sv1598_disabledos);
 	ndr->depth--;
@@ -4088,6 +4189,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1601(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1601(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1601 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1601");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "sv1598_lowdiskspaceminimum", r->sv1598_lowdiskspaceminimum);
 	ndr->depth--;
@@ -4120,9 +4222,48 @@ _PUBLIC_ enum ndr_err_code ndr_pull_SERVER_INFO_1602(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_SERVER_INFO_1602(struct ndr_print *ndr, const char *name, const struct SERVER_INFO_1602 *r)
 {
 	ndr_print_struct(ndr, name, "SERVER_INFO_1602");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint8(ndr, "sv_1598_disablestrictnamechecking", r->sv_1598_disablestrictnamechecking);
 	ndr->depth--;
+}
+
+_PUBLIC_ enum ndr_err_code ndr_push_DOMAIN_CONTROLLER_INFO_FLAGS(struct ndr_push *ndr, int ndr_flags, enum DOMAIN_CONTROLLER_INFO_FLAGS r)
+{
+	NDR_CHECK(ndr_push_enum_uint32(ndr, NDR_SCALARS, r));
+	return NDR_ERR_SUCCESS;
+}
+
+_PUBLIC_ enum ndr_err_code ndr_pull_DOMAIN_CONTROLLER_INFO_FLAGS(struct ndr_pull *ndr, int ndr_flags, enum DOMAIN_CONTROLLER_INFO_FLAGS *r)
+{
+	uint32_t v;
+	NDR_CHECK(ndr_pull_enum_uint32(ndr, NDR_SCALARS, &v));
+	*r = v;
+	return NDR_ERR_SUCCESS;
+}
+
+_PUBLIC_ void ndr_print_DOMAIN_CONTROLLER_INFO_FLAGS(struct ndr_print *ndr, const char *name, enum DOMAIN_CONTROLLER_INFO_FLAGS r)
+{
+	const char *val = NULL;
+
+	switch (r) {
+		case DS_PDC_FLAG: val = "DS_PDC_FLAG"; break;
+		case DS_GC_FLAG: val = "DS_GC_FLAG"; break;
+		case DS_LDAP_FLAG: val = "DS_LDAP_FLAG"; break;
+		case DS_DS_FLAG: val = "DS_DS_FLAG"; break;
+		case DS_KDC_FLAG: val = "DS_KDC_FLAG"; break;
+		case DS_TIMESERV_FLAG: val = "DS_TIMESERV_FLAG"; break;
+		case DS_CLOSEST_FLAG: val = "DS_CLOSEST_FLAG"; break;
+		case DS_WRITABLE_FLAG: val = "DS_WRITABLE_FLAG"; break;
+		case DS_GOOD_TIMESERV_FLAG: val = "DS_GOOD_TIMESERV_FLAG"; break;
+		case DS_NDNC_FLAG: val = "DS_NDNC_FLAG"; break;
+		case DS_SELECT_SECRET_DOMAIN_6_FLAG: val = "DS_SELECT_SECRET_DOMAIN_6_FLAG"; break;
+		case DS_FULL_SECRET_DOMAIN_6_FLAG: val = "DS_FULL_SECRET_DOMAIN_6_FLAG"; break;
+		case DS_DNS_CONTROLLER_FLAG: val = "DS_DNS_CONTROLLER_FLAG"; break;
+		case DS_DNS_DOMAIN_FLAG: val = "DS_DNS_DOMAIN_FLAG"; break;
+		case DS_DNS_FOREST_FLAG: val = "DS_DNS_FOREST_FLAG"; break;
+	}
+	ndr_print_enum(ndr, name, "ENUM", val, r);
 }
 
 _PUBLIC_ enum ndr_err_code ndr_push_DOMAIN_CONTROLLER_INFO(struct ndr_push *ndr, int ndr_flags, const struct DOMAIN_CONTROLLER_INFO *r)
@@ -4135,13 +4276,12 @@ _PUBLIC_ enum ndr_err_code ndr_push_DOMAIN_CONTROLLER_INFO(struct ndr_push *ndr,
 		NDR_CHECK(ndr_push_GUID(ndr, NDR_SCALARS, &r->domain_guid));
 		NDR_CHECK(ndr_push_string(ndr, NDR_SCALARS, r->domain_name));
 		NDR_CHECK(ndr_push_string(ndr, NDR_SCALARS, r->dns_forest_name));
-		NDR_CHECK(ndr_push_uint32(ndr, NDR_SCALARS, r->flags));
+		NDR_CHECK(ndr_push_DOMAIN_CONTROLLER_INFO_FLAGS(ndr, NDR_SCALARS, r->flags));
 		NDR_CHECK(ndr_push_string(ndr, NDR_SCALARS, r->dc_site_name));
 		NDR_CHECK(ndr_push_string(ndr, NDR_SCALARS, r->client_site_name));
 		NDR_CHECK(ndr_push_trailer_align(ndr, 4));
 	}
 	if (ndr_flags & NDR_BUFFERS) {
-		NDR_CHECK(ndr_push_GUID(ndr, NDR_BUFFERS, &r->domain_guid));
 	}
 	return NDR_ERR_SUCCESS;
 }
@@ -4156,13 +4296,12 @@ _PUBLIC_ enum ndr_err_code ndr_pull_DOMAIN_CONTROLLER_INFO(struct ndr_pull *ndr,
 		NDR_CHECK(ndr_pull_GUID(ndr, NDR_SCALARS, &r->domain_guid));
 		NDR_CHECK(ndr_pull_string(ndr, NDR_SCALARS, &r->domain_name));
 		NDR_CHECK(ndr_pull_string(ndr, NDR_SCALARS, &r->dns_forest_name));
-		NDR_CHECK(ndr_pull_uint32(ndr, NDR_SCALARS, &r->flags));
+		NDR_CHECK(ndr_pull_DOMAIN_CONTROLLER_INFO_FLAGS(ndr, NDR_SCALARS, &r->flags));
 		NDR_CHECK(ndr_pull_string(ndr, NDR_SCALARS, &r->dc_site_name));
 		NDR_CHECK(ndr_pull_string(ndr, NDR_SCALARS, &r->client_site_name));
 		NDR_CHECK(ndr_pull_trailer_align(ndr, 4));
 	}
 	if (ndr_flags & NDR_BUFFERS) {
-		NDR_CHECK(ndr_pull_GUID(ndr, NDR_BUFFERS, &r->domain_guid));
 	}
 	return NDR_ERR_SUCCESS;
 }
@@ -4170,6 +4309,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_DOMAIN_CONTROLLER_INFO(struct ndr_pull *ndr,
 _PUBLIC_ void ndr_print_DOMAIN_CONTROLLER_INFO(struct ndr_print *ndr, const char *name, const struct DOMAIN_CONTROLLER_INFO *r)
 {
 	ndr_print_struct(ndr, name, "DOMAIN_CONTROLLER_INFO");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "domain_controller_name", r->domain_controller_name);
 	ndr_print_string(ndr, "domain_controller_address", r->domain_controller_address);
@@ -4177,7 +4317,7 @@ _PUBLIC_ void ndr_print_DOMAIN_CONTROLLER_INFO(struct ndr_print *ndr, const char
 	ndr_print_GUID(ndr, "domain_guid", &r->domain_guid);
 	ndr_print_string(ndr, "domain_name", r->domain_name);
 	ndr_print_string(ndr, "dns_forest_name", r->dns_forest_name);
-	ndr_print_uint32(ndr, "flags", r->flags);
+	ndr_print_DOMAIN_CONTROLLER_INFO_FLAGS(ndr, "flags", r->flags);
 	ndr_print_string(ndr, "dc_site_name", r->dc_site_name);
 	ndr_print_string(ndr, "client_site_name", r->client_site_name);
 	ndr->depth--;
@@ -4210,6 +4350,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_0(struct ndr_pull *ndr, int ndr_fl
 _PUBLIC_ void ndr_print_USER_INFO_0(struct ndr_print *ndr, const char *name, const struct USER_INFO_0 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_0");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "usri0_name", r->usri0_name);
 	ndr->depth--;
@@ -4256,6 +4397,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_1(struct ndr_pull *ndr, int ndr_fl
 _PUBLIC_ void ndr_print_USER_INFO_1(struct ndr_print *ndr, const char *name, const struct USER_INFO_1 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_1");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "usri1_name", r->usri1_name);
 	ndr_print_string(ndr, "usri1_password", r->usri1_password);
@@ -4357,6 +4499,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_2(struct ndr_pull *ndr, int ndr_fl
 _PUBLIC_ void ndr_print_USER_INFO_2(struct ndr_print *ndr, const char *name, const struct USER_INFO_2 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_2");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "usri2_name", r->usri2_name);
 	ndr_print_string(ndr, "usri2_password", r->usri2_password);
@@ -4487,6 +4630,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_3(struct ndr_pull *ndr, int ndr_fl
 _PUBLIC_ void ndr_print_USER_INFO_3(struct ndr_print *ndr, const char *name, const struct USER_INFO_3 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_3");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "usri3_name", r->usri3_name);
 	ndr_print_uint32(ndr, "usri3_password_age", r->usri3_password_age);
@@ -4639,6 +4783,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_4(struct ndr_pull *ndr, int ndr_fl
 _PUBLIC_ void ndr_print_USER_INFO_4(struct ndr_print *ndr, const char *name, const struct USER_INFO_4 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_4");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "usri4_name", r->usri4_name);
 	ndr_print_string(ndr, "usri4_password", r->usri4_password);
@@ -4715,6 +4860,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_10(struct ndr_pull *ndr, int ndr_f
 _PUBLIC_ void ndr_print_USER_INFO_10(struct ndr_print *ndr, const char *name, const struct USER_INFO_10 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_10");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "usri10_name", r->usri10_name);
 	ndr_print_string(ndr, "usri10_comment", r->usri10_comment);
@@ -4804,6 +4950,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_11(struct ndr_pull *ndr, int ndr_f
 _PUBLIC_ void ndr_print_USER_INFO_11(struct ndr_print *ndr, const char *name, const struct USER_INFO_11 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_11");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "usri11_name", r->usri11_name);
 	ndr_print_string(ndr, "usri11_comment", r->usri11_comment);
@@ -4868,6 +5015,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_20(struct ndr_pull *ndr, int ndr_f
 _PUBLIC_ void ndr_print_USER_INFO_20(struct ndr_print *ndr, const char *name, const struct USER_INFO_20 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_20");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "usri20_name", r->usri20_name);
 	ndr_print_string(ndr, "usri20_full_name", r->usri20_full_name);
@@ -4891,10 +5039,12 @@ _PUBLIC_ enum ndr_err_code ndr_push_USER_INFO_21(struct ndr_push *ndr, int ndr_f
 
 _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_21(struct ndr_pull *ndr, int ndr_flags, struct USER_INFO_21 *r)
 {
+	uint32_t size_usri21_password_0 = 0;
 	if (ndr_flags & NDR_SCALARS) {
 		NDR_CHECK(ndr_pull_align(ndr, 1));
-		NDR_PULL_ALLOC_N(ndr, r->usri21_password, ENCRYPTED_PWLEN);
-		NDR_CHECK(ndr_pull_array_uint8(ndr, NDR_SCALARS, r->usri21_password, ENCRYPTED_PWLEN));
+		size_usri21_password_0 = ENCRYPTED_PWLEN;
+		NDR_PULL_ALLOC_N(ndr, r->usri21_password, size_usri21_password_0);
+		NDR_CHECK(ndr_pull_array_uint8(ndr, NDR_SCALARS, r->usri21_password, size_usri21_password_0));
 		NDR_CHECK(ndr_pull_trailer_align(ndr, 1));
 	}
 	if (ndr_flags & NDR_BUFFERS) {
@@ -4905,6 +5055,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_21(struct ndr_pull *ndr, int ndr_f
 _PUBLIC_ void ndr_print_USER_INFO_21(struct ndr_print *ndr, const char *name, const struct USER_INFO_21 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_21");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_array_uint8(ndr, "usri21_password", r->usri21_password, ENCRYPTED_PWLEN);
 	ndr->depth--;
@@ -4950,13 +5101,15 @@ _PUBLIC_ enum ndr_err_code ndr_push_USER_INFO_22(struct ndr_push *ndr, int ndr_f
 
 _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_22(struct ndr_pull *ndr, int ndr_flags, struct USER_INFO_22 *r)
 {
+	uint32_t size_usri22_password_0 = 0;
 	uint32_t _ptr_usri22_logon_hours;
 	TALLOC_CTX *_mem_save_usri22_logon_hours_0;
 	if (ndr_flags & NDR_SCALARS) {
 		NDR_CHECK(ndr_pull_align(ndr, 5));
 		NDR_CHECK(ndr_pull_string(ndr, NDR_SCALARS, &r->usri22_name));
-		NDR_PULL_ALLOC_N(ndr, r->usri22_password, ENCRYPTED_PWLEN);
-		NDR_CHECK(ndr_pull_array_uint8(ndr, NDR_SCALARS, r->usri22_password, ENCRYPTED_PWLEN));
+		size_usri22_password_0 = ENCRYPTED_PWLEN;
+		NDR_PULL_ALLOC_N(ndr, r->usri22_password, size_usri22_password_0);
+		NDR_CHECK(ndr_pull_array_uint8(ndr, NDR_SCALARS, r->usri22_password, size_usri22_password_0));
 		NDR_CHECK(ndr_pull_uint32(ndr, NDR_SCALARS, &r->usri22_password_age));
 		NDR_CHECK(ndr_pull_uint32(ndr, NDR_SCALARS, &r->usri22_priv));
 		NDR_CHECK(ndr_pull_string(ndr, NDR_SCALARS, &r->usri22_home_dir));
@@ -5000,6 +5153,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_22(struct ndr_pull *ndr, int ndr_f
 _PUBLIC_ void ndr_print_USER_INFO_22(struct ndr_print *ndr, const char *name, const struct USER_INFO_22 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_22");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "usri22_name", r->usri22_name);
 	ndr_print_array_uint8(ndr, "usri22_password", r->usri22_password, ENCRYPTED_PWLEN);
@@ -5084,6 +5238,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_23(struct ndr_pull *ndr, int ndr_f
 _PUBLIC_ void ndr_print_USER_INFO_23(struct ndr_print *ndr, const char *name, const struct USER_INFO_23 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_23");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "usri23_name", r->usri23_name);
 	ndr_print_string(ndr, "usri23_full_name", r->usri23_full_name);
@@ -5125,6 +5280,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_1003(struct ndr_pull *ndr, int ndr
 _PUBLIC_ void ndr_print_USER_INFO_1003(struct ndr_print *ndr, const char *name, const struct USER_INFO_1003 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_1003");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "usri1003_password", r->usri1003_password);
 	ndr->depth--;
@@ -5157,6 +5313,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_1005(struct ndr_pull *ndr, int ndr
 _PUBLIC_ void ndr_print_USER_INFO_1005(struct ndr_print *ndr, const char *name, const struct USER_INFO_1005 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_1005");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "usri1005_priv", r->usri1005_priv);
 	ndr->depth--;
@@ -5189,6 +5346,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_1006(struct ndr_pull *ndr, int ndr
 _PUBLIC_ void ndr_print_USER_INFO_1006(struct ndr_print *ndr, const char *name, const struct USER_INFO_1006 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_1006");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "usri1006_home_dir", r->usri1006_home_dir);
 	ndr->depth--;
@@ -5221,6 +5379,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_1007(struct ndr_pull *ndr, int ndr
 _PUBLIC_ void ndr_print_USER_INFO_1007(struct ndr_print *ndr, const char *name, const struct USER_INFO_1007 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_1007");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "usri1007_comment", r->usri1007_comment);
 	ndr->depth--;
@@ -5253,6 +5412,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_1008(struct ndr_pull *ndr, int ndr
 _PUBLIC_ void ndr_print_USER_INFO_1008(struct ndr_print *ndr, const char *name, const struct USER_INFO_1008 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_1008");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "usri1008_flags", r->usri1008_flags);
 	ndr->depth--;
@@ -5285,6 +5445,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_1009(struct ndr_pull *ndr, int ndr
 _PUBLIC_ void ndr_print_USER_INFO_1009(struct ndr_print *ndr, const char *name, const struct USER_INFO_1009 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_1009");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "usri1009_script_path", r->usri1009_script_path);
 	ndr->depth--;
@@ -5317,6 +5478,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_1010(struct ndr_pull *ndr, int ndr
 _PUBLIC_ void ndr_print_USER_INFO_1010(struct ndr_print *ndr, const char *name, const struct USER_INFO_1010 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_1010");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "usri1010_auth_flags", r->usri1010_auth_flags);
 	ndr->depth--;
@@ -5349,6 +5511,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_1011(struct ndr_pull *ndr, int ndr
 _PUBLIC_ void ndr_print_USER_INFO_1011(struct ndr_print *ndr, const char *name, const struct USER_INFO_1011 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_1011");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "usri1011_full_name", r->usri1011_full_name);
 	ndr->depth--;
@@ -5381,6 +5544,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_1012(struct ndr_pull *ndr, int ndr
 _PUBLIC_ void ndr_print_USER_INFO_1012(struct ndr_print *ndr, const char *name, const struct USER_INFO_1012 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_1012");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "usri1012_usr_comment", r->usri1012_usr_comment);
 	ndr->depth--;
@@ -5413,6 +5577,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_1013(struct ndr_pull *ndr, int ndr
 _PUBLIC_ void ndr_print_USER_INFO_1013(struct ndr_print *ndr, const char *name, const struct USER_INFO_1013 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_1013");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "usri1013_parms", r->usri1013_parms);
 	ndr->depth--;
@@ -5445,6 +5610,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_1014(struct ndr_pull *ndr, int ndr
 _PUBLIC_ void ndr_print_USER_INFO_1014(struct ndr_print *ndr, const char *name, const struct USER_INFO_1014 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_1014");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "usri1014_workstations", r->usri1014_workstations);
 	ndr->depth--;
@@ -5477,6 +5643,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_1017(struct ndr_pull *ndr, int ndr
 _PUBLIC_ void ndr_print_USER_INFO_1017(struct ndr_print *ndr, const char *name, const struct USER_INFO_1017 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_1017");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "usri1017_acct_expires", r->usri1017_acct_expires);
 	ndr->depth--;
@@ -5509,6 +5676,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_1018(struct ndr_pull *ndr, int ndr
 _PUBLIC_ void ndr_print_USER_INFO_1018(struct ndr_print *ndr, const char *name, const struct USER_INFO_1018 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_1018");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "usri1018_max_storage", r->usri1018_max_storage);
 	ndr->depth--;
@@ -5559,6 +5727,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_1020(struct ndr_pull *ndr, int ndr
 _PUBLIC_ void ndr_print_USER_INFO_1020(struct ndr_print *ndr, const char *name, const struct USER_INFO_1020 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_1020");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "usri1020_units_per_week", r->usri1020_units_per_week);
 	ndr_print_ptr(ndr, "usri1020_logon_hours", r->usri1020_logon_hours);
@@ -5597,6 +5766,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_1023(struct ndr_pull *ndr, int ndr
 _PUBLIC_ void ndr_print_USER_INFO_1023(struct ndr_print *ndr, const char *name, const struct USER_INFO_1023 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_1023");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "usri1023_logon_server", r->usri1023_logon_server);
 	ndr->depth--;
@@ -5629,6 +5799,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_1024(struct ndr_pull *ndr, int ndr
 _PUBLIC_ void ndr_print_USER_INFO_1024(struct ndr_print *ndr, const char *name, const struct USER_INFO_1024 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_1024");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "usri1024_country_code", r->usri1024_country_code);
 	ndr->depth--;
@@ -5661,6 +5832,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_1025(struct ndr_pull *ndr, int ndr
 _PUBLIC_ void ndr_print_USER_INFO_1025(struct ndr_print *ndr, const char *name, const struct USER_INFO_1025 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_1025");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "usri1025_code_page", r->usri1025_code_page);
 	ndr->depth--;
@@ -5693,6 +5865,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_1051(struct ndr_pull *ndr, int ndr
 _PUBLIC_ void ndr_print_USER_INFO_1051(struct ndr_print *ndr, const char *name, const struct USER_INFO_1051 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_1051");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "usri1051_primary_group_id", r->usri1051_primary_group_id);
 	ndr->depth--;
@@ -5725,6 +5898,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_1052(struct ndr_pull *ndr, int ndr
 _PUBLIC_ void ndr_print_USER_INFO_1052(struct ndr_print *ndr, const char *name, const struct USER_INFO_1052 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_1052");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "usri1052_profile", r->usri1052_profile);
 	ndr->depth--;
@@ -5757,6 +5931,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_1053(struct ndr_pull *ndr, int ndr
 _PUBLIC_ void ndr_print_USER_INFO_1053(struct ndr_print *ndr, const char *name, const struct USER_INFO_1053 *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_1053");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "usri1053_home_dir_drive", r->usri1053_home_dir_drive);
 	ndr->depth--;
@@ -5861,6 +6036,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_USER_INFO_X(struct ndr_pull *ndr, int ndr_fl
 _PUBLIC_ void ndr_print_USER_INFO_X(struct ndr_print *ndr, const char *name, const struct USER_INFO_X *r)
 {
 	ndr_print_struct(ndr, name, "USER_INFO_X");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "usriX_name", r->usriX_name);
 	ndr_print_string(ndr, "usriX_password", r->usriX_password);
@@ -5926,6 +6102,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_GROUP_USERS_INFO_0(struct ndr_pull *ndr, int
 _PUBLIC_ void ndr_print_GROUP_USERS_INFO_0(struct ndr_print *ndr, const char *name, const struct GROUP_USERS_INFO_0 *r)
 {
 	ndr_print_struct(ndr, name, "GROUP_USERS_INFO_0");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "grui0_name", r->grui0_name);
 	ndr->depth--;
@@ -5960,6 +6137,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_GROUP_USERS_INFO_1(struct ndr_pull *ndr, int
 _PUBLIC_ void ndr_print_GROUP_USERS_INFO_1(struct ndr_print *ndr, const char *name, const struct GROUP_USERS_INFO_1 *r)
 {
 	ndr_print_struct(ndr, name, "GROUP_USERS_INFO_1");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "grui1_name", r->grui1_name);
 	ndr_print_uint32(ndr, "grui1_attributes", r->grui1_attributes);
@@ -6003,6 +6181,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_NET_DISPLAY_USER(struct ndr_pull *ndr, int n
 _PUBLIC_ void ndr_print_NET_DISPLAY_USER(struct ndr_print *ndr, const char *name, const struct NET_DISPLAY_USER *r)
 {
 	ndr_print_struct(ndr, name, "NET_DISPLAY_USER");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "usri1_name", r->usri1_name);
 	ndr_print_string(ndr, "usri1_comment", r->usri1_comment);
@@ -6048,6 +6227,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_NET_DISPLAY_MACHINE(struct ndr_pull *ndr, in
 _PUBLIC_ void ndr_print_NET_DISPLAY_MACHINE(struct ndr_print *ndr, const char *name, const struct NET_DISPLAY_MACHINE *r)
 {
 	ndr_print_struct(ndr, name, "NET_DISPLAY_MACHINE");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "usri2_name", r->usri2_name);
 	ndr_print_string(ndr, "usri2_comment", r->usri2_comment);
@@ -6092,6 +6272,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_NET_DISPLAY_GROUP(struct ndr_pull *ndr, int 
 _PUBLIC_ void ndr_print_NET_DISPLAY_GROUP(struct ndr_print *ndr, const char *name, const struct NET_DISPLAY_GROUP *r)
 {
 	ndr_print_struct(ndr, name, "NET_DISPLAY_GROUP");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_string(ndr, "grpi3_name", r->grpi3_name);
 	ndr_print_string(ndr, "grpi3_comment", r->grpi3_comment);
@@ -6135,6 +6316,7 @@ _PUBLIC_ void ndr_print_SHARE_INFO_1005_FLAGS(struct ndr_print *ndr, const char 
 _PUBLIC_ void ndr_print_NetJoinDomain(struct ndr_print *ndr, const char *name, int flags, const struct NetJoinDomain *r)
 {
 	ndr_print_struct(ndr, name, "NetJoinDomain");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -6185,6 +6367,7 @@ _PUBLIC_ void ndr_print_NetJoinDomain(struct ndr_print *ndr, const char *name, i
 _PUBLIC_ void ndr_print_NetUnjoinDomain(struct ndr_print *ndr, const char *name, int flags, const struct NetUnjoinDomain *r)
 {
 	ndr_print_struct(ndr, name, "NetUnjoinDomain");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -6225,6 +6408,7 @@ _PUBLIC_ void ndr_print_NetUnjoinDomain(struct ndr_print *ndr, const char *name,
 _PUBLIC_ void ndr_print_NetGetJoinInformation(struct ndr_print *ndr, const char *name, int flags, const struct NetGetJoinInformation *r)
 {
 	ndr_print_struct(ndr, name, "NetGetJoinInformation");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -6265,6 +6449,7 @@ _PUBLIC_ void ndr_print_NetGetJoinInformation(struct ndr_print *ndr, const char 
 _PUBLIC_ void ndr_print_NetGetJoinableOUs(struct ndr_print *ndr, const char *name, int flags, const struct NetGetJoinableOUs *r)
 {
 	ndr_print_struct(ndr, name, "NetGetJoinableOUs");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -6326,6 +6511,7 @@ _PUBLIC_ void ndr_print_NetGetJoinableOUs(struct ndr_print *ndr, const char *nam
 _PUBLIC_ void ndr_print_NetRenameMachineInDomain(struct ndr_print *ndr, const char *name, int flags, const struct NetRenameMachineInDomain *r)
 {
 	ndr_print_struct(ndr, name, "NetRenameMachineInDomain");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -6352,6 +6538,7 @@ _PUBLIC_ void ndr_print_NetRenameMachineInDomain(struct ndr_print *ndr, const ch
 _PUBLIC_ void ndr_print_NetServerGetInfo(struct ndr_print *ndr, const char *name, int flags, const struct NetServerGetInfo *r)
 {
 	ndr_print_struct(ndr, name, "NetServerGetInfo");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -6389,6 +6576,7 @@ _PUBLIC_ void ndr_print_NetServerGetInfo(struct ndr_print *ndr, const char *name
 _PUBLIC_ void ndr_print_NetServerSetInfo(struct ndr_print *ndr, const char *name, int flags, const struct NetServerSetInfo *r)
 {
 	ndr_print_struct(ndr, name, "NetServerSetInfo");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -6425,6 +6613,7 @@ _PUBLIC_ void ndr_print_NetServerSetInfo(struct ndr_print *ndr, const char *name
 _PUBLIC_ void ndr_print_NetGetDCName(struct ndr_print *ndr, const char *name, int flags, const struct NetGetDCName *r)
 {
 	ndr_print_struct(ndr, name, "NetGetDCName");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -6467,6 +6656,7 @@ _PUBLIC_ void ndr_print_NetGetDCName(struct ndr_print *ndr, const char *name, in
 _PUBLIC_ void ndr_print_NetGetAnyDCName(struct ndr_print *ndr, const char *name, int flags, const struct NetGetAnyDCName *r)
 {
 	ndr_print_struct(ndr, name, "NetGetAnyDCName");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -6509,6 +6699,7 @@ _PUBLIC_ void ndr_print_NetGetAnyDCName(struct ndr_print *ndr, const char *name,
 _PUBLIC_ void ndr_print_DsGetDcName(struct ndr_print *ndr, const char *name, int flags, const struct DsGetDcName *r)
 {
 	ndr_print_struct(ndr, name, "DsGetDcName");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -6562,6 +6753,7 @@ _PUBLIC_ void ndr_print_DsGetDcName(struct ndr_print *ndr, const char *name, int
 _PUBLIC_ void ndr_print_NetUserAdd(struct ndr_print *ndr, const char *name, int flags, const struct NetUserAdd *r)
 {
 	ndr_print_struct(ndr, name, "NetUserAdd");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -6598,6 +6790,7 @@ _PUBLIC_ void ndr_print_NetUserAdd(struct ndr_print *ndr, const char *name, int 
 _PUBLIC_ void ndr_print_NetUserDel(struct ndr_print *ndr, const char *name, int flags, const struct NetUserDel *r)
 {
 	ndr_print_struct(ndr, name, "NetUserDel");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -6629,6 +6822,7 @@ _PUBLIC_ void ndr_print_NetUserDel(struct ndr_print *ndr, const char *name, int 
 _PUBLIC_ void ndr_print_NetUserEnum(struct ndr_print *ndr, const char *name, int flags, const struct NetUserEnum *r)
 {
 	ndr_print_struct(ndr, name, "NetUserEnum");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -6684,6 +6878,7 @@ _PUBLIC_ void ndr_print_NetUserEnum(struct ndr_print *ndr, const char *name, int
 _PUBLIC_ void ndr_print_NetUserChangePassword(struct ndr_print *ndr, const char *name, int flags, const struct NetUserChangePassword *r)
 {
 	ndr_print_struct(ndr, name, "NetUserChangePassword");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -6709,6 +6904,7 @@ _PUBLIC_ void ndr_print_NetUserChangePassword(struct ndr_print *ndr, const char 
 _PUBLIC_ void ndr_print_NetUserGetInfo(struct ndr_print *ndr, const char *name, int flags, const struct NetUserGetInfo *r)
 {
 	ndr_print_struct(ndr, name, "NetUserGetInfo");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -6742,6 +6938,7 @@ _PUBLIC_ void ndr_print_NetUserGetInfo(struct ndr_print *ndr, const char *name, 
 _PUBLIC_ void ndr_print_NetUserSetInfo(struct ndr_print *ndr, const char *name, int flags, const struct NetUserSetInfo *r)
 {
 	ndr_print_struct(ndr, name, "NetUserSetInfo");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -6774,6 +6971,7 @@ _PUBLIC_ void ndr_print_NetUserSetInfo(struct ndr_print *ndr, const char *name, 
 _PUBLIC_ void ndr_print_NetUserGetGroups(struct ndr_print *ndr, const char *name, int flags, const struct NetUserGetGroups *r)
 {
 	ndr_print_struct(ndr, name, "NetUserGetGroups");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -6816,6 +7014,7 @@ _PUBLIC_ void ndr_print_NetUserGetGroups(struct ndr_print *ndr, const char *name
 _PUBLIC_ void ndr_print_NetUserSetGroups(struct ndr_print *ndr, const char *name, int flags, const struct NetUserSetGroups *r)
 {
 	ndr_print_struct(ndr, name, "NetUserSetGroups");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -6845,6 +7044,7 @@ _PUBLIC_ void ndr_print_NetUserSetGroups(struct ndr_print *ndr, const char *name
 _PUBLIC_ void ndr_print_NetUserGetLocalGroups(struct ndr_print *ndr, const char *name, int flags, const struct NetUserGetLocalGroups *r)
 {
 	ndr_print_struct(ndr, name, "NetUserGetLocalGroups");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -6888,6 +7088,7 @@ _PUBLIC_ void ndr_print_NetUserGetLocalGroups(struct ndr_print *ndr, const char 
 _PUBLIC_ void ndr_print_NetUserModalsGet(struct ndr_print *ndr, const char *name, int flags, const struct NetUserModalsGet *r)
 {
 	ndr_print_struct(ndr, name, "NetUserModalsGet");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -6920,6 +7121,7 @@ _PUBLIC_ void ndr_print_NetUserModalsGet(struct ndr_print *ndr, const char *name
 _PUBLIC_ void ndr_print_NetUserModalsSet(struct ndr_print *ndr, const char *name, int flags, const struct NetUserModalsSet *r)
 {
 	ndr_print_struct(ndr, name, "NetUserModalsSet");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -6951,6 +7153,7 @@ _PUBLIC_ void ndr_print_NetUserModalsSet(struct ndr_print *ndr, const char *name
 _PUBLIC_ void ndr_print_NetQueryDisplayInformation(struct ndr_print *ndr, const char *name, int flags, const struct NetQueryDisplayInformation *r)
 {
 	ndr_print_struct(ndr, name, "NetQueryDisplayInformation");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -6986,6 +7189,7 @@ _PUBLIC_ void ndr_print_NetQueryDisplayInformation(struct ndr_print *ndr, const 
 _PUBLIC_ void ndr_print_NetGroupAdd(struct ndr_print *ndr, const char *name, int flags, const struct NetGroupAdd *r)
 {
 	ndr_print_struct(ndr, name, "NetGroupAdd");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7017,6 +7221,7 @@ _PUBLIC_ void ndr_print_NetGroupAdd(struct ndr_print *ndr, const char *name, int
 _PUBLIC_ void ndr_print_NetGroupDel(struct ndr_print *ndr, const char *name, int flags, const struct NetGroupDel *r)
 {
 	ndr_print_struct(ndr, name, "NetGroupDel");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7040,6 +7245,7 @@ _PUBLIC_ void ndr_print_NetGroupDel(struct ndr_print *ndr, const char *name, int
 _PUBLIC_ void ndr_print_NetGroupEnum(struct ndr_print *ndr, const char *name, int flags, const struct NetGroupEnum *r)
 {
 	ndr_print_struct(ndr, name, "NetGroupEnum");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7089,6 +7295,7 @@ _PUBLIC_ void ndr_print_NetGroupEnum(struct ndr_print *ndr, const char *name, in
 _PUBLIC_ void ndr_print_NetGroupSetInfo(struct ndr_print *ndr, const char *name, int flags, const struct NetGroupSetInfo *r)
 {
 	ndr_print_struct(ndr, name, "NetGroupSetInfo");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7121,6 +7328,7 @@ _PUBLIC_ void ndr_print_NetGroupSetInfo(struct ndr_print *ndr, const char *name,
 _PUBLIC_ void ndr_print_NetGroupGetInfo(struct ndr_print *ndr, const char *name, int flags, const struct NetGroupGetInfo *r)
 {
 	ndr_print_struct(ndr, name, "NetGroupGetInfo");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7154,6 +7362,7 @@ _PUBLIC_ void ndr_print_NetGroupGetInfo(struct ndr_print *ndr, const char *name,
 _PUBLIC_ void ndr_print_NetGroupAddUser(struct ndr_print *ndr, const char *name, int flags, const struct NetGroupAddUser *r)
 {
 	ndr_print_struct(ndr, name, "NetGroupAddUser");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7178,6 +7387,7 @@ _PUBLIC_ void ndr_print_NetGroupAddUser(struct ndr_print *ndr, const char *name,
 _PUBLIC_ void ndr_print_NetGroupDelUser(struct ndr_print *ndr, const char *name, int flags, const struct NetGroupDelUser *r)
 {
 	ndr_print_struct(ndr, name, "NetGroupDelUser");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7202,6 +7412,7 @@ _PUBLIC_ void ndr_print_NetGroupDelUser(struct ndr_print *ndr, const char *name,
 _PUBLIC_ void ndr_print_NetGroupGetUsers(struct ndr_print *ndr, const char *name, int flags, const struct NetGroupGetUsers *r)
 {
 	ndr_print_struct(ndr, name, "NetGroupGetUsers");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7252,6 +7463,7 @@ _PUBLIC_ void ndr_print_NetGroupGetUsers(struct ndr_print *ndr, const char *name
 _PUBLIC_ void ndr_print_NetGroupSetUsers(struct ndr_print *ndr, const char *name, int flags, const struct NetGroupSetUsers *r)
 {
 	ndr_print_struct(ndr, name, "NetGroupSetUsers");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7281,6 +7493,7 @@ _PUBLIC_ void ndr_print_NetGroupSetUsers(struct ndr_print *ndr, const char *name
 _PUBLIC_ void ndr_print_NetLocalGroupAdd(struct ndr_print *ndr, const char *name, int flags, const struct NetLocalGroupAdd *r)
 {
 	ndr_print_struct(ndr, name, "NetLocalGroupAdd");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7312,6 +7525,7 @@ _PUBLIC_ void ndr_print_NetLocalGroupAdd(struct ndr_print *ndr, const char *name
 _PUBLIC_ void ndr_print_NetLocalGroupDel(struct ndr_print *ndr, const char *name, int flags, const struct NetLocalGroupDel *r)
 {
 	ndr_print_struct(ndr, name, "NetLocalGroupDel");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7335,6 +7549,7 @@ _PUBLIC_ void ndr_print_NetLocalGroupDel(struct ndr_print *ndr, const char *name
 _PUBLIC_ void ndr_print_NetLocalGroupGetInfo(struct ndr_print *ndr, const char *name, int flags, const struct NetLocalGroupGetInfo *r)
 {
 	ndr_print_struct(ndr, name, "NetLocalGroupGetInfo");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7368,6 +7583,7 @@ _PUBLIC_ void ndr_print_NetLocalGroupGetInfo(struct ndr_print *ndr, const char *
 _PUBLIC_ void ndr_print_NetLocalGroupSetInfo(struct ndr_print *ndr, const char *name, int flags, const struct NetLocalGroupSetInfo *r)
 {
 	ndr_print_struct(ndr, name, "NetLocalGroupSetInfo");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7400,6 +7616,7 @@ _PUBLIC_ void ndr_print_NetLocalGroupSetInfo(struct ndr_print *ndr, const char *
 _PUBLIC_ void ndr_print_NetLocalGroupEnum(struct ndr_print *ndr, const char *name, int flags, const struct NetLocalGroupEnum *r)
 {
 	ndr_print_struct(ndr, name, "NetLocalGroupEnum");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7449,6 +7666,7 @@ _PUBLIC_ void ndr_print_NetLocalGroupEnum(struct ndr_print *ndr, const char *nam
 _PUBLIC_ void ndr_print_NetLocalGroupAddMembers(struct ndr_print *ndr, const char *name, int flags, const struct NetLocalGroupAddMembers *r)
 {
 	ndr_print_struct(ndr, name, "NetLocalGroupAddMembers");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7478,6 +7696,7 @@ _PUBLIC_ void ndr_print_NetLocalGroupAddMembers(struct ndr_print *ndr, const cha
 _PUBLIC_ void ndr_print_NetLocalGroupDelMembers(struct ndr_print *ndr, const char *name, int flags, const struct NetLocalGroupDelMembers *r)
 {
 	ndr_print_struct(ndr, name, "NetLocalGroupDelMembers");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7507,6 +7726,7 @@ _PUBLIC_ void ndr_print_NetLocalGroupDelMembers(struct ndr_print *ndr, const cha
 _PUBLIC_ void ndr_print_NetLocalGroupGetMembers(struct ndr_print *ndr, const char *name, int flags, const struct NetLocalGroupGetMembers *r)
 {
 	ndr_print_struct(ndr, name, "NetLocalGroupGetMembers");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7557,6 +7777,7 @@ _PUBLIC_ void ndr_print_NetLocalGroupGetMembers(struct ndr_print *ndr, const cha
 _PUBLIC_ void ndr_print_NetLocalGroupSetMembers(struct ndr_print *ndr, const char *name, int flags, const struct NetLocalGroupSetMembers *r)
 {
 	ndr_print_struct(ndr, name, "NetLocalGroupSetMembers");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7586,6 +7807,7 @@ _PUBLIC_ void ndr_print_NetLocalGroupSetMembers(struct ndr_print *ndr, const cha
 _PUBLIC_ void ndr_print_NetRemoteTOD(struct ndr_print *ndr, const char *name, int flags, const struct NetRemoteTOD *r)
 {
 	ndr_print_struct(ndr, name, "NetRemoteTOD");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7617,6 +7839,7 @@ _PUBLIC_ void ndr_print_NetRemoteTOD(struct ndr_print *ndr, const char *name, in
 _PUBLIC_ void ndr_print_NetShareAdd(struct ndr_print *ndr, const char *name, int flags, const struct NetShareAdd *r)
 {
 	ndr_print_struct(ndr, name, "NetShareAdd");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7648,6 +7871,7 @@ _PUBLIC_ void ndr_print_NetShareAdd(struct ndr_print *ndr, const char *name, int
 _PUBLIC_ void ndr_print_NetShareDel(struct ndr_print *ndr, const char *name, int flags, const struct NetShareDel *r)
 {
 	ndr_print_struct(ndr, name, "NetShareDel");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7672,6 +7896,7 @@ _PUBLIC_ void ndr_print_NetShareDel(struct ndr_print *ndr, const char *name, int
 _PUBLIC_ void ndr_print_NetShareEnum(struct ndr_print *ndr, const char *name, int flags, const struct NetShareEnum *r)
 {
 	ndr_print_struct(ndr, name, "NetShareEnum");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7721,6 +7946,7 @@ _PUBLIC_ void ndr_print_NetShareEnum(struct ndr_print *ndr, const char *name, in
 _PUBLIC_ void ndr_print_NetShareGetInfo(struct ndr_print *ndr, const char *name, int flags, const struct NetShareGetInfo *r)
 {
 	ndr_print_struct(ndr, name, "NetShareGetInfo");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7754,6 +7980,7 @@ _PUBLIC_ void ndr_print_NetShareGetInfo(struct ndr_print *ndr, const char *name,
 _PUBLIC_ void ndr_print_NetShareSetInfo(struct ndr_print *ndr, const char *name, int flags, const struct NetShareSetInfo *r)
 {
 	ndr_print_struct(ndr, name, "NetShareSetInfo");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7786,6 +8013,7 @@ _PUBLIC_ void ndr_print_NetShareSetInfo(struct ndr_print *ndr, const char *name,
 _PUBLIC_ void ndr_print_NetFileClose(struct ndr_print *ndr, const char *name, int flags, const struct NetFileClose *r)
 {
 	ndr_print_struct(ndr, name, "NetFileClose");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7809,6 +8037,7 @@ _PUBLIC_ void ndr_print_NetFileClose(struct ndr_print *ndr, const char *name, in
 _PUBLIC_ void ndr_print_NetFileGetInfo(struct ndr_print *ndr, const char *name, int flags, const struct NetFileGetInfo *r)
 {
 	ndr_print_struct(ndr, name, "NetFileGetInfo");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7842,6 +8071,7 @@ _PUBLIC_ void ndr_print_NetFileGetInfo(struct ndr_print *ndr, const char *name, 
 _PUBLIC_ void ndr_print_NetFileEnum(struct ndr_print *ndr, const char *name, int flags, const struct NetFileEnum *r)
 {
 	ndr_print_struct(ndr, name, "NetFileEnum");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7893,6 +8123,7 @@ _PUBLIC_ void ndr_print_NetFileEnum(struct ndr_print *ndr, const char *name, int
 _PUBLIC_ void ndr_print_NetShutdownInit(struct ndr_print *ndr, const char *name, int flags, const struct NetShutdownInit *r)
 {
 	ndr_print_struct(ndr, name, "NetShutdownInit");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7919,6 +8150,7 @@ _PUBLIC_ void ndr_print_NetShutdownInit(struct ndr_print *ndr, const char *name,
 _PUBLIC_ void ndr_print_NetShutdownAbort(struct ndr_print *ndr, const char *name, int flags, const struct NetShutdownAbort *r)
 {
 	ndr_print_struct(ndr, name, "NetShutdownAbort");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7941,6 +8173,7 @@ _PUBLIC_ void ndr_print_NetShutdownAbort(struct ndr_print *ndr, const char *name
 _PUBLIC_ void ndr_print_I_NetLogonControl(struct ndr_print *ndr, const char *name, int flags, const struct I_NetLogonControl *r)
 {
 	ndr_print_struct(ndr, name, "I_NetLogonControl");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7974,6 +8207,7 @@ _PUBLIC_ void ndr_print_I_NetLogonControl(struct ndr_print *ndr, const char *nam
 _PUBLIC_ void ndr_print_I_NetLogonControl2(struct ndr_print *ndr, const char *name, int flags, const struct I_NetLogonControl2 *r)
 {
 	ndr_print_struct(ndr, name, "I_NetLogonControl2");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	if (flags & NDR_SET_VALUES) {
 		ndr->flags |= LIBNDR_PRINT_SET_VALUES;
@@ -7986,7 +8220,9 @@ _PUBLIC_ void ndr_print_I_NetLogonControl2(struct ndr_print *ndr, const char *na
 		ndr_print_uint32(ndr, "query_level", r->in.query_level);
 		ndr_print_ptr(ndr, "data", r->in.data);
 		ndr->depth++;
-		ndr_print_uint8(ndr, "data", *r->in.data);
+		if (r->in.data) {
+			ndr_print_uint8(ndr, "data", *r->in.data);
+		}
 		ndr->depth--;
 		ndr->depth--;
 	}

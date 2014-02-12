@@ -19,6 +19,8 @@
 
 #include "includes.h"
 #include "web/swat_proto.h"
+#include "libcli/security/security.h"
+#include "locking/proto.h"
 
 #define _(x) lang_msg_rotate(talloc_tos(),x)
 
@@ -123,6 +125,7 @@ static void print_share_mode(const struct share_mode_entry *e,
 			     void *dummy)
 {
 	char           *utf8_fname;
+	char           *utf8_sharepath;
 	int deny_mode;
 	size_t converted_size;
 
@@ -172,15 +175,16 @@ static void print_share_mode(const struct share_mode_entry *e,
 	printf("</td>");
 
 	push_utf8_talloc(talloc_tos(), &utf8_fname, fname, &converted_size);
-	printf("<td>%s</td><td>%s</td></tr>\n",
-	       utf8_fname,tstring(talloc_tos(),e->time.tv_sec));
+	push_utf8_talloc(talloc_tos(), &utf8_sharepath, sharepath,
+			 &converted_size);
+	printf("<td>%s</td><td>%s</td><td>%s</td></tr>\n",
+	       utf8_sharepath,utf8_fname,tstring(talloc_tos(),e->time.tv_sec));
 	TALLOC_FREE(utf8_fname);
 }
 
 
 /* kill off any connections chosen by the user */
-static int traverse_fn1(struct db_record *rec,
-			const struct connections_key *key,
+static int traverse_fn1(const struct connections_key *key,
 			const struct connections_data *crec,
 			void *private_data)
 {
@@ -196,8 +200,7 @@ static int traverse_fn1(struct db_record *rec,
 }
 
 /* traversal fn for showing machine connections */
-static int traverse_fn2(struct db_record *rec,
-                        const struct connections_key *key,
+static int traverse_fn2(const struct connections_key *key,
                         const struct connections_data *crec,
                         void *private_data)
 {
@@ -221,8 +224,7 @@ static int traverse_fn2(struct db_record *rec,
 }
 
 /* traversal fn for showing share connections */
-static int traverse_fn3(struct db_record *rec,
-                        const struct connections_key *key,
+static int traverse_fn3(const struct connections_key *key,
                         const struct connections_data *crec,
                         void *private_data)
 {
@@ -247,8 +249,13 @@ void status_page(void)
 	int nr_running=0;
 	bool waitup = False;
 	TALLOC_CTX *ctx = talloc_stackframe();
+	const char form_name[] = "status";
 
 	smbd_pid = pid_to_procid(pidfile_pid("smbd"));
+
+	if (!verify_xsrf_token(form_name)) {
+		goto output_page;
+	}
 
 	if (cgi_variable("smbd_restart") || cgi_variable("all_restart")) {
 		stop_smbd();
@@ -322,13 +329,15 @@ void status_page(void)
 		PID_or_Machine = 0;
 	}
 
-	connections_forall(traverse_fn1, NULL);
+	connections_forall_read(traverse_fn1, NULL);
 
 	initPid2Machine ();
 
+output_page:
 	printf("<H2>%s</H2>\n", _("Server Status"));
 
 	printf("<FORM method=post>\n");
+	print_xsrf_token(cgi_user_name(), cgi_user_pass(), form_name);
 
 	if (!autorefresh) {
 		printf("<input type=submit value=\"%s\" name=\"autorefresh\">\n", _("Auto Refresh"));
@@ -412,7 +421,7 @@ void status_page(void)
 	}
 	printf("</tr>\n");
 
-	connections_forall(traverse_fn2, NULL);
+	connections_forall_read(traverse_fn2, NULL);
 
 	printf("</table><p>\n");
 
@@ -421,14 +430,14 @@ void status_page(void)
 	printf("<tr><th>%s</th><th>%s</th><th>%s</th><th>%s</th><th>%s</th><th>%s</th></tr>\n\n",
 		_("Share"), _("User"), _("Group"), _("PID"), _("Client"), _("Date"));
 
-	connections_forall(traverse_fn3, NULL);
+	connections_forall_read(traverse_fn3, NULL);
 
 	printf("</table><p>\n");
 
 	printf("<h3>%s</h3>\n", _("Open Files"));
 	printf("<table border=1>\n");
-	printf("<tr><th>%s</th><th>%s</th><th>%s</th><th>%s</th><th>%s</th><th>%s</th><th>%s</th></tr>\n",
-		_("PID"), _("UID"), _("Sharing"), _("R/W"), _("Oplock"), _("File"), _("Date"));
+	printf("<tr><th>%s</th><th>%s</th><th>%s</th><th>%s</th><th>%s</th><th>%s</th><th>%s</th><th>%s</th></tr>\n",
+		_("PID"), _("UID"), _("Sharing"), _("R/W"), _("Oplock"), _("Share"), _("File"), _("Date"));
 
 	locking_init_readonly();
 	share_mode_forall(print_share_mode, NULL);

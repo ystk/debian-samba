@@ -22,7 +22,17 @@
 
 #include "includes.h"
 #include "smb_krb5.h"
-#include "authdata.h"
+#include "../librpc/gen_ndr/krb5pac.h"
+#include "../lib/util/asn1.h"
+#include "libsmb/nmblib.h"
+
+#ifndef KRB5_AUTHDATA_WIN2K_PAC
+#define KRB5_AUTHDATA_WIN2K_PAC 128
+#endif
+
+#ifndef KRB5_AUTHDATA_IF_RELEVANT
+#define KRB5_AUTHDATA_IF_RELEVANT 1
+#endif
 
 #ifdef HAVE_KRB5
 
@@ -347,7 +357,7 @@ bool unwrap_edata_ntstatus(TALLOC_CTX *mem_ctx,
 	}
 	
 	asn1_start_tag(data, ASN1_CONTEXT(2));
-	asn1_read_OctetString(data, talloc_autofree_context(), &edata_contents);
+	asn1_read_OctetString(data, talloc_tos(), &edata_contents);
 	asn1_end_tag(data);
 	asn1_end_tag(data);
 	asn1_end_tag(data);
@@ -390,7 +400,7 @@ bool unwrap_pac(TALLOC_CTX *mem_ctx, DATA_BLOB *auth_data, DATA_BLOB *unwrapped_
 	
 	asn1_end_tag(data);
 	asn1_start_tag(data, ASN1_CONTEXT(1));
-	asn1_read_OctetString(data, talloc_autofree_context(), &pac_contents);
+	asn1_read_OctetString(data, talloc_tos(), &pac_contents);
 	asn1_end_tag(data);
 	asn1_end_tag(data);
 	asn1_end_tag(data);
@@ -696,26 +706,16 @@ static krb5_error_code create_gss_checksum(krb5_data *in_data, /* [inout] */
 	memset(gss_cksum, '\0', base_cksum_size + orig_length);
 	SIVAL(gss_cksum, 0, GSSAPI_BNDLENGTH);
 
-	/* Precalculated MD5sum of NULL channel bindings (20 bytes) */
-	/* Channel bindings are: (all ints encoded as little endian)
-
-		[4 bytes] initiator_addrtype (255 for null bindings)
-		[4 bytes] initiator_address length
-			[n bytes] .. initiator_address data - not present
-				     in null bindings.
-		[4 bytes] acceptor_addrtype (255 for null bindings)
-		[4 bytes] acceptor_address length
-			[n bytes] .. acceptor_address data - not present
-				     in null bindings.
-		[4 bytes] application_data length
-			[n bytes] .. application_ data - not present
-				     in null bindings.
-		MD5 of this is ""\x14\x8f\x0c\xf7\xb1u\xdey*J\x9a%\xdfV\xc5\x18"
-	*/
-
-	memcpy(&gss_cksum[4],
-		"\x14\x8f\x0c\xf7\xb1u\xdey*J\x9a%\xdfV\xc5\x18",
-		GSSAPI_BNDLENGTH);
+	/*
+	 * GSS_C_NO_CHANNEL_BINDINGS means 16 zero bytes.
+	 * This matches the behavior of heimdal and mit.
+	 *
+	 * And it is needed to work against some closed source
+	 * SMB servers.
+	 *
+	 * See bug #7883
+	 */
+	memset(&gss_cksum[4], 0x00, GSSAPI_BNDLENGTH);
 
 	SIVAL(gss_cksum, 20, gss_flags);
 
@@ -832,7 +832,7 @@ static krb5_error_code ads_krb5_mk_req(krb5_context context,
 		goto cleanup_creds;
 	}
 
-#if defined(TKT_FLG_OK_AS_DELEGATE ) && defined(HAVE_KRB5_FWD_TGT_CREDS) && defined(HAVE_KRB5_AUTH_CON_SETUSERUSERKEY) && defined(KRB5_AUTH_CONTEXT_USE_SUBKEY)
+#if defined(TKT_FLG_OK_AS_DELEGATE ) && defined(HAVE_KRB5_FWD_TGT_CREDS) && defined(HAVE_KRB5_AUTH_CON_SETUSERUSERKEY) && defined(KRB5_AUTH_CONTEXT_USE_SUBKEY) && defined(HAVE_KRB5_AUTH_CON_SET_REQ_CKSUMTYPE)
 	if( credsp->ticket_flags & TKT_FLG_OK_AS_DELEGATE ) {
 		/* Fetch a forwarded TGT from the KDC so that we can hand off a 2nd ticket
 		 as part of the kerberos exchange. */
@@ -894,7 +894,6 @@ static krb5_error_code ads_krb5_mk_req(krb5_context context,
 			gss_flags |= GSS_C_DELEG_FLAG;
 		}
 	}
-#endif
 
 	/* Frees and reallocates in_data into a GSS checksum blob. */
 	retval = create_gss_checksum(&in_data, gss_flags);
@@ -902,7 +901,6 @@ static krb5_error_code ads_krb5_mk_req(krb5_context context,
 		goto cleanup_data;
 	}
 
-#if defined(HAVE_KRB5_AUTH_CON_SET_REQ_CKSUMTYPE)
 	/* We always want GSS-checksum types. */
 	retval = krb5_auth_con_set_req_cksumtype(context, *auth_context, GSSAPI_CHECKSUM );
 	if (retval) {
@@ -940,11 +938,12 @@ cleanup_princ:
 }
 
 /*
-  get a kerberos5 ticket for the given service 
+  get a kerberos5 ticket for the given service
 */
-int cli_krb5_get_ticket(const char *principal, time_t time_offset, 
-			DATA_BLOB *ticket, DATA_BLOB *session_key_krb5, 
-			uint32 extra_ap_opts, const char *ccname, 
+int cli_krb5_get_ticket(TALLOC_CTX *mem_ctx,
+			const char *principal, time_t time_offset,
+			DATA_BLOB *ticket, DATA_BLOB *session_key_krb5,
+			uint32_t extra_ap_opts, const char *ccname,
 			time_t *tgs_expire,
 			const char *impersonate_princ_s)
 
@@ -955,17 +954,15 @@ int cli_krb5_get_ticket(const char *principal, time_t time_offset,
 	krb5_ccache ccdef = NULL;
 	krb5_auth_context auth_context = NULL;
 	krb5_enctype enc_types[] = {
-#ifdef ENCTYPE_ARCFOUR_HMAC
 		ENCTYPE_ARCFOUR_HMAC,
-#endif 
-		ENCTYPE_DES_CBC_MD5, 
-		ENCTYPE_DES_CBC_CRC, 
+		ENCTYPE_DES_CBC_MD5,
+		ENCTYPE_DES_CBC_CRC,
 		ENCTYPE_NULL};
 
 	initialize_krb5_error_table();
 	retval = krb5_init_context(&context);
 	if (retval) {
-		DEBUG(1,("cli_krb5_get_ticket: krb5_init_context failed (%s)\n", 
+		DEBUG(1, ("krb5_init_context failed (%s)\n",
 			 error_message(retval)));
 		goto failed;
 	}
@@ -976,56 +973,60 @@ int cli_krb5_get_ticket(const char *principal, time_t time_offset,
 
 	if ((retval = krb5_cc_resolve(context, ccname ?
 			ccname : krb5_cc_default_name(context), &ccdef))) {
-		DEBUG(1,("cli_krb5_get_ticket: krb5_cc_default failed (%s)\n",
+		DEBUG(1, ("krb5_cc_default failed (%s)\n",
 			 error_message(retval)));
 		goto failed;
 	}
 
 	if ((retval = krb5_set_default_tgs_ktypes(context, enc_types))) {
-		DEBUG(1,("cli_krb5_get_ticket: krb5_set_default_tgs_ktypes failed (%s)\n",
+		DEBUG(1, ("krb5_set_default_tgs_ktypes failed (%s)\n",
 			 error_message(retval)));
 		goto failed;
 	}
 
-	if ((retval = ads_krb5_mk_req(context, 
-					&auth_context, 
-					AP_OPTS_USE_SUBKEY | (krb5_flags)extra_ap_opts,
-					principal,
-					ccdef, &packet,
-					tgs_expire,
-					impersonate_princ_s))) {
+	retval = ads_krb5_mk_req(context, &auth_context,
+				AP_OPTS_USE_SUBKEY | (krb5_flags)extra_ap_opts,
+				principal, ccdef, &packet,
+				tgs_expire, impersonate_princ_s);
+	if (retval) {
 		goto failed;
 	}
 
-	get_krb5_smb_session_key(context, auth_context, session_key_krb5, False);
+	get_krb5_smb_session_key(mem_ctx, context, auth_context,
+				 session_key_krb5, false);
 
-	*ticket = data_blob(packet.data, packet.length);
+	*ticket = data_blob_talloc(mem_ctx, packet.data, packet.length);
 
- 	kerberos_free_data_contents(context, &packet); 
+ 	kerberos_free_data_contents(context, &packet);
 
 failed:
 
-	if ( context ) {
+	if (context) {
 		if (ccdef)
 			krb5_cc_close(context, ccdef);
 		if (auth_context)
 			krb5_auth_con_free(context, auth_context);
 		krb5_free_context(context);
 	}
-		
+
 	return retval;
 }
 
- bool get_krb5_smb_session_key(krb5_context context, krb5_auth_context auth_context, DATA_BLOB *session_key, bool remote)
- {
+bool get_krb5_smb_session_key(TALLOC_CTX *mem_ctx,
+			      krb5_context context,
+			      krb5_auth_context auth_context,
+			      DATA_BLOB *session_key, bool remote)
+{
 	krb5_keyblock *skey = NULL;
 	krb5_error_code err = 0;
 	bool ret = false;
 
 	if (remote) {
-		err = krb5_auth_con_getremotesubkey(context, auth_context, &skey);
+		err = krb5_auth_con_getremotesubkey(context,
+						    auth_context, &skey);
 	} else {
-		err = krb5_auth_con_getlocalsubkey(context, auth_context, &skey);
+		err = krb5_auth_con_getlocalsubkey(context,
+						   auth_context, &skey);
 	}
 
 	if (err || skey == NULL) {
@@ -1033,19 +1034,25 @@ failed:
 		goto done;
 	}
 
-	DEBUG(10, ("Got KRB5 session key of length %d\n",  (int)KRB5_KEY_LENGTH(skey)));
-	*session_key = data_blob(KRB5_KEY_DATA(skey), KRB5_KEY_LENGTH(skey));
-	dump_data_pw("KRB5 Session Key:\n", session_key->data, session_key->length);
+	DEBUG(10, ("Got KRB5 session key of length %d\n",
+		   (int)KRB5_KEY_LENGTH(skey)));
+
+	*session_key = data_blob_talloc(mem_ctx,
+					 KRB5_KEY_DATA(skey),
+					 KRB5_KEY_LENGTH(skey));
+	dump_data_pw("KRB5 Session Key:\n",
+		     session_key->data,
+		     session_key->length);
 
 	ret = true;
 
- done:
+done:
 	if (skey) {
 		krb5_free_keyblock(context, skey);
 	}
 
 	return ret;
- }
+}
 
 
 #if defined(HAVE_KRB5_PRINCIPAL_GET_COMP_STRING) && !defined(HAVE_KRB5_PRINC_COMPONENT)
@@ -2100,11 +2107,6 @@ krb5_error_code smb_krb5_get_credentials(krb5_context context,
 		goto done;
 	}
 
-	ret = krb5_cc_store_cred(context, ccache, creds);
-	if (ret) {
-		goto done;
-	}
-
 	if (out_creds) {
 		*out_creds = creds;
 	}
@@ -2263,8 +2265,10 @@ char *smb_krb5_principal_get_realm(krb5_context context,
 
 #else /* HAVE_KRB5 */
  /* this saves a few linking headaches */
- int cli_krb5_get_ticket(const char *principal, time_t time_offset, 
-			DATA_BLOB *ticket, DATA_BLOB *session_key_krb5, uint32 extra_ap_opts,
+ int cli_krb5_get_ticket(TALLOC_CTX *mem_ctx,
+			const char *principal, time_t time_offset,
+			DATA_BLOB *ticket, DATA_BLOB *session_key_krb5,
+			uint32_t extra_ap_opts,
 			const char *ccname, time_t *tgs_expire,
 			const char *impersonate_princ_s)
 {
@@ -2272,4 +2276,10 @@ char *smb_krb5_principal_get_realm(krb5_context context,
 	 return 1;
 }
 
-#endif
+bool unwrap_pac(TALLOC_CTX *mem_ctx, DATA_BLOB *auth_data, DATA_BLOB *unwrapped_pac_data)
+{
+	DEBUG(0,("NO KERBEROS SUPPORT\n"));
+	return false;
+}
+
+#endif /* HAVE_KRB5 */
