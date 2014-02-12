@@ -6,8 +6,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
-"Report-Msgid-Bugs-To: samba@packages.debian.org\n"
-"POT-Creation-Date: 2009-01-02 12:18-0800\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2012-05-11 19:55+0200\n"
 "PO-Revision-Date: 2008-09-10 01:45+0400\n"
 "Last-Translator: Aiet Kolkhi <aietkolkhi@gmail.com>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -16,15 +16,21 @@ msgstr ""
 "Content-Type: text/plain; charset=utf-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#. Type: boolean
+#. Type: title
 #. Description
 #: ../samba-common.templates:1001
+msgid "Samba server and utilities"
+msgstr ""
+
+#. Type: boolean
+#. Description
+#: ../samba-common.templates:2001
 msgid "Modify smb.conf to use WINS settings from DHCP?"
 msgstr "გსურთ smb.conf-ის შეცვლა WINS პარამეტრების DHCP-დან გამოსაყენებლად?"
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:1001
+#: ../samba-common.templates:2001
 msgid ""
 "If your computer gets IP address information from a DHCP server on the "
 "network, the DHCP server may also provide information about WINS servers "
@@ -40,7 +46,7 @@ msgstr ""
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:1001
+#: ../samba-common.templates:2001
 msgid ""
 "The dhcp3-client package must be installed to take advantage of this feature."
 msgstr ""
@@ -48,13 +54,13 @@ msgstr ""
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:2001
+#: ../samba-common.templates:3001
 msgid "Configure smb.conf automatically?"
 msgstr "გსურთ smb.conf-ის ავტომატური კონფიგურაცი?"
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:2001
+#: ../samba-common.templates:3001
 msgid ""
 "The rest of the configuration of Samba deals with questions that affect "
 "parameters in /etc/samba/smb.conf, which is the file used to configure the "
@@ -72,7 +78,7 @@ msgstr ""
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:2001
+#: ../samba-common.templates:3001
 msgid ""
 "If you do not choose this option, you will have to handle any configuration "
 "changes yourself, and will not be able to take advantage of periodic "
@@ -83,18 +89,14 @@ msgstr ""
 
 #. Type: string
 #. Description
-#: ../samba-common.templates:3001
+#: ../samba-common.templates:4001
 msgid "Workgroup/Domain Name:"
 msgstr "სამუშაო ჯგუფის/დომენის სახელი:"
 
 #. Type: string
 #. Description
-#: ../samba-common.templates:3001
+#: ../samba-common.templates:4001
 #, fuzzy
-#| msgid ""
-#| "Please specify the workgroup you want this server to appear to be in when "
-#| "queried by clients. Note that this parameter also controls the domain "
-#| "name used with the security=domain setting."
 msgid ""
 "Please specify the workgroup for this system.  This setting controls which "
 "workgroup the system will appear in when used as a server, the default "
@@ -107,18 +109,14 @@ msgstr ""
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:4001
+#: ../samba-common.templates:5001
 msgid "Use password encryption?"
 msgstr "გსურთ პაროლის დაშიფვრის გმაოყენება?"
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:4001
+#: ../samba-common.templates:5001
 #, fuzzy
-#| msgid ""
-#| "All recent Windows clients communicate with SMB servers using encrypted "
-#| "passwords. If you want to use clear text passwords you will need to "
-#| "change a parameter in your Windows registry."
 msgid ""
 "All recent Windows clients communicate with SMB/CIFS servers using encrypted "
 "passwords. If you want to use clear text passwords you will need to change a "
@@ -130,12 +128,8 @@ msgstr ""
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:4001
+#: ../samba-common.templates:5001
 #, fuzzy
-#| msgid ""
-#| "Enabling this option is highly recommended. If you do, make sure you have "
-#| "a valid /etc/samba/smbpasswd file and that you set passwords in there for "
-#| "each user using the smbpasswd command."
 msgid ""
 "Enabling this option is highly recommended as support for plain text "
 "passwords is no longer maintained in Microsoft Windows products. If you do, "
@@ -146,47 +140,11 @@ msgstr ""
 "რომ გაგაჩნიათ გამართული /etc/samba/smbpasswd ფაილი და რომ იქ ყოველ "
 "მომხმარებელზე პაროლი გქონდეთ დაყენებული smbpasswd ბრძანებით."
 
-#. Type: boolean
+#. Type: title
 #. Description
 #: ../samba.templates:1001
-msgid "Create samba password database, /var/lib/samba/passdb.tdb?"
-msgstr "გსურთ samba-ს პაროლთა ბაზის, /var/lib/samba/passdb.tdb-ს შექმნა?"
-
-#. Type: boolean
-#. Description
-#: ../samba.templates:1001
-msgid ""
-"To be compatible with the defaults in most versions of Windows, Samba must "
-"be configured to use encrypted passwords.  This requires user passwords to "
-"be stored in a file separate from /etc/passwd.  This file can be created "
-"automatically, but the passwords must be added manually by running smbpasswd "
-"and be kept up-to-date in the future."
+msgid "Samba server"
 msgstr ""
-"Windows-ის უმეტეს ვერსიების ნაგულისხმევ პარამეტრებთან თავსებადობისათვის, "
-"Samba-მ დაშიფრული პაროლები უნდა გამოიყენოს. ეს საჭიროებს, რომ მომხმარებელთა "
-"პაროლები /etc/passwd-ისაგან განცხალკევებით იქნას შენახული.  ამ ფაილის შექმნა "
-"ავტომატურად არის შესაძლებელი, თუმცა პაროლების ჩამატება ხელით უნდა მოხდეს "
-"smbpasswd ბრძანებით და სამომავლოდ მუდამ განახლებული უნდა იყოს."
-
-#. Type: boolean
-#. Description
-#: ../samba.templates:1001
-msgid ""
-"If you do not create it, you will have to reconfigure Samba (and probably "
-"your client machines) to use plaintext passwords."
-msgstr ""
-"თუ მას არ შექმნით, Samba-ს (და სავარაუდოდ თქვენი კლიენტისაც) ხელახალი "
-"კონფიგურაცია მოგიწევთ დაუშიფრავი პაროლების გამოსაყენებლად."
-
-#. Type: boolean
-#. Description
-#: ../samba.templates:1001
-msgid ""
-"See /usr/share/doc/samba-doc/htmldocs/Samba3-Developers-Guide/pwencrypt.html "
-"from the samba-doc package for more details."
-msgstr ""
-"დამატებითი ინფორმაციისათვის იხილეთ /usr/share/doc/samba-doc/htmldocs/"
-"ENCRYPTION.html სტატია samba-doc პაკეტიდან."
 
 #. Type: select
 #. Choices
@@ -215,3 +173,34 @@ msgid ""
 msgstr ""
 "Samba-ს დემონი smbd შეიძლება გაეშვას როგორც ჩვეულებრივი დემო inetd-დან. "
 "დემონად გაშვება რეკომენდირებული მიდგომაა."
+
+#~ msgid "Create samba password database, /var/lib/samba/passdb.tdb?"
+#~ msgstr "გსურთ samba-ს პაროლთა ბაზის, /var/lib/samba/passdb.tdb-ს შექმნა?"
+
+#~ msgid ""
+#~ "To be compatible with the defaults in most versions of Windows, Samba "
+#~ "must be configured to use encrypted passwords.  This requires user "
+#~ "passwords to be stored in a file separate from /etc/passwd.  This file "
+#~ "can be created automatically, but the passwords must be added manually by "
+#~ "running smbpasswd and be kept up-to-date in the future."
+#~ msgstr ""
+#~ "Windows-ის უმეტეს ვერსიების ნაგულისხმევ პარამეტრებთან თავსებადობისათვის, "
+#~ "Samba-მ დაშიფრული პაროლები უნდა გამოიყენოს. ეს საჭიროებს, რომ "
+#~ "მომხმარებელთა პაროლები /etc/passwd-ისაგან განცხალკევებით იქნას შენახული.  "
+#~ "ამ ფაილის შექმნა ავტომატურად არის შესაძლებელი, თუმცა პაროლების ჩამატება "
+#~ "ხელით უნდა მოხდეს smbpasswd ბრძანებით და სამომავლოდ მუდამ განახლებული "
+#~ "უნდა იყოს."
+
+#~ msgid ""
+#~ "If you do not create it, you will have to reconfigure Samba (and probably "
+#~ "your client machines) to use plaintext passwords."
+#~ msgstr ""
+#~ "თუ მას არ შექმნით, Samba-ს (და სავარაუდოდ თქვენი კლიენტისაც) ხელახალი "
+#~ "კონფიგურაცია მოგიწევთ დაუშიფრავი პაროლების გამოსაყენებლად."
+
+#~ msgid ""
+#~ "See /usr/share/doc/samba-doc/htmldocs/Samba3-Developers-Guide/pwencrypt."
+#~ "html from the samba-doc package for more details."
+#~ msgstr ""
+#~ "დამატებითი ინფორმაციისათვის იხილეთ /usr/share/doc/samba-doc/htmldocs/"
+#~ "ENCRYPTION.html სტატია samba-doc პაკეტიდან."

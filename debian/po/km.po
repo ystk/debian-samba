@@ -16,8 +16,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: samba_po_km\n"
-"Report-Msgid-Bugs-To: samba@packages.debian.org\n"
-"POT-Creation-Date: 2009-01-02 12:18-0800\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2012-05-11 19:55+0200\n"
 "PO-Revision-Date: 2007-03-13 08:39+0700\n"
 "Last-Translator: Khoem Sokhem <khoemsokhem@khmeros.info>\n"
 "Language-Team: Khmer <support@khmeros.info>\n"
@@ -27,11 +27,17 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "X-Generator: KBabel 1.11.4\n"
 
+#. Type: title
+#. Description
+#: ../samba-common.templates:1001
+msgid "Samba server and utilities"
+msgstr ""
+
 #  Type: boolean
 #  Description
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:1001
+#: ../samba-common.templates:2001
 msgid "Modify smb.conf to use WINS settings from DHCP?"
 msgstr "កែប្រែ smb.conf ដើម្បី​ប្រើ​ការកំណត់​របស់ WINS ពី DHCP ?"
 
@@ -39,7 +45,7 @@ msgstr "កែប្រែ smb.conf ដើម្បី​ប្រើ​កា�
 #  Description
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:1001
+#: ../samba-common.templates:2001
 msgid ""
 "If your computer gets IP address information from a DHCP server on the "
 "network, the DHCP server may also provide information about WINS servers "
@@ -56,7 +62,7 @@ msgstr ""
 #  Description
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:1001
+#: ../samba-common.templates:2001
 msgid ""
 "The dhcp3-client package must be installed to take advantage of this feature."
 msgstr "កញ្ចប់​ម៉ាស៊ីន​ភ្ញៀវ dhcp3 ត្រូវ​តែ​បាន​ដំឡើង​ដើម្បី​ទទួល​បាន​ផលប្រយោជន៍របស់​លក្ខណៈ​ពិសេស​នេះ ។"
@@ -65,7 +71,7 @@ msgstr "កញ្ចប់​ម៉ាស៊ីន​ភ្ញៀវ dhcp3 ត�
 #  Description
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:2001
+#: ../samba-common.templates:3001
 msgid "Configure smb.conf automatically?"
 msgstr "កំណត់​រចនាសម្ព័ន្ធ smb.conf ដោយ​ស្វ័យ​ប្រវត្តិ ?"
 
@@ -73,7 +79,7 @@ msgstr "កំណត់​រចនាសម្ព័ន្ធ smb.conf ដោ�
 #  Description
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:2001
+#: ../samba-common.templates:3001
 msgid ""
 "The rest of the configuration of Samba deals with questions that affect "
 "parameters in /etc/samba/smb.conf, which is the file used to configure the "
@@ -92,7 +98,7 @@ msgstr ""
 #  Description
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:2001
+#: ../samba-common.templates:3001
 msgid ""
 "If you do not choose this option, you will have to handle any configuration "
 "changes yourself, and will not be able to take advantage of periodic "
@@ -105,7 +111,7 @@ msgstr ""
 #  Description
 #. Type: string
 #. Description
-#: ../samba-common.templates:3001
+#: ../samba-common.templates:4001
 msgid "Workgroup/Domain Name:"
 msgstr "ឈ្មោះ​ក្រុមការងារ/ដែន ៖"
 
@@ -113,12 +119,8 @@ msgstr "ឈ្មោះ​ក្រុមការងារ/ដែន ៖"
 #  Description
 #. Type: string
 #. Description
-#: ../samba-common.templates:3001
+#: ../samba-common.templates:4001
 #, fuzzy
-#| msgid ""
-#| "Please specify the workgroup you want this server to appear to be in when "
-#| "queried by clients. Note that this parameter also controls the domain "
-#| "name used with the security=domain setting."
 msgid ""
 "Please specify the workgroup for this system.  This setting controls which "
 "workgroup the system will appear in when used as a server, the default "
@@ -132,7 +134,7 @@ msgstr ""
 #  Description
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:4001
+#: ../samba-common.templates:5001
 msgid "Use password encryption?"
 msgstr "ប្រើ​ការ​អ៊ិនគ្រីប​ពាក្យ​សម្ងាត់ ?"
 
@@ -140,12 +142,8 @@ msgstr "ប្រើ​ការ​អ៊ិនគ្រីប​ពាក្យ
 #  Description
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:4001
+#: ../samba-common.templates:5001
 #, fuzzy
-#| msgid ""
-#| "All recent Windows clients communicate with SMB servers using encrypted "
-#| "passwords. If you want to use clear text passwords you will need to "
-#| "change a parameter in your Windows registry."
 msgid ""
 "All recent Windows clients communicate with SMB/CIFS servers using encrypted "
 "passwords. If you want to use clear text passwords you will need to change a "
@@ -159,12 +157,8 @@ msgstr ""
 #  Description
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:4001
+#: ../samba-common.templates:5001
 #, fuzzy
-#| msgid ""
-#| "Enabling this option is highly recommended. If you do, make sure you have "
-#| "a valid /etc/samba/smbpasswd file and that you set passwords in there for "
-#| "each user using the smbpasswd command."
 msgid ""
 "Enabling this option is highly recommended as support for plain text "
 "passwords is no longer maintained in Microsoft Windows products. If you do, "
@@ -175,54 +169,11 @@ msgstr ""
 "ឯកសារ /etc/samba/smbpasswd ត្រឹមត្រូវ ហើយ​អ្នក​បាន​កំណត់​ពាក្យ​សម្ងាត់​ ដូច្នេះ​សម្រាប់​អ្នក​ប្រើ​"
 "ម្នាក់ៗ អាច​ប្រើ​ពាក្យ​បញ្ជា smbpasswd ។"
 
-#  Type: boolean
-#  Description
-#. Type: boolean
+#. Type: title
 #. Description
 #: ../samba.templates:1001
-msgid "Create samba password database, /var/lib/samba/passdb.tdb?"
-msgstr "បង្កើត​មូលដ្ឋាន​ទិន្នន័យពាក្យសម្ងាត់ samba /var/lib/samba/passdb.tdb ?"
-
-#  Type: boolean
-#  Description
-#. Type: boolean
-#. Description
-#: ../samba.templates:1001
-msgid ""
-"To be compatible with the defaults in most versions of Windows, Samba must "
-"be configured to use encrypted passwords.  This requires user passwords to "
-"be stored in a file separate from /etc/passwd.  This file can be created "
-"automatically, but the passwords must be added manually by running smbpasswd "
-"and be kept up-to-date in the future."
+msgid "Samba server"
 msgstr ""
-"ដើម្បី​ឆប​ជា​មួយ​នឹង​លំនាំដើម​នៅ​ក្នុង​កំណែ​ភាគ​ច្រើន​របស់​វីនដូ Samba ត្រូវ​តែ​បាន​កំណត់​រចនាសម្ព័ន្ធ​ដើម្បី​ប្រើ​ពាក្យ​"
-"សម្ងាត់​ដែល​បាន​អ៊ិនគ្រីប ។  វា​ត្រូវ​ការ​ពាក្យសម្ងាត់​អ្នក​ប្រើ​ដើម្បី​ទុក​ក្នុង​ឯកសារ​ដោយ​ឡែក​ពី /etc/"
-"passwd ។ ឯកសារ​នេះ​អាច​ត្រូវ​បាន​បង្កើត​ដោយ​ស្វ័យប្រវត្តិ ប៉ុន្តែ​ពាក្យ​សម្ងាត់​ត្រូវ​តែ​បាន​បន្ថែម​ដោយ​ដៃ​ដោយ​"
-"រត់ smbpasswd និង​ត្រូវ​បាន​ធ្វើឲ្យ​ទាន់​សម័យ​ក្នុង​ពេល​អនាគត ។"
-
-#  Type: boolean
-#  Description
-#. Type: boolean
-#. Description
-#: ../samba.templates:1001
-msgid ""
-"If you do not create it, you will have to reconfigure Samba (and probably "
-"your client machines) to use plaintext passwords."
-msgstr ""
-"ប្រសិន​បើ​អ្នក​មិន​បង្កើត​វា អ្នក​ត្រូវ​តែ​កំណត់​រចនាសម្ព័ន្ធ Samba (និង​ប្រហែល​ជាម៉ាស៊ីន​ភ្ញៀវ​របស់​អ្នក) ដើម្បី​"
-"ប្រើពាក្យសម្ងាត់អត្ថបទ​ធម្មតា ។"
-
-#  Type: boolean
-#  Description
-#. Type: boolean
-#. Description
-#: ../samba.templates:1001
-msgid ""
-"See /usr/share/doc/samba-doc/htmldocs/Samba3-Developers-Guide/pwencrypt.html "
-"from the samba-doc package for more details."
-msgstr ""
-"សម្រាប់​សេចក្តី​លម្អិត​បន្ថែម​សូម​មើល  /usr/share/doc/samba-doc/htmldocs/Samba3-"
-"Developers-Guide/pwencrypt.html ពី​កញ្ចប់ samba-doc ។"
 
 #. Type: select
 #. Choices
@@ -252,6 +203,43 @@ msgid ""
 "daemon is the recommended approach."
 msgstr ""
 "ដេមិន Samba smbd អាចរត់ជាដេមិនធម្មតា ឬពី inetd ។ ការរត់ជាដេមិនមួយត្រូវបានផ្ដល់អនុសាសន៍ ។"
+
+#  Type: boolean
+#  Description
+#~ msgid "Create samba password database, /var/lib/samba/passdb.tdb?"
+#~ msgstr "បង្កើត​មូលដ្ឋាន​ទិន្នន័យពាក្យសម្ងាត់ samba /var/lib/samba/passdb.tdb ?"
+
+#  Type: boolean
+#  Description
+#~ msgid ""
+#~ "To be compatible with the defaults in most versions of Windows, Samba "
+#~ "must be configured to use encrypted passwords.  This requires user "
+#~ "passwords to be stored in a file separate from /etc/passwd.  This file "
+#~ "can be created automatically, but the passwords must be added manually by "
+#~ "running smbpasswd and be kept up-to-date in the future."
+#~ msgstr ""
+#~ "ដើម្បី​ឆប​ជា​មួយ​នឹង​លំនាំដើម​នៅ​ក្នុង​កំណែ​ភាគ​ច្រើន​របស់​វីនដូ Samba ត្រូវ​តែ​បាន​កំណត់​រចនាសម្ព័ន្ធ​ដើម្បី​ប្រើ​"
+#~ "ពាក្យ​សម្ងាត់​ដែល​បាន​អ៊ិនគ្រីប ។  វា​ត្រូវ​ការ​ពាក្យសម្ងាត់​អ្នក​ប្រើ​ដើម្បី​ទុក​ក្នុង​ឯកសារ​ដោយ​ឡែក​ពី /etc/"
+#~ "passwd ។ ឯកសារ​នេះ​អាច​ត្រូវ​បាន​បង្កើត​ដោយ​ស្វ័យប្រវត្តិ ប៉ុន្តែ​ពាក្យ​សម្ងាត់​ត្រូវ​តែ​បាន​បន្ថែម​ដោយ​ដៃ​"
+#~ "ដោយ​រត់ smbpasswd និង​ត្រូវ​បាន​ធ្វើឲ្យ​ទាន់​សម័យ​ក្នុង​ពេល​អនាគត ។"
+
+#  Type: boolean
+#  Description
+#~ msgid ""
+#~ "If you do not create it, you will have to reconfigure Samba (and probably "
+#~ "your client machines) to use plaintext passwords."
+#~ msgstr ""
+#~ "ប្រសិន​បើ​អ្នក​មិន​បង្កើត​វា អ្នក​ត្រូវ​តែ​កំណត់​រចនាសម្ព័ន្ធ Samba (និង​ប្រហែល​ជាម៉ាស៊ីន​ភ្ញៀវ​របស់​អ្នក) "
+#~ "ដើម្បី​ប្រើពាក្យសម្ងាត់អត្ថបទ​ធម្មតា ។"
+
+#  Type: boolean
+#  Description
+#~ msgid ""
+#~ "See /usr/share/doc/samba-doc/htmldocs/Samba3-Developers-Guide/pwencrypt."
+#~ "html from the samba-doc package for more details."
+#~ msgstr ""
+#~ "សម្រាប់​សេចក្តី​លម្អិត​បន្ថែម​សូម​មើល  /usr/share/doc/samba-doc/htmldocs/Samba3-"
+#~ "Developers-Guide/pwencrypt.html ពី​កញ្ចប់ samba-doc ។"
 
 #~ msgid "Chaining passdb backends is not supported"
 #~ msgstr "មិនគាំទ្រ​ការ​ដាក់​កម្មវិធី​ខាង​ក្រោយ passdb ជា​លំដាប់"

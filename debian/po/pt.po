@@ -1,30 +1,38 @@
 # translation of pt.po to Portuguese
 # translation of samba Debian debconf template to Portuguese
-# Miguel Figueiredo <elmig@debianpt.org>, 2004, 2007, 2010
 #
+# Miguel Figueiredo <elmig@debianpt.org>, 2004, 2007, 2010, 2011.
 msgid ""
 msgstr ""
 "Project-Id-Version: samba\n"
-"Report-Msgid-Bugs-To: samba@packages.debian.org\n"
-"POT-Creation-Date: 2009-01-02 12:18-0800\n"
-"PO-Revision-Date: 2010-03-30 21:36+0100\n"
-"Last-Translator: Miguel Figueiredo <elmig@debian.org>\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2012-05-11 19:55+0200\n"
+"PO-Revision-Date: 2011-05-14 10:47+0100\n"
+"Last-Translator: Miguel Figueiredo <elmig@debianpt.org>\n"
 "Language-Team: Portuguese <traduz@debianpt.org>\n"
 "Language: pt\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Lokalize 1.2\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#. Type: title
+#. Description
+#: ../samba-common.templates:1001
+msgid "Samba server and utilities"
+msgstr "Servidor e utilitários Samba"
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:1001
+#: ../samba-common.templates:2001
 msgid "Modify smb.conf to use WINS settings from DHCP?"
 msgstr ""
 "Modificar o smb.conf para utilizar definições de WINS a partir de DHCP?"
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:1001
+#: ../samba-common.templates:2001
 msgid ""
 "If your computer gets IP address information from a DHCP server on the "
 "network, the DHCP server may also provide information about WINS servers "
@@ -41,7 +49,7 @@ msgstr ""
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:1001
+#: ../samba-common.templates:2001
 msgid ""
 "The dhcp3-client package must be installed to take advantage of this feature."
 msgstr ""
@@ -50,13 +58,13 @@ msgstr ""
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:2001
+#: ../samba-common.templates:3001
 msgid "Configure smb.conf automatically?"
 msgstr "Configurar automaticamente o smb.conf?"
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:2001
+#: ../samba-common.templates:3001
 msgid ""
 "The rest of the configuration of Samba deals with questions that affect "
 "parameters in /etc/samba/smb.conf, which is the file used to configure the "
@@ -74,7 +82,7 @@ msgstr ""
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:2001
+#: ../samba-common.templates:3001
 msgid ""
 "If you do not choose this option, you will have to handle any configuration "
 "changes yourself, and will not be able to take advantage of periodic "
@@ -86,13 +94,13 @@ msgstr ""
 
 #. Type: string
 #. Description
-#: ../samba-common.templates:3001
+#: ../samba-common.templates:4001
 msgid "Workgroup/Domain Name:"
 msgstr "Nome do Grupo de trabalho/Domínio:"
 
 #. Type: string
 #. Description
-#: ../samba-common.templates:3001
+#: ../samba-common.templates:4001
 msgid ""
 "Please specify the workgroup for this system.  This setting controls which "
 "workgroup the system will appear in when used as a server, the default "
@@ -107,13 +115,13 @@ msgstr ""
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:4001
+#: ../samba-common.templates:5001
 msgid "Use password encryption?"
 msgstr "Utilizar encriptação de palavras-passe?"
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:4001
+#: ../samba-common.templates:5001
 msgid ""
 "All recent Windows clients communicate with SMB/CIFS servers using encrypted "
 "passwords. If you want to use clear text passwords you will need to change a "
@@ -125,7 +133,7 @@ msgstr ""
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:4001
+#: ../samba-common.templates:5001
 msgid ""
 "Enabling this option is highly recommended as support for plain text "
 "passwords is no longer maintained in Microsoft Windows products. If you do, "
@@ -138,49 +146,11 @@ msgstr ""
 "válido e que define as palavras-passe para cada utilizador utilizando o "
 "comando smbpasswd."
 
-#. Type: boolean
+#. Type: title
 #. Description
 #: ../samba.templates:1001
-msgid "Create samba password database, /var/lib/samba/passdb.tdb?"
-msgstr ""
-"Criar base de dados de palavras-passe samba, /var/lib/samba/passdb.tdb?"
-
-#. Type: boolean
-#. Description
-#: ../samba.templates:1001
-msgid ""
-"To be compatible with the defaults in most versions of Windows, Samba must "
-"be configured to use encrypted passwords.  This requires user passwords to "
-"be stored in a file separate from /etc/passwd.  This file can be created "
-"automatically, but the passwords must be added manually by running smbpasswd "
-"and be kept up-to-date in the future."
-msgstr ""
-"Para ser compatível com as predefinições na maioria das versões do Windows, "
-"o Samba tem de ser configurado para utilizar palavras-passe encriptadas.  "
-"Isto faz com que as passwords dos utilizadores sejam guardadas noutro "
-"ficheiro separado do /etc/passwd. Este ficheiro pode ser criado "
-"automaticamente, mas as palavras-passe têm de ser manualmente adicionadas "
-"correndo o smbpasswd e mantidas actualizadas no futuro."
-
-#. Type: boolean
-#. Description
-#: ../samba.templates:1001
-msgid ""
-"If you do not create it, you will have to reconfigure Samba (and probably "
-"your client machines) to use plaintext passwords."
-msgstr ""
-"Se não o criar, terá de reconfigurar o Samba (e provavelmente as suas "
-"máquinas clientes) para utilizar palavras-passe de texto visível."
-
-#. Type: boolean
-#. Description
-#: ../samba.templates:1001
-msgid ""
-"See /usr/share/doc/samba-doc/htmldocs/Samba3-Developers-Guide/pwencrypt.html "
-"from the samba-doc package for more details."
-msgstr ""
-"Para mais detalhes veja /usr/share/doc/samba-doc/htmldocs/Samba3-Developers-"
-"Guide/pwencrypt.html do pacote samba-doc."
+msgid "Samba server"
+msgstr "Servidor Samba"
 
 #. Type: select
 #. Choices
@@ -209,6 +179,38 @@ msgid ""
 msgstr ""
 "O daemon de Samba smbd pode correr como um daemon normal ou a partir de "
 "inetd. Executá-lo como um daemon é a aproximação recomendada."
+
+#~ msgid "Create samba password database, /var/lib/samba/passdb.tdb?"
+#~ msgstr ""
+#~ "Criar base de dados de palavras-passe samba, /var/lib/samba/passdb.tdb?"
+
+#~ msgid ""
+#~ "To be compatible with the defaults in most versions of Windows, Samba "
+#~ "must be configured to use encrypted passwords.  This requires user "
+#~ "passwords to be stored in a file separate from /etc/passwd.  This file "
+#~ "can be created automatically, but the passwords must be added manually by "
+#~ "running smbpasswd and be kept up-to-date in the future."
+#~ msgstr ""
+#~ "Para ser compatível com as predefinições na maioria das versões do "
+#~ "Windows, o Samba tem de ser configurado para utilizar palavras-passe "
+#~ "encriptadas.  Isto faz com que as passwords dos utilizadores sejam "
+#~ "guardadas noutro ficheiro separado do /etc/passwd. Este ficheiro pode ser "
+#~ "criado automaticamente, mas as palavras-passe têm de ser manualmente "
+#~ "adicionadas correndo o smbpasswd e mantidas actualizadas no futuro."
+
+#~ msgid ""
+#~ "If you do not create it, you will have to reconfigure Samba (and probably "
+#~ "your client machines) to use plaintext passwords."
+#~ msgstr ""
+#~ "Se não o criar, terá de reconfigurar o Samba (e provavelmente as suas "
+#~ "máquinas clientes) para utilizar palavras-passe de texto visível."
+
+#~ msgid ""
+#~ "See /usr/share/doc/samba-doc/htmldocs/Samba3-Developers-Guide/pwencrypt."
+#~ "html from the samba-doc package for more details."
+#~ msgstr ""
+#~ "Para mais detalhes veja /usr/share/doc/samba-doc/htmldocs/Samba3-"
+#~ "Developers-Guide/pwencrypt.html do pacote samba-doc."
 
 #~ msgid "Chaining passdb backends is not supported"
 #~ msgstr "Não é suportado carregar backends passdb"

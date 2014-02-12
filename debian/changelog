@@ -1,11 +1,533 @@
-samba (2:3.5.6~dfsg-3squeeze2) stable-security; urgency=high
+samba (2:3.6.6-6+deb7u1) wheezy; urgency=low
 
+  * Security update
+  * CVE-2013-4124: Denial of service - CPU loop and memory allocation
+    Closes: #718781
+
+ -- Ivo De Decker <ivo.dedecker@ugent.be>  Thu, 15 Aug 2013 12:06:17 +0200
+
+samba (2:3.6.6-6) unstable; urgency=low
+
+  * Team upload.
+  * Move binary files out of /etc/samba to /var/lib/samba,
+    where they belong according to the FHS:
+    - schannel_store.tdb
+    - idmap2.tdb
+    - MACHINE.sid
+    Closes: #454770
+
+ -- Ivo De Decker <ivo.dedecker@ugent.be>  Mon, 15 Apr 2013 23:56:23 +0200
+
+samba (2:3.6.6-5) unstable; urgency=high
+
+  * Security update
+  * CVE-2013-0213: Clickjacking issue in SWAT
+  * CVE-2013-0214: Potential XSRF in SWAT
+
+ -- Christian Perrier <bubulle@debian.org>  Wed, 30 Jan 2013 18:49:32 +0100
+
+samba (2:3.6.6-4) unstable; urgency=low
+
+  * Fix printers tdb migration by including an upstream fix
+    from 3.6.7 (upstream bug #9026)
+    Closes: #696675
+
+ -- Christian Perrier <bubulle@debian.org>  Sat, 05 Jan 2013 12:42:02 +0100
+
+samba (2:3.6.6-3) unstable; urgency=low
+
+  [ Ansgar Burchardt ]
+  * debian/rules: Use xz compression for binary packages.
+    Closes: #683899
+
+ -- Christian Perrier <bubulle@debian.org>  Sun, 05 Aug 2012 12:19:12 +0200
+
+samba (2:3.6.6-2) unstable; urgency=low
+
+  * Restore the DHCP hook.
+
+ -- Steve Langasek <vorlon@debian.org>  Wed, 27 Jun 2012 09:31:15 -0700
+
+samba (2:3.6.6-1) unstable; urgency=low
+
+  [ Ivo De Decker ]
+  * Only enable swat in inetd.conf on first install. Closes: #658245 
+  * Minor lintian fixes. 
+  * Remove DHCP hook. Closes: #652942, #629406, #649100
+  * Don't reload smbd when running from inetd. Closes: #678741 
+  * Don't start smbd when guest account doesn't exist. Closes: #653382
+  * Only export public symbols in libsmbclient and libwbclient.
+
+  [ Christian Perrier ]
+  * New upstream version
+
+ -- Christian Perrier <bubulle@debian.org>  Wed, 27 Jun 2012 06:03:17 +0200
+
+samba (2:3.6.5-7) unstable; urgency=low
+
+  * Allow installing smbclient package together with newer versions of
+    samba4-clients, which no longer ship the smbclient and nmblookup
+    binaries.
+
+ -- Jelmer Vernooij <jelmer@debian.org>  Mon, 11 Jun 2012 13:19:24 +0200
+
+samba (2:3.6.5-6) unstable; urgency=high
+
+  [ Ivo De Decker ]
+  * Update symbols file for linux-only symbols in libsmbclient. This should
+    fix the FTBFS on kfreebsd and hurd. Closes: #676170
+  * Enable ctdb for non-linux archs. 
+  * Remove old if-up script during upgrade.
+
+ -- Christian Perrier <bubulle@debian.org>  Wed, 06 Jun 2012 19:10:02 +0200
+
+samba (2:3.6.5-5) unstable; urgency=low
+
+  [ Christian Perrier ]
+  * Make libpam-winbind depend on libnss-winbind.
+
+  [ Ivo De Decker ]
+  * Update symbols file for libsmbclient and libwbclient0
+  * Add lintian overrides for examples in samba-doc
+  * libpam-winbind: change Depends on libnss-winbind to Recommends
+  * libnss-winbind: Suggests libpam-winbind
+  * Update package description for winbind, libpam-winbind and libnss-winbind
+    to better reflect their content
+  * Backport vfs_shadow_copy2 from master, to allow shadow copy to work
+    without wide links
+
+  [ Luk Claes ]
+  * Ship wbclient.pc file in multiarch safe directory (Closes: #674215).
+
+  [ Sam Morris ]
+  * Add libutil_drop_AI_ADDRCONFIG.patch  that allows running nmbd when
+    no network interfaces have been assigned an address, therefore
+    removing the need for an if-up script. Closes: #640668,#640508
+
+ -- Christian Perrier <bubulle@debian.org>  Sun, 03 Jun 2012 20:00:56 +0200
+
+samba (2:3.6.5-3) unstable; urgency=low
+
+  [ Luk Claes ]
+  * Ship wbclient.pc so cifs-utils can be built again (Closes: #672733).
+  * Activate parallel building. Might need DEB_BUILD_OPTIONS as usual.
+
+  [ Christian Perrier ]
+  * Add Breaks and Replaces on libpam-winbind for newly created
+    libnss-winbind. Thanks to Colin Watson for pointing this and shame
+    on me for not properly checking the transition. Closes: #673122
+
+ -- Christian Perrier <bubulle@debian.org>  Thu, 17 May 2012 10:34:38 +0200
+
+samba (2:3.6.5-2) unstable; urgency=low
+
+  * The yearly "SambaXP bug cleaning party" release. 11 years
+    SambaXP, 20 years Samba and counting...
+  * Make samba-common "Multi-Arch: foreign"
+  * Adapt patch in upstream #7499 and stop nss_wins clobbering other
+    daemon's logfiles. Closes: #598313
+  * Add some mention about some use for the user information in Kerberos
+    environments in the smbspool manpage. Closes: #387266
+  * Drop link to no longer provided "Using Samba" documentation in
+    HTML documentation summary file. Closes: #604768
+  * Provide WHATSNEW.txt in samba-doc too as it is linked from the
+    documentation summary file. Do not compress that file.
+  * Fix link to WHATSNEW.txt in HTML documentation summary file. This
+    is the second part of the fix for #604768
+  * Use lp_state_dir() instead of get_dyn_STATEDIR() in
+    fhs-filespaths.patch as the latter does indeed hardcode the
+    location for passdb.tdb and secrets.tdb to /var/lib/samba
+    (the compile-time option for state directory and NOT the configurable
+    value). This is left to "state directory" instead of "private dir"
+    at least as of now, because if doesn't change anything to the
+    current behaviour, but allows the files' location to be configurable
+    through "state directory" (and not "private dir").
+    Closes: #249873
+  * Disable useless smbtorture4 build. Thanks to Ivo De Decker for the patch.
+    Closes: #670561
+  * Add upstream commit that adds waf source to the buildtools/
+    directory. As upstream will, one day or another, merge this, I
+    prefer this over removing the waf binary and repack upstream
+    tarball.
+    Closes: #654499
+  * Build-Conflict with python-ldb and python-ldb-dev to avoid build
+    failures when some versions of these packages are locally installed.
+    Closes: #657314
+  * Rename fix-samba.ldip-syntax.patch to fix-samba.ldif-syntax.patch
+  * Split NSS modules into a new libnss-winbind binary package.
+    Closes: #646292
+  * Add a NEWS.Debian entry about the libnss-winbind split and, while at
+    it, add an entry for libpam-winbind too (as it will affect upgrades
+    from squeeze).
+  * Drop code that was moving files around in samba.postinst and
+    winbind.postinst for pre-squeeze versions of the package.
+  * Drop code that was modifying a deprecated "passdb backend" setting
+    in smb.conf for pre-squeeze versions of the package (in 
+    samba-common.config).
+  * Add Should-Start dependency to winbind init script to guarantee
+    that the samba init script is started before winbind if present.
+    Closes: #638066
+  * Provide a (basic) manpage to smbtorture(1). Closes: #528735
+  * Turkish debconf translation update (Atila KOÇ).  Closes: #672447
+  * Drop the code that generates an smbpasswd file from the system's
+    user list. This adds very long delays on systems with many users,
+    including those with external user backends. It also makes much
+    less sense nowadays and the use of libpam-smbpass can easily
+    fill most of the needs. Closes: #671926
+  * Merged from Ubuntu:
+    - Set 'usershare allow guests', so that usershare admins are 
+      allowed to create public shares in addition to authenticated
+      ones.
+    - add map to guest = Bad user, maps bad username to guest access.
+    This allows for anonymous user shares. Closes: #672497  
+
+ -- Christian Perrier <bubulle@debian.org>  Sat, 12 May 2012 14:30:58 +0200
+
+samba (2:3.6.5-1) unstable; urgency=low
+
+  * New upstream release. Fixes CVE-2012-2111: Incorrect permission
+    checks when granting/removing privileges can compromise file
+    server security.
+  * Build-Depend on debhelper >= 9~ (which is in unstable for a few
+    months now)
+  * Use "set -e" in maintainer scripts instead of passing -e in the
+    shebang line
+  * Update Standards to 3.9.3 (checked, no change)
+
+ -- Christian Perrier <bubulle@debian.org>  Tue, 01 May 2012 08:07:39 +0200
+
+samba (2:3.6.4-1) unstable; urgency=low
+
+  [ Christian Perrier ]
+  * Two changes in the previous version should indeed read:
+    - samba.postinst: Avoid scary pdbedit warnings on first import.
+    - samba-common.postinst: Add more informative error message for the case
+      where smb.conf was manually deleted.
+    Closes: #664509
+
+  [ Jelmer Vernooij ]
+  * New upstream release.
+   + Fixes CVE-2012-1182: PIDL based autogenerated code allows overwriting
+     beyond of allocated array.
+
+ -- Jelmer Vernooij <jelmer@debian.org>  Wed, 11 Apr 2012 23:25:41 +0200
+
+samba (2:3.6.3-2) unstable; urgency=low
+
+  [ Christian Perrier ]
+  * Fix example samba.ldif syntax. Closes: #659963
+  * Set minimal version of tdb ot 1.2.6 in Build-Depends
+    (thanks, backports!)
+  * Lower priority of debconf question to medium after some pondering.
+    After all, we have a sane default. Closes: #662801
+  * Merge some Ubuntu patches:
+    - samba.config: Avoid scary pdbedit warnings on first import.
+    - samba.postinst: Add more informative error message for the case
+      where smb.conf was manually deleted.
+
+  [ Maarten Bezemer ]
+  * Removed references to the testprns command from documentation
+  * Added notes that the smbsh command is not available in this package
+    Closes: #662243
+
+  [ Debconf translations ]
+  * Indonesian (Arief S Fitrianto).  Closes: #660312
+  * Slovak (Ivan Masár).  Closes: #661125
+
+  [ Steve Langasek ]
+  * Use Debian copyright-format 1.0 in debian/copyright.
+
+ -- Christian Perrier <bubulle@debian.org>  Mon, 12 Mar 2012 20:49:24 +0100
+
+samba (2:3.6.3-1) unstable; urgency=low
+
+  [ Christian Perrier ]
+  * New upstream release
+  * Fixes CVE-2012-0817:
+    The Samba File Serving daemon (smbd) in Samba versions
+    3.6.0 to 3.6.2 is affected by a memory leak that can
+    cause a server denial of service.
+
+  [ Debconf translations ] 
+  * Polish (Michał Kułach).  Closes: #657770
+
+ -- Christian Perrier <bubulle@debian.org>  Tue, 31 Jan 2012 22:09:39 +0100
+
+samba (2:3.6.2-1) unstable; urgency=low
+
+  * New upstream release
+  * Drop bug_601406_fix-perl-path-in-example.patch (applied upstream)
+
+ -- Christian Perrier <bubulle@debian.org>  Fri, 27 Jan 2012 21:38:52 +0100
+
+samba (2:3.6.1-3) unstable; urgency=low
+
+  [ Sam Hartman ]
+  * Increase libkrb5-dev dependency to avoid depending on
+    krb5_locate_kdc, Closes: #650541
+
+  [ Steve Langasek ]
+  * Fix the libpam-winbind description to more accurately identify the
+    protocols being used by nss_wins.  Closes: #650091.
+
+ -- Christian Perrier <bubulle@debian.org>  Thu, 01 Dec 2011 21:56:52 +0100
+
+samba (2:3.6.1-2) unstable; urgency=low
+
+  * Merge changes from 3.5.11~dfsg-4 and unreleased -5 in unstable branch
+  * debian/patches/initialize_password_db-null-deref: Avoid null
+    dereference in initialize_password_db().  Closes LP: #829221.
+  * Mark samba-common Multi-Arch: foreign.
+
+ -- Christian Perrier <bubulle@debian.org>  Sun, 27 Nov 2011 19:06:39 +0100
+
+samba (2:3.6.1-1) experimental; urgency=low
+
+  * New upstream release
+
+ -- Christian Perrier <bubulle@debian.org>  Sat, 22 Oct 2011 10:56:17 +0200
+
+samba (2:3.6.0-1) experimental; urgency=low
+
+  * New upstream release
+  * Resync with packaging changes in 3.5 branch between 3.5.8~dfsg1
+    and 3.5.11~dfsg-1
+  * Drop wbc_async.h from libwbclient-dev as, according to upstream's
+    commit c0a7c9f99188ebb3cd27094b9364449bcc2f80d8, " its only user is
+    smbtorture3"
+
+ -- Christian Perrier <bubulle@debian.org>  Thu, 11 Aug 2011 09:14:53 +0200
+
+samba (2:3.6.0~rc3-1) experimental; urgency=low
+
+  * New upstream version
+
+ -- Christian Perrier <bubulle@debian.org>  Fri, 29 Jul 2011 23:11:10 +0200
+
+samba (2:3.6.0~rc2-1) experimental; urgency=low
+
+  * New upstream version
+
+ -- Christian Perrier <bubulle@debian.org>  Tue, 07 Jun 2011 23:09:41 +0200
+
+samba (2:3.6.0~rc1-2) experimental; urgency=low
+
+  * Use --with-nmbdsocketdir=/var/run/samba to have nmbd socket file
+    in an existing directory. Closes: #628121
+
+ -- Christian Perrier <bubulle@debian.org>  Fri, 27 May 2011 15:35:44 +0200
+
+samba (2:3.6.0~rc1-1) experimental; urgency=low
+
+  * New upstream release
+
+ -- Christian Perrier <bubulle@debian.org>  Thu, 19 May 2011 22:26:08 +0200
+
+samba (2:3.6.0~pre3-1) experimental; urgency=low
+
+  [ Christian Perrier ]
+  * New upstream release
+  * add "#include "fcntl.h"" to idmap_tdb2.c to get it compiled
+  * samba-doc-pdf: add Samba3-HOWTO.pdf from pre1 as it
+    was forgotten upstream
+  * libwbclient0.symbols: dropped several symbols related to
+    asynchronous actions that weren't working anyway (according
+    to Kai Blin at SambaXP)
+
+  [ Mathieu Parent ]
+  * Build against libctdb-dev (>= 1.10+git20110412) to have required control:
+    CTDB_CONTROL_SCHEDULE_FOR_DELETION. 
+
+ -- Christian Perrier <bubulle@debian.org>  Mon, 09 May 2011 11:29:52 +0200
+
+samba (2:3.5.11~dfsg-4) unstable; urgency=low
+
+  * Lintian override for libpam-winbind; it's not a shared library so doesn't
+    really need the pre-depends on multiarch-support.
+  * export DEB_BUILD_MAINT_OPTIONS := hardening=+bindnow, taken from Ubuntu.
+
+ -- Steve Langasek <vorlon@debian.org>  Fri, 21 Oct 2011 16:01:29 -0700
+
+samba (2:3.5.11~dfsg-3) unstable; urgency=low
+
+  * Split winbind into separate packages, winbind and libpam-winbind,
+    with the latter marked Multi-Arch: same and the former marked
+    Multi-Arch: foreign, so that we can install multiple copies of the
+    pam module and nss modules on the same system.
+
+ -- Steve Langasek <vorlon@debian.org>  Fri, 21 Oct 2011 20:00:13 +0000
+
+samba (2:3.5.11~dfsg-2) unstable; urgency=low
+
+  * Don't export DEB_HOST_ARCH_OS in debian/rules, this is only used locally.
+  * Use dh_links instead of manually creating directories and symlinks from
+    debian/rules.
+  * Switch from dh_movefiles to dh_install and adjust for debhelper compat
+    level 7, in preparation for moving to dh(1).
+  * Where possible, use dh_installman and dh_install's support for target
+    directories instead of moving files around in debian/rules.
+  * We don't need to mess with perms on usr/include/libsmbclient.h anymore
+    in debian/rules, the upstream install target gets it right
+  * Use debian/clean instead of removing left-behind files by hand in the
+    clean target
+  * Convert debian/rules to dh(1).
+  * Don't run debconf-updatepo on clean; not worth the divergence in
+    debian/rules anymore :)
+  * Don't install debian/README.build in the package; this is really only
+    relevant in the source.
+  * Bump to debhelper compat level 9 and build libraries for multiarch.
+  * Drop Makefile.internal from libsmbclient-dev examples so that we can mark
+    libsmbclient-dev Multi-Arch: same.
+  * Bump build-depends on debhelper to 8.9.4, so we ensure we have
+    dpkg-buildflags by default and get full build hardening enabled out of
+    the box - critical for a server like samba.
+  * Use DH_ALWAYS_EXCLUDE instead of passing override options to
+    dh_installexamples.
+  * Pass --sourcedirectory=source3 to dh instead of having to pass it to each
+    dh_auto_* command.
+  * Ironically, this means that we have to manually disable dh_auto_test,
+    which now finds the makefile targets but doesn't work unless we build an
+    extra wrapper library into our binaries that we don't want.
+  * Drop a few configure options from debian/rules that shadow the built-in
+    defaults.
+  * debian/libsmbclient.lintian-overrides: yes, we know the package name
+    doesn't match the soname - and it never should until there's an ABI
+    change.
+
+ -- Steve Langasek <vorlon@debian.org>  Fri, 07 Oct 2011 21:36:43 -0700
+
+samba (2:3.5.11~dfsg-1) unstable; urgency=low
+
+  * New upstream release
+
+ -- Christian Perrier <bubulle@debian.org>  Fri, 05 Aug 2011 20:12:01 +0200
+
+samba (2:3.5.10~dfsg-1) unstable; urgency=low
+
+  * New upstream release
+  * Security update, fixing the following issues:
+    - CVE-2011-2694: possible XSS attack in SWAT
+    - CVE-2011-2522: Cross-Site Request Forgery vulnerability in SWAT
+
+ -- Christian Perrier <bubulle@debian.org>  Thu, 28 Jul 2011 12:19:01 +0200
+
+samba (2:3.5.9~dfsg-1) unstable; urgency=low
+
+  * New upstream release
+  * Add "--quiet" to start-stop-daemon call in reload target in init
+    script. Closes: #572483
+  * Add examples/LDAP in examples for the samba package. With this,
+    samba.schema will be provided in some way in the package.
+    This very partially addresses #190162
+  * patches/bug_221618_precise-64bit-prototype.patch: precise
+    64bits prototype in libsmbclient-dev. Closes: #221618
+  * patches/no-unnecessary-cups.patch: dropped after upstream
+    changes to printing code
+  * Update Standards to 3.9.2 (checked, no change)
+  * Add build-arch and build-indep targets in debian/rules
+
+ -- Christian Perrier <bubulle@debian.org>  Sat, 18 Jun 2011 07:08:00 +0200
+
+samba (2:3.5.8~dfsg-5) unstable; urgency=low
+
+  * Fix "tdb2.so undefined symbol: dyn_get_STATEDIR" by fixing a typo
+    in fhs-filespath.patch. Closes: #629183, LP: #789097
+
+ -- Christian Perrier <bubulle@debian.org>  Sat, 04 Jun 2011 13:48:32 +0200
+
+samba (2:3.5.8~dfsg-4) unstable; urgency=low
+
+  [ Debconf translations ]
+  * Spanish (Omar Campagne).  Closes: #627813
+  * Swedish (Martin Bagge / brother).  Closes: #627849
+  * Brazilian Portuguese (Adriano Rafael Gomes).  Closes: #627866
+
+  [ Christian Perrier ]
+  * bug_601406_fix-perl-path-in-example.patch:  fix path to perl
+    binary in example file. Closes: #601406
+
+ -- Christian Perrier <bubulle@debian.org>  Fri, 27 May 2011 12:23:05 +0200
+
+samba (2:3.5.8~dfsg-3) unstable; urgency=low
+
+  [ Debconf translations ]
+  * Italian (Luca Monducci).  Closes: #626674
+  * Dutch (Vincent Zweije).  Closes: #627519
+  * Czech (Miroslav Kure).  Closes: #627442
+
+ -- Christian Perrier <bubulle@debian.org>  Tue, 24 May 2011 22:40:04 +0200
+
+samba (2:3.5.8~dfsg-2) unstable; urgency=low
+
+  [ Jelmer Vernooij ]
+  * Add libwbclient-dev package.
+  * Build against external libtdb.
+  * Bump standards version to 3.9.1 (no changes).
+
+  [ Mathieu Parent ]
+  * Builddep on libctdb-dev or ctdb < 1.10 
+
+  [ Christian Perrier ]
+  * Use db_settitle in debconf questions and make these
+    titles translatable. Closes: #560318
+  * Test the presence of testparm before trying to use it in init script
+    Closes: #606320
+  * Add cups to Should-{Start,Stop} in LSB headers of
+    samba init script to guarantee that CUPS is started
+    before samba. Closes: #619132
+  * Drop libsmbclient-dev useless dependency on samba-common
+    Closes: #597987
+
+  [ Debconf translations ]
+  * French (Christian Perrier)
+  * Japanese (Kenshi Muto).  Closes: #626474
+  * Galician (Miguel Anxo Bouzada).  Closes: #626477
+  * Thai (Theppitak Karoonboonyanan).  Closes: #626487
+  * Russian (Yuri Kozlov).  Closes: #626523
+  * Danish (Joe Hansen).  Closes: #626531
+  * Esperanto (Felipe Castro).  Closes: #626558
+  * Hebrew (Eran Cohen).  Closes: #626638
+  * Bokmål, (Bjørn Steensrud).
+  * Italian (Luca Monducci).  Closes: #626674
+  * Finnish (Tapio Lehtonen).  Closes: #626890
+  * Portuguese (Miguel Figueiredo).  Closes: #627224
+  * German (Holger Wansing).  Closes: #627354
+  * Czech (Miroslav Kure).  Closes: #627442
+
+ -- Christian Perrier <bubulle@sesostris.kheops.frmug.org>  Sun, 22 May 2011 21:15:21 +0200
+
+samba (2:3.5.8~dfsg-1) unstable; urgency=low
+
+  * New upstream release. This fixes the following bugs:
+    - Winbind leaks gids with idmap ldap backend (upstrem #7777)
+      Closes: #613624
+    - printing from Windows 7 fails with 0x000003e6
+      Closes: #617429
+  * smb.conf(5) restored from samba 3.5.6 as a workaround to upstream
+    #7997
+
+ -- Christian Perrier <bubulle@debian.org>  Tue, 08 Mar 2011 22:38:32 +0100
+
+samba (2:3.5.7~dfsg-1) unstable; urgency=low
+
+  [ Christian Perrier ]
+  * New upstream release
   * Security update, fixing the following issue:
     - CVE-2011-0719: denial of service by memory corruption
+  * Use architecture wildcard "linux-any" in build dependencies
+    Closes: #563372
 
- -- Christian Perrier <bubulle@debian.org>  Wed, 23 Feb 2011 20:14:40 +0100
+ -- Christian Perrier <bubulle@debian.org>  Tue, 01 Mar 2011 20:59:34 +0100
 
-samba (2:3.5.6~dfsg-3squeeze1) stable-proposed-updates; urgency=low
+samba (2:3.5.6~dfsg-5) unstable; urgency=low
+
+  * Fix FTBFS on Hurd. Closes: #610678
+  * Only try parsing dhcpd.conf is it's not empty,
+    in dhclient-enter-hooks.d/samba.  Closes: #594088.
+
+ -- Christian Perrier <bubulle@debian.org>  Sat, 05 Feb 2011 13:50:22 +0100
+
+samba (2:3.5.6~dfsg-4) unstable; urgency=low
 
   * Fix pam_winbind file descriptor leak with a patch
     proposed in https://bugzilla.samba.org/show_bug.cgi?id=7265.
@@ -93,6 +615,12 @@ samba (2:3.5.4~dfsg-2) unstable; urgency=low
     and idmap2.tdb.
 
  -- Christian Perrier <bubulle@debian.org>  Tue, 07 Sep 2010 17:47:32 +0200
+
+samba (2:3.6.0~pre1-1) experimental; urgency=low
+
+  * New upstream release
+
+ -- Christian Perrier <bubulle@debian.org>  Wed, 04 Aug 2010 01:39:11 +0200
 
 samba (2:3.5.4~dfsg-1) experimental; urgency=low
 

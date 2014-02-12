@@ -14,8 +14,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: samba-lt\n"
-"Report-Msgid-Bugs-To: samba@packages.debian.org\n"
-"POT-Creation-Date: 2009-01-02 12:18-0800\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2012-05-11 19:55+0200\n"
 "PO-Revision-Date: 2006-11-26 00:20+0200\n"
 "Last-Translator: Gintautas Miliauskas <gintas@akl.lt>\n"
 "Language-Team: Lithuanian <komp_lt@konferencijos.lt>\n"
@@ -27,15 +27,21 @@ msgstr ""
 "Plural-Forms:  nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && (n"
 "%100<10 || n%100>=20) ? 1 : 2);\n"
 
-#. Type: boolean
+#. Type: title
 #. Description
 #: ../samba-common.templates:1001
+msgid "Samba server and utilities"
+msgstr ""
+
+#. Type: boolean
+#. Description
+#: ../samba-common.templates:2001
 msgid "Modify smb.conf to use WINS settings from DHCP?"
 msgstr "Pakeisti smb.conf, kad būtų naudojami WINS nustatymai iš DHCP?"
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:1001
+#: ../samba-common.templates:2001
 msgid ""
 "If your computer gets IP address information from a DHCP server on the "
 "network, the DHCP server may also provide information about WINS servers "
@@ -50,7 +56,7 @@ msgstr ""
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:1001
+#: ../samba-common.templates:2001
 msgid ""
 "The dhcp3-client package must be installed to take advantage of this feature."
 msgstr ""
@@ -59,13 +65,13 @@ msgstr ""
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:2001
+#: ../samba-common.templates:3001
 msgid "Configure smb.conf automatically?"
 msgstr "Automatiškai konfigūruoti smb.conf?"
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:2001
+#: ../samba-common.templates:3001
 msgid ""
 "The rest of the configuration of Samba deals with questions that affect "
 "parameters in /etc/samba/smb.conf, which is the file used to configure the "
@@ -83,7 +89,7 @@ msgstr ""
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:2001
+#: ../samba-common.templates:3001
 msgid ""
 "If you do not choose this option, you will have to handle any configuration "
 "changes yourself, and will not be able to take advantage of periodic "
@@ -95,18 +101,14 @@ msgstr ""
 
 #. Type: string
 #. Description
-#: ../samba-common.templates:3001
+#: ../samba-common.templates:4001
 msgid "Workgroup/Domain Name:"
 msgstr "Grupė (workgroup) / domeno vardas:"
 
 #. Type: string
 #. Description
-#: ../samba-common.templates:3001
+#: ../samba-common.templates:4001
 #, fuzzy
-#| msgid ""
-#| "Please specify the workgroup you want this server to appear to be in when "
-#| "queried by clients. Note that this parameter also controls the domain "
-#| "name used with the security=domain setting."
 msgid ""
 "Please specify the workgroup for this system.  This setting controls which "
 "workgroup the system will appear in when used as a server, the default "
@@ -118,18 +120,14 @@ msgstr ""
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:4001
+#: ../samba-common.templates:5001
 msgid "Use password encryption?"
 msgstr "Naudoti slaptažodžių šifravimą?"
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:4001
+#: ../samba-common.templates:5001
 #, fuzzy
-#| msgid ""
-#| "All recent Windows clients communicate with SMB servers using encrypted "
-#| "passwords. If you want to use clear text passwords you will need to "
-#| "change a parameter in your Windows registry."
 msgid ""
 "All recent Windows clients communicate with SMB/CIFS servers using encrypted "
 "passwords. If you want to use clear text passwords you will need to change a "
@@ -141,12 +139,8 @@ msgstr ""
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:4001
+#: ../samba-common.templates:5001
 #, fuzzy
-#| msgid ""
-#| "Enabling this option is highly recommended. If you do, make sure you have "
-#| "a valid /etc/samba/smbpasswd file and that you set passwords in there for "
-#| "each user using the smbpasswd command."
 msgid ""
 "Enabling this option is highly recommended as support for plain text "
 "passwords is no longer maintained in Microsoft Windows products. If you do, "
@@ -158,47 +152,11 @@ msgstr ""
 "rinkmeną ir kad ten nurodyti visų naudotojų, naudojančių smbpasswd, "
 "slaptažodžiai."
 
-#. Type: boolean
+#. Type: title
 #. Description
 #: ../samba.templates:1001
-msgid "Create samba password database, /var/lib/samba/passdb.tdb?"
-msgstr "Sukurti slaptažodžių duomenų bazę, /var/lib/samba/passdb.tdb?"
-
-#. Type: boolean
-#. Description
-#: ../samba.templates:1001
-msgid ""
-"To be compatible with the defaults in most versions of Windows, Samba must "
-"be configured to use encrypted passwords.  This requires user passwords to "
-"be stored in a file separate from /etc/passwd.  This file can be created "
-"automatically, but the passwords must be added manually by running smbpasswd "
-"and be kept up-to-date in the future."
+msgid "Samba server"
 msgstr ""
-"Kad būtų suderinama su standartine daugumos Windows sistemų konfigūracija, "
-"Samba turi naudoti šifruotus slaptažodžius. Tokiu atveju naudotojų "
-"slaptažodžiai turi būti saugomi atskirai nuo bendrų slaptažodžių rinkmenoje /"
-"etc/passwd. Ši rinkmena gali būti sukurta automatiškai, tačiau slaptažodžiai "
-"turi būti pridėti rankiniu būdu, leidžiant programą smbpasswd."
-
-#. Type: boolean
-#. Description
-#: ../samba.templates:1001
-msgid ""
-"If you do not create it, you will have to reconfigure Samba (and probably "
-"your client machines) to use plaintext passwords."
-msgstr ""
-"Jei nesukursite rinkmenos, turėsite perkonfigūruoti Samba (greičiausiai ir "
-"kitus tinklo kompiuterius), kad būtų naudojami nešifruoti slaptažodžiai."
-
-#. Type: boolean
-#. Description
-#: ../samba.templates:1001
-msgid ""
-"See /usr/share/doc/samba-doc/htmldocs/Samba3-Developers-Guide/pwencrypt.html "
-"from the samba-doc package for more details."
-msgstr ""
-"Daugiau informacijos galite rasti rinkmenoje /usr/share/doc/samba-doc/"
-"htmldocs/ENCRYPTION.html iš paketo samba-doc."
 
 #. Type: select
 #. Choices
@@ -227,6 +185,38 @@ msgid ""
 msgstr ""
 "Samba tarnyba smbd gali veikti kaip įprastinė tarnyba arba ji gali būti "
 "paleidžiama iš inetd. Rekomenduojama Samba naudoti kaip įprastinę tarnybą."
+
+#~ msgid "Create samba password database, /var/lib/samba/passdb.tdb?"
+#~ msgstr "Sukurti slaptažodžių duomenų bazę, /var/lib/samba/passdb.tdb?"
+
+#~ msgid ""
+#~ "To be compatible with the defaults in most versions of Windows, Samba "
+#~ "must be configured to use encrypted passwords.  This requires user "
+#~ "passwords to be stored in a file separate from /etc/passwd.  This file "
+#~ "can be created automatically, but the passwords must be added manually by "
+#~ "running smbpasswd and be kept up-to-date in the future."
+#~ msgstr ""
+#~ "Kad būtų suderinama su standartine daugumos Windows sistemų "
+#~ "konfigūracija, Samba turi naudoti šifruotus slaptažodžius. Tokiu atveju "
+#~ "naudotojų slaptažodžiai turi būti saugomi atskirai nuo bendrų "
+#~ "slaptažodžių rinkmenoje /etc/passwd. Ši rinkmena gali būti sukurta "
+#~ "automatiškai, tačiau slaptažodžiai turi būti pridėti rankiniu būdu, "
+#~ "leidžiant programą smbpasswd."
+
+#~ msgid ""
+#~ "If you do not create it, you will have to reconfigure Samba (and probably "
+#~ "your client machines) to use plaintext passwords."
+#~ msgstr ""
+#~ "Jei nesukursite rinkmenos, turėsite perkonfigūruoti Samba (greičiausiai "
+#~ "ir kitus tinklo kompiuterius), kad būtų naudojami nešifruoti "
+#~ "slaptažodžiai."
+
+#~ msgid ""
+#~ "See /usr/share/doc/samba-doc/htmldocs/Samba3-Developers-Guide/pwencrypt."
+#~ "html from the samba-doc package for more details."
+#~ msgstr ""
+#~ "Daugiau informacijos galite rasti rinkmenoje /usr/share/doc/samba-doc/"
+#~ "htmldocs/ENCRYPTION.html iš paketo samba-doc."
 
 #~ msgid "Move /etc/samba/smbpasswd to /var/lib/samba/passdb.tdb?"
 #~ msgstr "Perkelti /etc/samba/smbpasswd į /var/lib/samba/passdb.tdb?"

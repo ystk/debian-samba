@@ -44,6 +44,7 @@ static enum ndr_err_code ndr_pull_SYSTEMTIME(struct ndr_pull *ndr, int ndr_flags
 _PUBLIC_ void ndr_print_SYSTEMTIME(struct ndr_print *ndr, const char *name, const struct SYSTEMTIME *r)
 {
 	ndr_print_struct(ndr, name, "SYSTEMTIME");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint16(ndr, "year", r->year);
 	ndr_print_uint16(ndr, "month", r->month);
@@ -101,6 +102,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_PERF_COUNTER_DEFINITION(struct ndr_pull *ndr
 _PUBLIC_ void ndr_print_PERF_COUNTER_DEFINITION(struct ndr_print *ndr, const char *name, const struct PERF_COUNTER_DEFINITION *r)
 {
 	ndr_print_struct(ndr, name, "PERF_COUNTER_DEFINITION");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "ByteLength", r->ByteLength);
 	ndr_print_uint32(ndr, "CounterNameTitleIndex", r->CounterNameTitleIndex);
@@ -130,11 +132,13 @@ _PUBLIC_ enum ndr_err_code ndr_push_PERF_COUNTER_BLOCK(struct ndr_push *ndr, int
 
 _PUBLIC_ enum ndr_err_code ndr_pull_PERF_COUNTER_BLOCK(struct ndr_pull *ndr, int ndr_flags, struct PERF_COUNTER_BLOCK *r)
 {
+	uint32_t size_data_0 = 0;
 	if (ndr_flags & NDR_SCALARS) {
 		NDR_CHECK(ndr_pull_align(ndr, 4));
 		NDR_CHECK(ndr_pull_uint32(ndr, NDR_SCALARS, &r->ByteLength));
-		NDR_PULL_ALLOC_N(ndr, r->data, r->ByteLength);
-		NDR_CHECK(ndr_pull_array_uint8(ndr, NDR_SCALARS, r->data, r->ByteLength));
+		size_data_0 = r->ByteLength;
+		NDR_PULL_ALLOC_N(ndr, r->data, size_data_0);
+		NDR_CHECK(ndr_pull_array_uint8(ndr, NDR_SCALARS, r->data, size_data_0));
 		NDR_CHECK(ndr_pull_trailer_align(ndr, 4));
 	}
 	if (ndr_flags & NDR_BUFFERS) {
@@ -145,6 +149,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_PERF_COUNTER_BLOCK(struct ndr_pull *ndr, int
 _PUBLIC_ void ndr_print_PERF_COUNTER_BLOCK(struct ndr_print *ndr, const char *name, const struct PERF_COUNTER_BLOCK *r)
 {
 	ndr_print_struct(ndr, name, "PERF_COUNTER_BLOCK");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "ByteLength", r->ByteLength);
 	ndr_print_array_uint8(ndr, "data", r->data, r->ByteLength);
@@ -208,6 +213,7 @@ _PUBLIC_ enum ndr_err_code ndr_pull_PERF_INSTANCE_DEFINITION(struct ndr_pull *nd
 _PUBLIC_ void ndr_print_PERF_INSTANCE_DEFINITION(struct ndr_print *ndr, const char *name, const struct PERF_INSTANCE_DEFINITION *r)
 {
 	ndr_print_struct(ndr, name, "PERF_INSTANCE_DEFINITION");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "ByteLength", r->ByteLength);
 	ndr_print_uint32(ndr, "ParentObjectTitleIndex", r->ParentObjectTitleIndex);
@@ -264,8 +270,10 @@ _PUBLIC_ enum ndr_err_code ndr_push_PERF_OBJECT_TYPE(struct ndr_push *ndr, int n
 
 _PUBLIC_ enum ndr_err_code ndr_pull_PERF_OBJECT_TYPE(struct ndr_pull *ndr, int ndr_flags, struct PERF_OBJECT_TYPE *r)
 {
+	uint32_t size_counters_0 = 0;
 	uint32_t cntr_counters_0;
 	TALLOC_CTX *_mem_save_counters_0;
+	uint32_t size_instances_0 = 0;
 	uint32_t cntr_instances_0;
 	TALLOC_CTX *_mem_save_instances_0;
 	if (ndr_flags & NDR_SCALARS) {
@@ -284,17 +292,19 @@ _PUBLIC_ enum ndr_err_code ndr_pull_PERF_OBJECT_TYPE(struct ndr_pull *ndr, int n
 		NDR_CHECK(ndr_pull_uint32(ndr, NDR_SCALARS, &r->CodePage));
 		NDR_CHECK(ndr_pull_hyper(ndr, NDR_SCALARS, &r->PerfTime));
 		NDR_CHECK(ndr_pull_hyper(ndr, NDR_SCALARS, &r->PerfFreq));
-		NDR_PULL_ALLOC_N(ndr, r->counters, r->NumCounters);
+		size_counters_0 = r->NumCounters;
+		NDR_PULL_ALLOC_N(ndr, r->counters, size_counters_0);
 		_mem_save_counters_0 = NDR_PULL_GET_MEM_CTX(ndr);
 		NDR_PULL_SET_MEM_CTX(ndr, r->counters, 0);
-		for (cntr_counters_0 = 0; cntr_counters_0 < r->NumCounters; cntr_counters_0++) {
+		for (cntr_counters_0 = 0; cntr_counters_0 < size_counters_0; cntr_counters_0++) {
 			NDR_CHECK(ndr_pull_PERF_COUNTER_DEFINITION(ndr, NDR_SCALARS, &r->counters[cntr_counters_0]));
 		}
 		NDR_PULL_SET_MEM_CTX(ndr, _mem_save_counters_0, 0);
-		NDR_PULL_ALLOC_N(ndr, r->instances, r->NumInstances);
+		size_instances_0 = r->NumInstances;
+		NDR_PULL_ALLOC_N(ndr, r->instances, size_instances_0);
 		_mem_save_instances_0 = NDR_PULL_GET_MEM_CTX(ndr);
 		NDR_PULL_SET_MEM_CTX(ndr, r->instances, 0);
-		for (cntr_instances_0 = 0; cntr_instances_0 < r->NumInstances; cntr_instances_0++) {
+		for (cntr_instances_0 = 0; cntr_instances_0 < size_instances_0; cntr_instances_0++) {
 			NDR_CHECK(ndr_pull_PERF_INSTANCE_DEFINITION(ndr, NDR_SCALARS, &r->instances[cntr_instances_0]));
 		}
 		NDR_PULL_SET_MEM_CTX(ndr, _mem_save_instances_0, 0);
@@ -302,9 +312,10 @@ _PUBLIC_ enum ndr_err_code ndr_pull_PERF_OBJECT_TYPE(struct ndr_pull *ndr, int n
 		NDR_CHECK(ndr_pull_trailer_align(ndr, 8));
 	}
 	if (ndr_flags & NDR_BUFFERS) {
+		size_instances_0 = r->NumInstances;
 		_mem_save_instances_0 = NDR_PULL_GET_MEM_CTX(ndr);
 		NDR_PULL_SET_MEM_CTX(ndr, r->instances, 0);
-		for (cntr_instances_0 = 0; cntr_instances_0 < r->NumInstances; cntr_instances_0++) {
+		for (cntr_instances_0 = 0; cntr_instances_0 < size_instances_0; cntr_instances_0++) {
 			NDR_CHECK(ndr_pull_PERF_INSTANCE_DEFINITION(ndr, NDR_BUFFERS, &r->instances[cntr_instances_0]));
 		}
 		NDR_PULL_SET_MEM_CTX(ndr, _mem_save_instances_0, 0);
@@ -317,6 +328,7 @@ _PUBLIC_ void ndr_print_PERF_OBJECT_TYPE(struct ndr_print *ndr, const char *name
 	uint32_t cntr_counters_0;
 	uint32_t cntr_instances_0;
 	ndr_print_struct(ndr, name, "PERF_OBJECT_TYPE");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr_print_uint32(ndr, "TotalByteLength", r->TotalByteLength);
 	ndr_print_uint32(ndr, "DefinitionLength", r->DefinitionLength);
@@ -335,21 +347,13 @@ _PUBLIC_ void ndr_print_PERF_OBJECT_TYPE(struct ndr_print *ndr, const char *name
 	ndr->print(ndr, "%s: ARRAY(%d)", "counters", (int)r->NumCounters);
 	ndr->depth++;
 	for (cntr_counters_0=0;cntr_counters_0<r->NumCounters;cntr_counters_0++) {
-		char *idx_0=NULL;
-		if (asprintf(&idx_0, "[%d]", cntr_counters_0) != -1) {
-			ndr_print_PERF_COUNTER_DEFINITION(ndr, "counters", &r->counters[cntr_counters_0]);
-			free(idx_0);
-		}
+		ndr_print_PERF_COUNTER_DEFINITION(ndr, "counters", &r->counters[cntr_counters_0]);
 	}
 	ndr->depth--;
 	ndr->print(ndr, "%s: ARRAY(%d)", "instances", (int)r->NumInstances);
 	ndr->depth++;
 	for (cntr_instances_0=0;cntr_instances_0<r->NumInstances;cntr_instances_0++) {
-		char *idx_0=NULL;
-		if (asprintf(&idx_0, "[%d]", cntr_instances_0) != -1) {
-			ndr_print_PERF_INSTANCE_DEFINITION(ndr, "instances", &r->instances[cntr_instances_0]);
-			free(idx_0);
-		}
+		ndr_print_PERF_INSTANCE_DEFINITION(ndr, "instances", &r->instances[cntr_instances_0]);
 	}
 	ndr->depth--;
 	ndr_print_PERF_COUNTER_BLOCK(ndr, "counter_data", &r->counter_data);
@@ -398,14 +402,17 @@ _PUBLIC_ enum ndr_err_code ndr_push_PERF_DATA_BLOCK(struct ndr_push *ndr, int nd
 
 _PUBLIC_ enum ndr_err_code ndr_pull_PERF_DATA_BLOCK(struct ndr_pull *ndr, int ndr_flags, struct PERF_DATA_BLOCK *r)
 {
+	uint32_t size_Signature_0 = 0;
 	uint32_t cntr_Signature_0;
 	uint32_t _ptr_data;
 	TALLOC_CTX *_mem_save_data_0;
+	uint32_t size_objects_0 = 0;
 	uint32_t cntr_objects_0;
 	TALLOC_CTX *_mem_save_objects_0;
 	if (ndr_flags & NDR_SCALARS) {
 		NDR_CHECK(ndr_pull_align(ndr, 8));
-		for (cntr_Signature_0 = 0; cntr_Signature_0 < 4; cntr_Signature_0++) {
+		size_Signature_0 = 4;
+		for (cntr_Signature_0 = 0; cntr_Signature_0 < size_Signature_0; cntr_Signature_0++) {
 			NDR_CHECK(ndr_pull_uint16(ndr, NDR_SCALARS, &r->Signature[cntr_Signature_0]));
 		}
 		NDR_CHECK(ndr_pull_uint32(ndr, NDR_SCALARS, &r->LittleEndian));
@@ -428,10 +435,11 @@ _PUBLIC_ enum ndr_err_code ndr_pull_PERF_DATA_BLOCK(struct ndr_pull *ndr, int nd
 		} else {
 			r->data = NULL;
 		}
-		NDR_PULL_ALLOC_N(ndr, r->objects, r->NumObjectTypes);
+		size_objects_0 = r->NumObjectTypes;
+		NDR_PULL_ALLOC_N(ndr, r->objects, size_objects_0);
 		_mem_save_objects_0 = NDR_PULL_GET_MEM_CTX(ndr);
 		NDR_PULL_SET_MEM_CTX(ndr, r->objects, 0);
-		for (cntr_objects_0 = 0; cntr_objects_0 < r->NumObjectTypes; cntr_objects_0++) {
+		for (cntr_objects_0 = 0; cntr_objects_0 < size_objects_0; cntr_objects_0++) {
 			NDR_CHECK(ndr_pull_PERF_OBJECT_TYPE(ndr, NDR_SCALARS, &r->objects[cntr_objects_0]));
 		}
 		NDR_PULL_SET_MEM_CTX(ndr, _mem_save_objects_0, 0);
@@ -444,9 +452,10 @@ _PUBLIC_ enum ndr_err_code ndr_pull_PERF_DATA_BLOCK(struct ndr_pull *ndr, int nd
 			NDR_CHECK(ndr_pull_uint8(ndr, NDR_SCALARS, r->data));
 			NDR_PULL_SET_MEM_CTX(ndr, _mem_save_data_0, 0);
 		}
+		size_objects_0 = r->NumObjectTypes;
 		_mem_save_objects_0 = NDR_PULL_GET_MEM_CTX(ndr);
 		NDR_PULL_SET_MEM_CTX(ndr, r->objects, 0);
-		for (cntr_objects_0 = 0; cntr_objects_0 < r->NumObjectTypes; cntr_objects_0++) {
+		for (cntr_objects_0 = 0; cntr_objects_0 < size_objects_0; cntr_objects_0++) {
 			NDR_CHECK(ndr_pull_PERF_OBJECT_TYPE(ndr, NDR_BUFFERS, &r->objects[cntr_objects_0]));
 		}
 		NDR_PULL_SET_MEM_CTX(ndr, _mem_save_objects_0, 0);
@@ -459,15 +468,12 @@ _PUBLIC_ void ndr_print_PERF_DATA_BLOCK(struct ndr_print *ndr, const char *name,
 	uint32_t cntr_Signature_0;
 	uint32_t cntr_objects_0;
 	ndr_print_struct(ndr, name, "PERF_DATA_BLOCK");
+	if (r == NULL) { ndr_print_null(ndr); return; }
 	ndr->depth++;
 	ndr->print(ndr, "%s: ARRAY(%d)", "Signature", (int)4);
 	ndr->depth++;
 	for (cntr_Signature_0=0;cntr_Signature_0<4;cntr_Signature_0++) {
-		char *idx_0=NULL;
-		if (asprintf(&idx_0, "[%d]", cntr_Signature_0) != -1) {
-			ndr_print_uint16(ndr, "Signature", r->Signature[cntr_Signature_0]);
-			free(idx_0);
-		}
+		ndr_print_uint16(ndr, "Signature", r->Signature[cntr_Signature_0]);
 	}
 	ndr->depth--;
 	ndr_print_uint32(ndr, "LittleEndian", r->LittleEndian);
@@ -493,11 +499,7 @@ _PUBLIC_ void ndr_print_PERF_DATA_BLOCK(struct ndr_print *ndr, const char *name,
 	ndr->print(ndr, "%s: ARRAY(%d)", "objects", (int)r->NumObjectTypes);
 	ndr->depth++;
 	for (cntr_objects_0=0;cntr_objects_0<r->NumObjectTypes;cntr_objects_0++) {
-		char *idx_0=NULL;
-		if (asprintf(&idx_0, "[%d]", cntr_objects_0) != -1) {
-			ndr_print_PERF_OBJECT_TYPE(ndr, "objects", &r->objects[cntr_objects_0]);
-			free(idx_0);
-		}
+		ndr_print_PERF_OBJECT_TYPE(ndr, "objects", &r->objects[cntr_objects_0]);
 	}
 	ndr->depth--;
 	ndr->depth--;

@@ -2,7 +2,7 @@
  *  Unix SMB/CIFS implementation.
  *  Virtual Windows Registry Layer
  *  Copyright (C) Volker Lendecke 2006
- *  Copyright (C) Michael Adam 2007-2008
+ *  Copyright (C) Michael Adam 2007-2010
  *
  *  This program is free software; you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -53,17 +53,23 @@
  * 0x1a		winreg_GetVersion			reg_getversion
  * 0x1b		winreg_OpenHKCC
  * 0x1c		winreg_OpenHKDD
- * 0x1d		winreg_QueryMultipleValues
+ * 0x1d		winreg_QueryMultipleValues		reg_querymultiplevalues
  * 0x1e		winreg_InitiateSystemShutdownEx
  * 0x1f		winreg_SaveKeyEx
  * 0x20		winreg_OpenHKPT
  * 0x21		winreg_OpenHKPN
- * 0x22		winreg_QueryMultipleValues2
+ * 0x22		winreg_QueryMultipleValues2		reg_querymultiplevalues
  *
  */
 
 #include "includes.h"
-#include "regfio.h"
+#include "registry.h"
+#include "reg_api.h"
+#include "reg_cachehook.h"
+#include "reg_backend_db.h"
+#include "reg_dispatcher.h"
+#include "reg_objects.h"
+#include "../librpc/gen_ndr/ndr_security.h"
 
 #undef DBGC_CLASS
 #define DBGC_CLASS DBGC_REGISTRY
@@ -75,15 +81,18 @@
 
 static WERROR fill_value_cache(struct registry_key *key)
 {
+	WERROR werr;
+
 	if (key->values != NULL) {
 		if (!reg_values_need_update(key->key, key->values)) {
 			return WERR_OK;
 		}
 	}
 
-	if (!(key->values = TALLOC_ZERO_P(key, struct regval_ctr))) {
-		return WERR_NOMEM;
-	}
+	TALLOC_FREE(key->values);
+	werr = regval_ctr_init(key, &(key->values));
+	W_ERROR_NOT_OK_RETURN(werr);
+
 	if (fetch_reg_values(key->key, key->values) == -1) {
 		TALLOC_FREE(key->values);
 		return WERR_BADFILE;
@@ -107,7 +116,7 @@ static WERROR fill_subkey_cache(struct registry_key *key)
 
 	if (fetch_reg_keys(key->key, key->subkeys) == -1) {
 		TALLOC_FREE(key->subkeys);
-		return WERR_NO_MORE_ITEMS;
+		return WERR_BADFILE;
 	}
 
 	return WERR_OK;
@@ -121,14 +130,13 @@ static int regkey_destructor(struct registry_key_handle *key)
 static WERROR regkey_open_onelevel(TALLOC_CTX *mem_ctx, 
 				   struct registry_key *parent,
 				   const char *name,
-				   const struct nt_user_token *token,
+				   const struct security_token *token,
 				   uint32 access_desired,
 				   struct registry_key **pregkey)
 {
 	WERROR     	result = WERR_OK;
 	struct registry_key *regkey;
 	struct registry_key_handle *key;
-	struct regsubkey_ctr	*subkeys = NULL;
 
 	DEBUG(7,("regkey_open_onelevel: name = [%s]\n", name));
 
@@ -142,15 +150,16 @@ static WERROR regkey_open_onelevel(TALLOC_CTX *mem_ctx,
 		goto done;
 	}
 
-	if ( !(W_ERROR_IS_OK(result = regdb_open())) ) {
+	result = regdb_open();
+	if (!(W_ERROR_IS_OK(result))) {
 		goto done;
 	}
 
 	key = regkey->key;
 	talloc_set_destructor(key, regkey_destructor);
-		
+
 	/* initialization */
-	
+
 	key->type = REG_KEY_GENERIC;
 
 	if (name[0] == '\0') {
@@ -182,30 +191,23 @@ static WERROR regkey_open_onelevel(TALLOC_CTX *mem_ctx,
 
 	if( StrnCaseCmp(key->name, KEY_HKPD, strlen(KEY_HKPD)) == 0 )
 		key->type = REG_KEY_HKPD;
-	
+
 	/* Look up the table of registry I/O operations */
 
-	if ( !(key->ops = reghook_cache_find( key->name )) ) {
+	key->ops = reghook_cache_find( key->name );
+	if (key->ops == NULL) {
 		DEBUG(0,("reg_open_onelevel: Failed to assign "
 			 "registry_ops to [%s]\n", key->name ));
 		result = WERR_BADFILE;
 		goto done;
 	}
 
-	/* check if the path really exists; failed is indicated by -1 */
-	/* if the subkey count failed, bail out */
+	/* FIXME: Existence is currently checked by fetching the subkeys */
 
-	result = regsubkey_ctr_init(key, &subkeys);
+	result = fill_subkey_cache(regkey);
 	if (!W_ERROR_IS_OK(result)) {
 		goto done;
 	}
-
-	if ( fetch_reg_keys( key, subkeys ) == -1 )  {
-		result = WERR_BADFILE;
-		goto done;
-	}
-
-	TALLOC_FREE( subkeys );
 
 	if ( !regkey_access_check( key, access_desired, &key->access_granted,
 				   token ) ) {
@@ -215,7 +217,7 @@ static WERROR regkey_open_onelevel(TALLOC_CTX *mem_ctx,
 
 	*pregkey = regkey;
 	result = WERR_OK;
-	
+
 done:
 	if ( !W_ERROR_IS_OK(result) ) {
 		TALLOC_FREE(regkey);
@@ -226,7 +228,7 @@ done:
 
 WERROR reg_openhive(TALLOC_CTX *mem_ctx, const char *hive,
 		    uint32 desired_access,
-		    const struct nt_user_token *token,
+		    const struct security_token *token,
 		    struct registry_key **pkey)
 {
 	SMB_ASSERT(hive != NULL);
@@ -248,13 +250,15 @@ WERROR reg_openkey(TALLOC_CTX *mem_ctx, struct registry_key *parent,
 {
 	struct registry_key *direct_parent = parent;
 	WERROR err;
-	char *p, *path, *to_free;
+	char *p, *path;
 	size_t len;
+	TALLOC_CTX *frame = talloc_stackframe();
 
-	if (!(path = SMB_STRDUP(name))) {
-		return WERR_NOMEM;
+	path = talloc_strdup(frame, name);
+	if (path == NULL) {
+		err = WERR_NOMEM;
+		goto error;
 	}
-	to_free = path;
 
 	len = strlen(path);
 
@@ -266,21 +270,18 @@ WERROR reg_openkey(TALLOC_CTX *mem_ctx, struct registry_key *parent,
 		char *name_component;
 		struct registry_key *tmp;
 
-		if (!(name_component = SMB_STRNDUP(path, (p - path)))) {
+		name_component = talloc_strndup(frame, path, (p - path));
+		if (name_component == NULL) {
 			err = WERR_NOMEM;
 			goto error;
 		}
 
-		err = regkey_open_onelevel(mem_ctx, direct_parent,
+		err = regkey_open_onelevel(frame, direct_parent,
 					   name_component, parent->token,
 					   KEY_ENUMERATE_SUB_KEYS, &tmp);
-		SAFE_FREE(name_component);
 
 		if (!W_ERROR_IS_OK(err)) {
 			goto error;
-		}
-		if (direct_parent != parent) {
-			TALLOC_FREE(direct_parent);
 		}
 
 		direct_parent = tmp;
@@ -289,11 +290,9 @@ WERROR reg_openkey(TALLOC_CTX *mem_ctx, struct registry_key *parent,
 
 	err = regkey_open_onelevel(mem_ctx, direct_parent, path, parent->token,
 				   desired_access, pkey);
- error:
-	if (direct_parent != parent) {
-		TALLOC_FREE(direct_parent);
-	}
-	SAFE_FREE(to_free);
+
+error:
+	talloc_free(frame);
 	return err;
 }
 
@@ -331,6 +330,7 @@ WERROR reg_enumvalue(TALLOC_CTX *mem_ctx, struct registry_key *key,
 		     uint32 idx, char **pname, struct registry_value **pval)
 {
 	struct registry_value *val;
+	struct regval_blob *blob;
 	WERROR err;
 
 	if (!(key->key->access_granted & KEY_QUERY_VALUE)) {
@@ -341,23 +341,61 @@ WERROR reg_enumvalue(TALLOC_CTX *mem_ctx, struct registry_key *key,
 		return err;
 	}
 
-	if (idx >= key->values->num_values) {
+	if (idx >= regval_ctr_numvals(key->values)) {
 		return WERR_NO_MORE_ITEMS;
 	}
 
-	err = registry_pull_value(mem_ctx, &val,
-				  key->values->values[idx]->type,
-				  key->values->values[idx]->data_p,
-				  key->values->values[idx]->size,
-				  key->values->values[idx]->size);
-	if (!W_ERROR_IS_OK(err)) {
-		return err;
+	blob = regval_ctr_specific_value(key->values, idx);
+
+	val = talloc_zero(mem_ctx, struct registry_value);
+	if (val == NULL) {
+		return WERR_NOMEM;
 	}
+
+	val->type = regval_type(blob);
+	val->data = data_blob_talloc(mem_ctx, regval_data_p(blob), regval_size(blob));
 
 	if (pname
 	    && !(*pname = talloc_strdup(
-			 mem_ctx, key->values->values[idx]->valuename))) {
-		SAFE_FREE(val);
+			 mem_ctx, regval_name(blob)))) {
+		TALLOC_FREE(val);
+		return WERR_NOMEM;
+	}
+
+	*pval = val;
+	return WERR_OK;
+}
+
+static WERROR reg_enumvalue_nocachefill(TALLOC_CTX *mem_ctx,
+					struct registry_key *key,
+					uint32 idx, char **pname,
+					struct registry_value **pval)
+{
+	struct registry_value *val;
+	struct regval_blob *blob;
+
+	if (!(key->key->access_granted & KEY_QUERY_VALUE)) {
+		return WERR_ACCESS_DENIED;
+	}
+
+	if (idx >= regval_ctr_numvals(key->values)) {
+		return WERR_NO_MORE_ITEMS;
+	}
+
+	blob = regval_ctr_specific_value(key->values, idx);
+
+	val = talloc_zero(mem_ctx, struct registry_value);
+	if (val == NULL) {
+		return WERR_NOMEM;
+	}
+
+	val->type = regval_type(blob);
+	val->data = data_blob_talloc(mem_ctx, regval_data_p(blob), regval_size(blob));
+
+	if (pname
+	    && !(*pname = talloc_strdup(
+			 mem_ctx, regval_name(blob)))) {
+		TALLOC_FREE(val);
 		return WERR_NOMEM;
 	}
 
@@ -379,13 +417,72 @@ WERROR reg_queryvalue(TALLOC_CTX *mem_ctx, struct registry_key *key,
 		return err;
 	}
 
-	for (i=0; i<key->values->num_values; i++) {
-		if (strequal(key->values->values[i]->valuename, name)) {
-			return reg_enumvalue(mem_ctx, key, i, NULL, pval);
+	for (i=0; i < regval_ctr_numvals(key->values); i++) {
+		struct regval_blob *blob;
+		blob = regval_ctr_specific_value(key->values, i);
+		if (strequal(regval_name(blob), name)) {
+			/*
+			 * don't use reg_enumvalue here:
+			 * re-reading the values from the disk
+			 * would change the indexing and break
+			 * this function.
+			 */
+			return reg_enumvalue_nocachefill(mem_ctx, key, i,
+							 NULL, pval);
 		}
 	}
 
 	return WERR_BADFILE;
+}
+
+WERROR reg_querymultiplevalues(TALLOC_CTX *mem_ctx,
+			       struct registry_key *key,
+			       uint32_t num_names,
+			       const char **names,
+			       uint32_t *pnum_vals,
+			       struct registry_value **pvals)
+{
+	WERROR err;
+	uint32_t i, n, found = 0;
+	struct registry_value *vals;
+
+	if (num_names == 0) {
+		return WERR_OK;
+	}
+
+	if (!(key->key->access_granted & KEY_QUERY_VALUE)) {
+		return WERR_ACCESS_DENIED;
+	}
+
+	if (!(W_ERROR_IS_OK(err = fill_value_cache(key)))) {
+		return err;
+	}
+
+	vals = talloc_zero_array(mem_ctx, struct registry_value, num_names);
+	if (vals == NULL) {
+		return WERR_NOMEM;
+	}
+
+	for (n=0; n < num_names; n++) {
+		for (i=0; i < regval_ctr_numvals(key->values); i++) {
+			struct regval_blob *blob;
+			blob = regval_ctr_specific_value(key->values, i);
+			if (strequal(regval_name(blob), names[n])) {
+				struct registry_value *v;
+				err = reg_enumvalue(mem_ctx, key, i, NULL, &v);
+				if (!W_ERROR_IS_OK(err)) {
+					return err;
+				}
+				vals[n] = *v;
+				found++;
+			}
+		}
+	}
+
+	*pvals = vals;
+	*pnum_vals = found;
+
+	return WERR_OK;
 }
 
 WERROR reg_queryinfokey(struct registry_key *key, uint32_t *num_subkeys,
@@ -421,13 +518,14 @@ WERROR reg_queryinfokey(struct registry_key *key, uint32_t *num_subkeys,
 
 	max_len = 0;
 	max_size = 0;
-	for (i=0; i<key->values->num_values; i++) {
-		max_len = MAX(max_len,
-			      strlen(key->values->values[i]->valuename));
-		max_size = MAX(max_size, key->values->values[i]->size);
+	for (i=0; i < regval_ctr_numvals(key->values); i++) {
+		struct regval_blob *blob;
+		blob = regval_ctr_specific_value(key->values, i);
+		max_len = MAX(max_len, strlen(regval_name(blob)));
+		max_size = MAX(max_size, regval_size(blob));
 	}
 
-	*num_values = key->values->num_values;
+	*num_values = regval_ctr_numvals(key->values);
 	*max_valnamelen = max_len;
 	*max_valbufsize = max_size;
 
@@ -441,7 +539,7 @@ WERROR reg_queryinfokey(struct registry_key *key, uint32_t *num_subkeys,
 		return err;
 	}
 
-	*secdescsize = ndr_size_security_descriptor(secdesc, NULL, 0);
+	*secdescsize = ndr_size_security_descriptor(secdesc, 0);
 	TALLOC_FREE(mem_ctx);
 
 	*last_changed_time = 0;
@@ -459,21 +557,23 @@ WERROR reg_createkey(TALLOC_CTX *ctx, struct registry_key *parent,
 	TALLOC_CTX *mem_ctx;
 	char *path, *end;
 	WERROR err;
+	uint32_t access_granted;
 
-	/*
-	 * We must refuse to handle subkey-paths containing
-	 * a '/' character because at a lower level, after
-	 * normalization, '/' is treated as a key separator
-	 * just like '\\'.
-	 */
-	if (strchr(subkeypath, '/') != NULL) {
-		return WERR_INVALID_PARAM;
+	mem_ctx = talloc_new(ctx);
+	if (mem_ctx == NULL) {
+		return WERR_NOMEM;
 	}
 
-	if (!(mem_ctx = talloc_new(ctx))) return WERR_NOMEM;
-
-	if (!(path = talloc_strdup(mem_ctx, subkeypath))) {
+	path = talloc_strdup(mem_ctx, subkeypath);
+	if (path == NULL) {
 		err = WERR_NOMEM;
+		goto done;
+	}
+
+	err = regdb_transaction_start();
+	if (!W_ERROR_IS_OK(err)) {
+		DEBUG(0, ("reg_createkey: failed to start transaction: %s\n",
+			  win_errstr(err)));
 		goto done;
 	}
 
@@ -486,7 +586,7 @@ WERROR reg_createkey(TALLOC_CTX *ctx, struct registry_key *parent,
 		err = reg_createkey(mem_ctx, key, path,
 				    KEY_ENUMERATE_SUB_KEYS, &tmp, &action);
 		if (!W_ERROR_IS_OK(err)) {
-			goto done;
+			goto trans_done;
 		}
 
 		if (key != parent) {
@@ -507,24 +607,25 @@ WERROR reg_createkey(TALLOC_CTX *ctx, struct registry_key *parent,
 		if (paction != NULL) {
 			*paction = REG_OPENED_EXISTING_KEY;
 		}
-		goto done;
+		goto trans_done;
 	}
 
 	if (!W_ERROR_EQUAL(err, WERR_BADFILE)) {
 		/*
 		 * Something but "notfound" has happened, so bail out
 		 */
-		goto done;
+		goto trans_done;
 	}
 
 	/*
-	 * We have to make a copy of the current key, as we opened it only
-	 * with ENUM_SUBKEY access.
+	 * We may (e.g. in the iteration) have opened the key with ENUM_SUBKEY.
+	 * Instead of re-opening the key with CREATE_SUB_KEY, we simply
+	 * duplicate the access check here and skip the expensive full open.
 	 */
-
-	err = reg_openkey(mem_ctx, key, "", KEY_CREATE_SUB_KEY,
-			  &create_parent);
-	if (!W_ERROR_IS_OK(err)) {
+	if (!regkey_access_check(key->key, KEY_CREATE_SUB_KEY, &access_granted,
+				 key->token))
+	{
+		err = WERR_ACCESS_DENIED;
 		goto done;
 	}
 
@@ -532,19 +633,31 @@ WERROR reg_createkey(TALLOC_CTX *ctx, struct registry_key *parent,
 	 * Actually create the subkey
 	 */
 
-	err = fill_subkey_cache(create_parent);
-	if (!W_ERROR_IS_OK(err)) goto done;
-
 	err = create_reg_subkey(key->key, path);
-	W_ERROR_NOT_OK_GOTO_DONE(err);
+	if (!W_ERROR_IS_OK(err)) {
+		goto trans_done;
+	}
 
 	/*
 	 * Now open the newly created key
 	 */
 
-	err = reg_openkey(ctx, create_parent, path, desired_access, pkey);
+	err = reg_openkey(ctx, key, path, desired_access, pkey);
 	if (W_ERROR_IS_OK(err) && (paction != NULL)) {
 		*paction = REG_CREATED_NEW_KEY;
+	}
+
+trans_done:
+	if (W_ERROR_IS_OK(err)) {
+		err = regdb_transaction_commit();
+		if (!W_ERROR_IS_OK(err)) {
+			DEBUG(0, ("reg_createkey: Error committing transaction: %s\n", win_errstr(err)));
+		}
+	} else {
+		WERROR err1 = regdb_transaction_cancel();
+		if (!W_ERROR_IS_OK(err1)) {
+			DEBUG(0, ("reg_createkey: Error cancelling transaction: %s\n", win_errstr(err1)));
+		}
 	}
 
  done:
@@ -569,12 +682,19 @@ WERROR reg_deletekey(struct registry_key *parent, const char *path)
 	err = reg_openkey(mem_ctx, parent, name, REG_KEY_READ, &key);
 	W_ERROR_NOT_OK_GOTO_DONE(err);
 
+	err = regdb_transaction_start();
+	if (!W_ERROR_IS_OK(err)) {
+		DEBUG(0, ("reg_deletekey: Error starting transaction: %s\n",
+			  win_errstr(err)));
+		goto done;
+	}
+
 	err = fill_subkey_cache(key);
-	W_ERROR_NOT_OK_GOTO_DONE(err);
+	W_ERROR_NOT_OK_GOTO(err, trans_done);
 
 	if (regsubkey_ctr_numkeys(key->subkeys) > 0) {
 		err = WERR_ACCESS_DENIED;
-		goto done;
+		goto trans_done;
 	}
 
 	/* no subkeys - proceed with delete */
@@ -584,7 +704,7 @@ WERROR reg_deletekey(struct registry_key *parent, const char *path)
 
 		err = reg_openkey(mem_ctx, parent, name,
 				  KEY_CREATE_SUB_KEY, &tmp_key);
-		W_ERROR_NOT_OK_GOTO_DONE(err);
+		W_ERROR_NOT_OK_GOTO(err, trans_done);
 
 		parent = tmp_key;
 		name = end+1;
@@ -592,10 +712,23 @@ WERROR reg_deletekey(struct registry_key *parent, const char *path)
 
 	if (name[0] == '\0') {
 		err = WERR_INVALID_PARAM;
-		goto done;
+		goto trans_done;
 	}
 
 	err = delete_reg_subkey(parent->key, name);
+
+trans_done:
+	if (W_ERROR_IS_OK(err)) {
+		err = regdb_transaction_commit();
+		if (!W_ERROR_IS_OK(err)) {
+			DEBUG(0, ("reg_deletekey: Error committing transaction: %s\n", win_errstr(err)));
+		}
+	} else {
+		WERROR err1 = regdb_transaction_cancel();
+		if (!W_ERROR_IS_OK(err1)) {
+			DEBUG(0, ("reg_deletekey: Error cancelling transaction: %s\n", win_errstr(err1)));
+		}
+	}
 
 done:
 	TALLOC_FREE(mem_ctx);
@@ -605,51 +738,83 @@ done:
 WERROR reg_setvalue(struct registry_key *key, const char *name,
 		    const struct registry_value *val)
 {
+	struct regval_blob *existing;
 	WERROR err;
-	DATA_BLOB value_data;
 	int res;
 
 	if (!(key->key->access_granted & KEY_SET_VALUE)) {
 		return WERR_ACCESS_DENIED;
 	}
 
-	if (!W_ERROR_IS_OK(err = fill_value_cache(key))) {
+	err = regdb_transaction_start();
+	if (!W_ERROR_IS_OK(err)) {
+		DEBUG(0, ("reg_setvalue: Failed to start transaction: %s\n",
+			  win_errstr(err)));
 		return err;
 	}
 
-	err = registry_push_value(key, val, &value_data);
+	err = fill_value_cache(key);
 	if (!W_ERROR_IS_OK(err)) {
-		return err;
+		DEBUG(0, ("reg_setvalue: Error filling value cache: %s\n", win_errstr(err)));
+		goto done;
+	}
+
+	existing = regval_ctr_getvalue(key->values, name);
+
+	if ((existing != NULL) &&
+	    (regval_size(existing) == val->data.length) &&
+	    (memcmp(regval_data_p(existing), val->data.data,
+		    val->data.length) == 0))
+	{
+		err = WERR_OK;
+		goto done;
 	}
 
 	res = regval_ctr_addvalue(key->values, name, val->type,
-				  (char *)value_data.data, value_data.length);
-	TALLOC_FREE(value_data.data);
+				  val->data.data, val->data.length);
 
 	if (res == 0) {
 		TALLOC_FREE(key->values);
-		return WERR_NOMEM;
+		err = WERR_NOMEM;
+		goto done;
 	}
 
 	if (!store_reg_values(key->key, key->values)) {
 		TALLOC_FREE(key->values);
-		return WERR_REG_IO_FAILURE;
+		DEBUG(0, ("reg_setvalue: store_reg_values failed\n"));
+		err = WERR_REG_IO_FAILURE;
+		goto done;
 	}
 
-	return WERR_OK;
+	err = WERR_OK;
+
+done:
+	if (W_ERROR_IS_OK(err)) {
+		err = regdb_transaction_commit();
+		if (!W_ERROR_IS_OK(err)) {
+			DEBUG(0, ("reg_setvalue: Error committing transaction: %s\n", win_errstr(err)));
+		}
+	} else {
+		WERROR err1 = regdb_transaction_cancel();
+		if (!W_ERROR_IS_OK(err1)) {
+			DEBUG(0, ("reg_setvalue: Error cancelling transaction: %s\n", win_errstr(err1)));
+		}
+	}
+
+	return err;
 }
 
 static WERROR reg_value_exists(struct registry_key *key, const char *name)
 {
-	int i;
+	struct regval_blob *blob;
 
-	for (i=0; i<key->values->num_values; i++) {
-		if (strequal(key->values->values[i]->valuename, name)) {
-			return WERR_OK;
-		}
+	blob = regval_ctr_getvalue(key->values, name);
+
+	if (blob == NULL) {
+		return WERR_BADFILE;
+	} else {
+		return WERR_OK;
 	}
-
-	return WERR_BADFILE;
 }
 
 WERROR reg_deletevalue(struct registry_key *key, const char *name)
@@ -660,23 +825,50 @@ WERROR reg_deletevalue(struct registry_key *key, const char *name)
 		return WERR_ACCESS_DENIED;
 	}
 
-	if (!W_ERROR_IS_OK(err = fill_value_cache(key))) {
+	err = regdb_transaction_start();
+	if (!W_ERROR_IS_OK(err)) {
+		DEBUG(0, ("reg_deletevalue: Failed to start transaction: %s\n",
+			  win_errstr(err)));
 		return err;
+	}
+
+	err = fill_value_cache(key);
+	if (!W_ERROR_IS_OK(err)) {
+		DEBUG(0, ("reg_deletevalue; Error filling value cache: %s\n",
+			  win_errstr(err)));
+		goto done;
 	}
 
 	err = reg_value_exists(key, name);
 	if (!W_ERROR_IS_OK(err)) {
-		return err;
+		goto done;
 	}
 
 	regval_ctr_delvalue(key->values, name);
 
 	if (!store_reg_values(key->key, key->values)) {
 		TALLOC_FREE(key->values);
-		return WERR_REG_IO_FAILURE;
+		err = WERR_REG_IO_FAILURE;
+		DEBUG(0, ("reg_deletevalue: store_reg_values failed\n"));
+		goto done;
 	}
 
-	return WERR_OK;
+	err = WERR_OK;
+
+done:
+	if (W_ERROR_IS_OK(err)) {
+		err = regdb_transaction_commit();
+		if (!W_ERROR_IS_OK(err)) {
+			DEBUG(0, ("reg_deletevalue: Error committing transaction: %s\n", win_errstr(err)));
+		}
+	} else {
+		WERROR err1 = regdb_transaction_cancel();
+		if (!W_ERROR_IS_OK(err1)) {
+			DEBUG(0, ("reg_deletevalue: Error cancelling transaction: %s\n", win_errstr(err1)));
+		}
+	}
+
+	return err;
 }
 
 WERROR reg_getkeysecurity(TALLOC_CTX *mem_ctx, struct registry_key *key,
@@ -701,281 +893,6 @@ WERROR reg_getversion(uint32_t *version)
 	return WERR_OK;
 }
 
-/*******************************************************************
- Note: topkeypat is the *full* path that this *key will be
- loaded into (including the name of the key)
- ********************************************************************/
-
-static WERROR reg_load_tree(REGF_FILE *regfile, const char *topkeypath,
-			    REGF_NK_REC *key)
-{
-	REGF_NK_REC *subkey;
-	struct registry_key_handle registry_key;
-	struct regval_ctr *values;
-	struct regsubkey_ctr *subkeys;
-	int i;
-	char *path = NULL;
-	WERROR result = WERR_OK;
-
-	/* initialize the struct registry_key_handle structure */
-
-	registry_key.ops = reghook_cache_find(topkeypath);
-	if (!registry_key.ops) {
-		DEBUG(0, ("reg_load_tree: Failed to assign registry_ops "
-			  "to [%s]\n", topkeypath));
-		return WERR_BADFILE;
-	}
-
-	registry_key.name = talloc_strdup(regfile->mem_ctx, topkeypath);
-	if (!registry_key.name) {
-		DEBUG(0, ("reg_load_tree: Talloc failed for reg_key.name!\n"));
-		return WERR_NOMEM;
-	}
-
-	/* now start parsing the values and subkeys */
-
-	result = regsubkey_ctr_init(regfile->mem_ctx, &subkeys);
-	W_ERROR_NOT_OK_RETURN(result);
-
-	values = TALLOC_ZERO_P(subkeys, struct regval_ctr);
-	if (values == NULL) {
-		return WERR_NOMEM;
-	}
-
-	/* copy values into the struct regval_ctr */
-
-	for (i=0; i<key->num_values; i++) {
-		regval_ctr_addvalue(values, key->values[i].valuename,
-				    key->values[i].type,
-				    (char*)key->values[i].data,
-				    (key->values[i].data_size & ~VK_DATA_IN_OFFSET));
-	}
-
-	/* copy subkeys into the struct regsubkey_ctr */
-
-	key->subkey_index = 0;
-	while ((subkey = regfio_fetch_subkey( regfile, key ))) {
-		result = regsubkey_ctr_addkey(subkeys, subkey->keyname);
-		if (!W_ERROR_IS_OK(result)) {
-			TALLOC_FREE(subkeys);
-			return result;
-		}
-	}
-
-	/* write this key and values out */
-
-	if (!store_reg_values(&registry_key, values)
-	    || !store_reg_keys(&registry_key, subkeys))
-	{
-		DEBUG(0,("reg_load_tree: Failed to load %s!\n", topkeypath));
-		result = WERR_REG_IO_FAILURE;
-	}
-
-	TALLOC_FREE(subkeys);
-
-	if (!W_ERROR_IS_OK(result)) {
-		return result;
-	}
-
-	/* now continue to load each subkey registry tree */
-
-	key->subkey_index = 0;
-	while ((subkey = regfio_fetch_subkey(regfile, key))) {
-		path = talloc_asprintf(regfile->mem_ctx,
-				       "%s\\%s",
-				       topkeypath,
-				       subkey->keyname);
-		if (path == NULL) {
-			return WERR_NOMEM;
-		}
-		result = reg_load_tree(regfile, path, subkey);
-		if (!W_ERROR_IS_OK(result)) {
-			break;
-		}
-	}
-
-	return result;
-}
-
-/*******************************************************************
- ********************************************************************/
-
-static WERROR restore_registry_key(struct registry_key_handle *krecord,
-				   const char *fname)
-{
-	REGF_FILE *regfile;
-	REGF_NK_REC *rootkey;
-	WERROR result;
-
-	/* open the registry file....fail if the file already exists */
-
-	regfile = regfio_open(fname, (O_RDONLY), 0);
-	if (regfile == NULL) {
-		DEBUG(0, ("restore_registry_key: failed to open \"%s\" (%s)\n",
-			  fname, strerror(errno)));
-		return ntstatus_to_werror(map_nt_error_from_unix(errno));
-	}
-
-	/* get the rootkey from the regf file and then load the tree
-	   via recursive calls */
-
-	if (!(rootkey = regfio_rootkey(regfile))) {
-		regfio_close(regfile);
-		return WERR_REG_FILE_INVALID;
-	}
-
-	result = reg_load_tree(regfile, krecord->name, rootkey);
-
-	/* cleanup */
-
-	regfio_close(regfile);
-
-	return result;
-}
-
-WERROR reg_restorekey(struct registry_key *key, const char *fname)
-{
-	return restore_registry_key(key->key, fname);
-}
-
-/********************************************************************
-********************************************************************/
-
-static WERROR reg_write_tree(REGF_FILE *regfile, const char *keypath,
-			     REGF_NK_REC *parent)
-{
-	REGF_NK_REC *key;
-	struct regval_ctr *values;
-	struct regsubkey_ctr *subkeys;
-	int i, num_subkeys;
-	char *key_tmp = NULL;
-	char *keyname, *parentpath;
-	char *subkeypath = NULL;
-	char *subkeyname;
-	struct registry_key_handle registry_key;
-	WERROR result = WERR_OK;
-	SEC_DESC *sec_desc = NULL;
-
-	if (!regfile) {
-		return WERR_GENERAL_FAILURE;
-	}
-
-	if (!keypath) {
-		return WERR_OBJECT_PATH_INVALID;
-	}
-
-	/* split up the registry key path */
-
-	key_tmp = talloc_strdup(regfile->mem_ctx, keypath);
-	if (!key_tmp) {
-		return WERR_NOMEM;
-	}
-	if (!reg_split_key(key_tmp, &parentpath, &keyname)) {
-		return WERR_OBJECT_PATH_INVALID;
-	}
-
-	if (!keyname) {
-		keyname = parentpath;
-	}
-
-	/* we need a registry_key_handle object here to enumerate subkeys and values */
-
-	ZERO_STRUCT(registry_key);
-
-	registry_key.name = talloc_strdup(regfile->mem_ctx, keypath);
-	if (registry_key.name == NULL) {
-		return WERR_NOMEM;
-	}
-
-	registry_key.ops = reghook_cache_find(registry_key.name);
-	if (registry_key.ops == NULL) {
-		return WERR_BADFILE;
-	}
-
-	/* lookup the values and subkeys */
-
-	result = regsubkey_ctr_init(regfile->mem_ctx, &subkeys);
-	W_ERROR_NOT_OK_RETURN(result);
-
-	values = TALLOC_ZERO_P(subkeys, struct regval_ctr);
-	if (values == NULL) {
-		return WERR_NOMEM;
-	}
-
-	fetch_reg_keys(&registry_key, subkeys);
-	fetch_reg_values(&registry_key, values);
-
-	result = regkey_get_secdesc(regfile->mem_ctx, &registry_key, &sec_desc);
-	if (!W_ERROR_IS_OK(result)) {
-		goto done;
-	}
-
-	/* write out this key */
-
-	key = regfio_write_key(regfile, keyname, values, subkeys, sec_desc,
-			       parent);
-	if (key == NULL) {
-		result = WERR_CAN_NOT_COMPLETE;
-		goto done;
-	}
-
-	/* write each one of the subkeys out */
-
-	num_subkeys = regsubkey_ctr_numkeys(subkeys);
-	for (i=0; i<num_subkeys; i++) {
-		subkeyname = regsubkey_ctr_specific_key(subkeys, i);
-		subkeypath = talloc_asprintf(regfile->mem_ctx, "%s\\%s",
-					     keypath, subkeyname);
-		if (subkeypath == NULL) {
-			result = WERR_NOMEM;
-			goto done;
-		}
-		result = reg_write_tree(regfile, subkeypath, key);
-		if (!W_ERROR_IS_OK(result))
-			goto done;
-	}
-
-	DEBUG(6, ("reg_write_tree: wrote key [%s]\n", keypath));
-
-done:
-	TALLOC_FREE(subkeys);
-	TALLOC_FREE(registry_key.name);
-
-	return result;
-}
-
-static WERROR backup_registry_key(struct registry_key_handle *krecord,
-				  const char *fname)
-{
-	REGF_FILE *regfile;
-	WERROR result;
-
-	/* open the registry file....fail if the file already exists */
-
-	regfile = regfio_open(fname, (O_RDWR|O_CREAT|O_EXCL),
-			      (S_IRUSR|S_IWUSR));
-	if (regfile == NULL) {
-		DEBUG(0,("backup_registry_key: failed to open \"%s\" (%s)\n",
-			 fname, strerror(errno) ));
-		return ntstatus_to_werror(map_nt_error_from_unix(errno));
-	}
-
-	/* write the registry tree to the file  */
-
-	result = reg_write_tree(regfile, krecord->name, NULL);
-
-	/* cleanup */
-
-	regfio_close(regfile);
-
-	return result;
-}
-
-WERROR reg_savekey(struct registry_key *key, const char *fname)
-{
-	return backup_registry_key(key->key, fname);
-}
-
 /**********************************************************************
  * Higher level utility functions
  **********************************************************************/
@@ -993,8 +910,10 @@ WERROR reg_deleteallvalues(struct registry_key *key)
 		return err;
 	}
 
-	for (i=0; i<key->values->num_values; i++) {
-		regval_ctr_delvalue(key->values, key->values->values[i]->valuename);
+	for (i=0; i < regval_ctr_numvals(key->values); i++) {
+		struct regval_blob *blob;
+		blob = regval_ctr_specific_value(key->values, i);
+		regval_ctr_delvalue(key->values, regval_name(blob));
 	}
 
 	if (!store_reg_values(key->key, key->values)) {
@@ -1006,82 +925,19 @@ WERROR reg_deleteallvalues(struct registry_key *key)
 }
 
 /*
- * Utility function to open a complete registry path including the hive prefix.
- */
-
-WERROR reg_open_path(TALLOC_CTX *mem_ctx, const char *orig_path,
-		     uint32 desired_access, const struct nt_user_token *token,
-		     struct registry_key **pkey)
-{
-	struct registry_key *hive, *key;
-	char *path, *p;
-	WERROR err;
-
-	if (!(path = SMB_STRDUP(orig_path))) {
-		return WERR_NOMEM;
-	}
-
-	p = strchr(path, '\\');
-
-	if ((p == NULL) || (p[1] == '\0')) {
-		/*
-		 * No key behind the hive, just return the hive
-		 */
-
-		err = reg_openhive(mem_ctx, path, desired_access, token,
-				   &hive);
-		if (!W_ERROR_IS_OK(err)) {
-			SAFE_FREE(path);
-			return err;
-		}
-		SAFE_FREE(path);
-		*pkey = hive;
-		return WERR_OK;
-	}
-
-	*p = '\0';
-
-	err = reg_openhive(mem_ctx, path, KEY_ENUMERATE_SUB_KEYS, token,
-			   &hive);
-	if (!W_ERROR_IS_OK(err)) {
-		SAFE_FREE(path);
-		return err;
-	}
-
-	err = reg_openkey(mem_ctx, hive, p+1, desired_access, &key);
-
-	TALLOC_FREE(hive);
-	SAFE_FREE(path);
-
-	if (!W_ERROR_IS_OK(err)) {
-		return err;
-	}
-
-	*pkey = key;
-	return WERR_OK;
-}
-
-/*
  * Utility function to delete a registry key with all its subkeys.
  * Note that reg_deletekey returns ACCESS_DENIED when called on a
  * key that has subkeys.
  */
-static WERROR reg_deletekey_recursive_internal(TALLOC_CTX *ctx,
-					       struct registry_key *parent,
+static WERROR reg_deletekey_recursive_internal(struct registry_key *parent,
 					       const char *path,
 					       bool del_key)
 {
-	TALLOC_CTX *mem_ctx = NULL;
 	WERROR werr = WERR_OK;
 	struct registry_key *key;
 	char *subkey_name = NULL;
 	uint32 i;
-
-	mem_ctx = talloc_new(ctx);
-	if (mem_ctx == NULL) {
-		werr = WERR_NOMEM;
-		goto done;
-	}
+	TALLOC_CTX *mem_ctx = talloc_stackframe();
 
 	/* recurse through subkeys first */
 	werr = reg_openkey(mem_ctx, parent, path, REG_KEY_ALL, &key);
@@ -1098,9 +954,7 @@ static WERROR reg_deletekey_recursive_internal(TALLOC_CTX *ctx,
 	 */
 	for (i = regsubkey_ctr_numkeys(key->subkeys) ; i > 0; i--) {
 		subkey_name = regsubkey_ctr_specific_key(key->subkeys, i-1);
-		werr = reg_deletekey_recursive_internal(mem_ctx, key,
-					subkey_name,
-					true);
+		werr = reg_deletekey_recursive_internal(key, subkey_name, true);
 		W_ERROR_NOT_OK_GOTO_DONE(werr);
 	}
 
@@ -1114,8 +968,7 @@ done:
 	return werr;
 }
 
-static WERROR reg_deletekey_recursive_trans(TALLOC_CTX *ctx,
-					    struct registry_key *parent,
+static WERROR reg_deletekey_recursive_trans(struct registry_key *parent,
 					    const char *path,
 					    bool del_key)
 {
@@ -1129,17 +982,24 @@ static WERROR reg_deletekey_recursive_trans(TALLOC_CTX *ctx,
 		return werr;
 	}
 
-	werr = reg_deletekey_recursive_internal(ctx, parent, path, del_key);
+	werr = reg_deletekey_recursive_internal(parent, path, del_key);
 
 	if (!W_ERROR_IS_OK(werr)) {
+		WERROR werr2;
+
 		DEBUG(1, (__location__ " failed to delete key '%s' from key "
 			  "'%s': %s\n", path, parent->key->name,
 			  win_errstr(werr)));
-		werr = regdb_transaction_cancel();
-		if (!W_ERROR_IS_OK(werr)) {
+
+		werr2 = regdb_transaction_cancel();
+		if (!W_ERROR_IS_OK(werr2)) {
 			DEBUG(0, ("reg_deletekey_recursive_trans: "
 				  "error cancelling transaction: %s\n",
-				  win_errstr(werr)));
+				  win_errstr(werr2)));
+			/*
+			 * return the original werr or the
+			 * error from cancelling the transaction?
+			 */
 		}
 	} else {
 		werr = regdb_transaction_commit();
@@ -1153,115 +1013,15 @@ static WERROR reg_deletekey_recursive_trans(TALLOC_CTX *ctx,
 	return werr;
 }
 
-WERROR reg_deletekey_recursive(TALLOC_CTX *ctx,
-			       struct registry_key *parent,
+WERROR reg_deletekey_recursive(struct registry_key *parent,
 			       const char *path)
 {
-	return reg_deletekey_recursive_trans(ctx, parent, path, true);
+	return reg_deletekey_recursive_trans(parent, path, true);
 }
 
-WERROR reg_deletesubkeys_recursive(TALLOC_CTX *ctx,
-				   struct registry_key *parent,
+WERROR reg_deletesubkeys_recursive(struct registry_key *parent,
 				   const char *path)
 {
-	return reg_deletekey_recursive_trans(ctx, parent, path, false);
+	return reg_deletekey_recursive_trans(parent, path, false);
 }
 
-#if 0
-/* these two functions are unused. */
-
-/**
- * Utility function to create a registry key without opening the hive
- * before. Assumes the hive already exists.
- */
-
-WERROR reg_create_path(TALLOC_CTX *mem_ctx, const char *orig_path,
-		       uint32 desired_access,
-		       const struct nt_user_token *token,
-		       enum winreg_CreateAction *paction,
-		       struct registry_key **pkey)
-{
-	struct registry_key *hive;
-	char *path, *p;
-	WERROR err;
-
-	if (!(path = SMB_STRDUP(orig_path))) {
-		return WERR_NOMEM;
-	}
-
-	p = strchr(path, '\\');
-
-	if ((p == NULL) || (p[1] == '\0')) {
-		/*
-		 * No key behind the hive, just return the hive
-		 */
-
-		err = reg_openhive(mem_ctx, path, desired_access, token,
-				   &hive);
-		if (!W_ERROR_IS_OK(err)) {
-			SAFE_FREE(path);
-			return err;
-		}
-		SAFE_FREE(path);
-		*pkey = hive;
-		*paction = REG_OPENED_EXISTING_KEY;
-		return WERR_OK;
-	}
-
-	*p = '\0';
-
-	err = reg_openhive(mem_ctx, path,
-			   (strchr(p+1, '\\') != NULL) ?
-			   KEY_ENUMERATE_SUB_KEYS : KEY_CREATE_SUB_KEY,
-			   token, &hive);
-	if (!W_ERROR_IS_OK(err)) {
-		SAFE_FREE(path);
-		return err;
-	}
-
-	err = reg_createkey(mem_ctx, hive, p+1, desired_access, pkey, paction);
-	SAFE_FREE(path);
-	TALLOC_FREE(hive);
-	return err;
-}
-
-/*
- * Utility function to create a registry key without opening the hive
- * before. Will not delete a hive.
- */
-
-WERROR reg_delete_path(const struct nt_user_token *token,
-		       const char *orig_path)
-{
-	struct registry_key *hive;
-	char *path, *p;
-	WERROR err;
-
-	if (!(path = SMB_STRDUP(orig_path))) {
-		return WERR_NOMEM;
-	}
-
-	p = strchr(path, '\\');
-
-	if ((p == NULL) || (p[1] == '\0')) {
-		SAFE_FREE(path);
-		return WERR_INVALID_PARAM;
-	}
-
-	*p = '\0';
-
-	err = reg_openhive(NULL, path,
-			   (strchr(p+1, '\\') != NULL) ?
-			   KEY_ENUMERATE_SUB_KEYS : KEY_CREATE_SUB_KEY,
-			   token, &hive);
-	if (!W_ERROR_IS_OK(err)) {
-		SAFE_FREE(path);
-		return err;
-	}
-
-	err = reg_deletekey(hive, p+1);
-	SAFE_FREE(path);
-	TALLOC_FREE(hive);
-	return err;
-}
-#endif /* #if 0 */

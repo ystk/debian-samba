@@ -8,8 +8,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: samba 2.3.5.6~dfsg1-1\n"
-"Report-Msgid-Bugs-To: samba@packages.debian.org\n"
-"POT-Creation-Date: 2009-01-02 12:18-0800\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2012-05-11 19:55+0200\n"
 "PO-Revision-Date: 2010-10-23 13:13+0200\n"
 "Last-Translator: Jordi Mallach <jordi@debian.org>\n"
 "Language-Team: Catalan <debian-l10n-catalan@lists.debian.org>\n"
@@ -18,16 +18,22 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#. Type: boolean
+#. Type: title
 #. Description
 #: ../samba-common.templates:1001
+msgid "Samba server and utilities"
+msgstr ""
+
+#. Type: boolean
+#. Description
+#: ../samba-common.templates:2001
 msgid "Modify smb.conf to use WINS settings from DHCP?"
 msgstr ""
 "Voleu modificar el smb.conf perquè utilitzi els paràmetres del WINS del DHCP?"
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:1001
+#: ../samba-common.templates:2001
 msgid ""
 "If your computer gets IP address information from a DHCP server on the "
 "network, the DHCP server may also provide information about WINS servers "
@@ -44,7 +50,7 @@ msgstr ""
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:1001
+#: ../samba-common.templates:2001
 msgid ""
 "The dhcp3-client package must be installed to take advantage of this feature."
 msgstr ""
@@ -53,13 +59,13 @@ msgstr ""
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:2001
+#: ../samba-common.templates:3001
 msgid "Configure smb.conf automatically?"
 msgstr "Voleu configurar el smb.conf automàticament?"
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:2001
+#: ../samba-common.templates:3001
 msgid ""
 "The rest of the configuration of Samba deals with questions that affect "
 "parameters in /etc/samba/smb.conf, which is the file used to configure the "
@@ -77,7 +83,7 @@ msgstr ""
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:2001
+#: ../samba-common.templates:3001
 msgid ""
 "If you do not choose this option, you will have to handle any configuration "
 "changes yourself, and will not be able to take advantage of periodic "
@@ -88,13 +94,13 @@ msgstr ""
 
 #. Type: string
 #. Description
-#: ../samba-common.templates:3001
+#: ../samba-common.templates:4001
 msgid "Workgroup/Domain Name:"
 msgstr "Grup de treball/nom del domini:"
 
 #. Type: string
 #. Description
-#: ../samba-common.templates:3001
+#: ../samba-common.templates:4001
 msgid ""
 "Please specify the workgroup for this system.  This setting controls which "
 "workgroup the system will appear in when used as a server, the default "
@@ -108,13 +114,13 @@ msgstr ""
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:4001
+#: ../samba-common.templates:5001
 msgid "Use password encryption?"
 msgstr "Voleu utilitzar el xifrat de contrasenyes?"
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:4001
+#: ../samba-common.templates:5001
 msgid ""
 "All recent Windows clients communicate with SMB/CIFS servers using encrypted "
 "passwords. If you want to use clear text passwords you will need to change a "
@@ -126,7 +132,7 @@ msgstr ""
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:4001
+#: ../samba-common.templates:5001
 msgid ""
 "Enabling this option is highly recommended as support for plain text "
 "passwords is no longer maintained in Microsoft Windows products. If you do, "
@@ -139,50 +145,11 @@ msgstr ""
 "vàlid i que hi especifiqueu la contrasenya de cada usuari utilitzant l'ordre "
 "smbpasswd."
 
-#. Type: boolean
+#. Type: title
 #. Description
 #: ../samba.templates:1001
-msgid "Create samba password database, /var/lib/samba/passdb.tdb?"
+msgid "Samba server"
 msgstr ""
-"Voleu crear la base de dades de contrasenyes de Samba, /var/lib/samba/passdb."
-"tdb?"
-
-#. Type: boolean
-#. Description
-#: ../samba.templates:1001
-msgid ""
-"To be compatible with the defaults in most versions of Windows, Samba must "
-"be configured to use encrypted passwords.  This requires user passwords to "
-"be stored in a file separate from /etc/passwd.  This file can be created "
-"automatically, but the passwords must be added manually by running smbpasswd "
-"and be kept up-to-date in the future."
-msgstr ""
-"El Samba s'ha de configurar perquè utilitzi contrasenyes xifrades per tal "
-"que sigui compatible amb la majoria de versions de Windows per defecte. Això "
-"implica que les contrasenyes d'usuari s'emmagatzemin a un fitxer diferent "
-"del /etc/passwd. Aquest fitxer es pot crear automàticament, però les "
-"contrasenyes s'han d'afegir manualment executant l'ordre smbpasswd i s'han "
-"de mantindre actualitzades en el futur."
-
-#. Type: boolean
-#. Description
-#: ../samba.templates:1001
-msgid ""
-"If you do not create it, you will have to reconfigure Samba (and probably "
-"your client machines) to use plaintext passwords."
-msgstr ""
-"Si no el creeu, haureu de reconfigurar el Samba (i probablement els vostres "
-"ordinadors clients) per tal que utilitzin contrasenyes de text pla."
-
-#. Type: boolean
-#. Description
-#: ../samba.templates:1001
-msgid ""
-"See /usr/share/doc/samba-doc/htmldocs/Samba3-Developers-Guide/pwencrypt.html "
-"from the samba-doc package for more details."
-msgstr ""
-"Per més informació feu una ullada a /usr/share/doc/samba-doc/htmldocs/"
-"ENCRYPTION.html del paquet samba-doc."
 
 #. Type: select
 #. Choices
@@ -211,6 +178,40 @@ msgid ""
 msgstr ""
 "El dimoni de Samba pot executar-se com un dimoni normal o des de l'inetd. És "
 "recomanable executar-lo com a dimoni."
+
+#~ msgid "Create samba password database, /var/lib/samba/passdb.tdb?"
+#~ msgstr ""
+#~ "Voleu crear la base de dades de contrasenyes de Samba, /var/lib/samba/"
+#~ "passdb.tdb?"
+
+#~ msgid ""
+#~ "To be compatible with the defaults in most versions of Windows, Samba "
+#~ "must be configured to use encrypted passwords.  This requires user "
+#~ "passwords to be stored in a file separate from /etc/passwd.  This file "
+#~ "can be created automatically, but the passwords must be added manually by "
+#~ "running smbpasswd and be kept up-to-date in the future."
+#~ msgstr ""
+#~ "El Samba s'ha de configurar perquè utilitzi contrasenyes xifrades per tal "
+#~ "que sigui compatible amb la majoria de versions de Windows per defecte. "
+#~ "Això implica que les contrasenyes d'usuari s'emmagatzemin a un fitxer "
+#~ "diferent del /etc/passwd. Aquest fitxer es pot crear automàticament, però "
+#~ "les contrasenyes s'han d'afegir manualment executant l'ordre smbpasswd i "
+#~ "s'han de mantindre actualitzades en el futur."
+
+#~ msgid ""
+#~ "If you do not create it, you will have to reconfigure Samba (and probably "
+#~ "your client machines) to use plaintext passwords."
+#~ msgstr ""
+#~ "Si no el creeu, haureu de reconfigurar el Samba (i probablement els "
+#~ "vostres ordinadors clients) per tal que utilitzin contrasenyes de text "
+#~ "pla."
+
+#~ msgid ""
+#~ "See /usr/share/doc/samba-doc/htmldocs/Samba3-Developers-Guide/pwencrypt."
+#~ "html from the samba-doc package for more details."
+#~ msgstr ""
+#~ "Per més informació feu una ullada a /usr/share/doc/samba-doc/htmldocs/"
+#~ "ENCRYPTION.html del paquet samba-doc."
 
 #~ msgid "Chaining passdb backends is not supported"
 #~ msgstr "L'encadenament dels passdb no es permet"

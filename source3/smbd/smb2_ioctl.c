@@ -19,14 +19,18 @@
 */
 
 #include "includes.h"
+#include "smbd/smbd.h"
 #include "smbd/globals.h"
 #include "../libcli/smb/smb_common.h"
+#include "../lib/util/tevent_ntstatus.h"
+#include "rpc_server/srv_pipe_hnd.h"
+#include "include/ntioctl.h"
 
 static struct tevent_req *smbd_smb2_ioctl_send(TALLOC_CTX *mem_ctx,
 					       struct tevent_context *ev,
 					       struct smbd_smb2_request *smb2req,
+					       struct files_struct *in_fsp,
 					       uint32_t in_ctl_code,
-					       uint64_t in_file_id_volatile,
 					       DATA_BLOB in_input,
 					       uint32_t in_max_output,
 					       uint32_t in_flags);
@@ -37,14 +41,13 @@ static NTSTATUS smbd_smb2_ioctl_recv(struct tevent_req *req,
 static void smbd_smb2_request_ioctl_done(struct tevent_req *subreq);
 NTSTATUS smbd_smb2_request_process_ioctl(struct smbd_smb2_request *req)
 {
-	const uint8_t *inhdr;
+	NTSTATUS status;
 	const uint8_t *inbody;
 	int i = req->current_idx;
-	size_t expected_body_size = 0x39;
-	size_t body_size;
 	uint32_t in_ctl_code;
 	uint64_t in_file_id_persistent;
 	uint64_t in_file_id_volatile;
+	struct files_struct *in_fsp = NULL;
 	uint32_t in_input_offset;
 	uint32_t in_input_length;
 	DATA_BLOB in_input_buffer;
@@ -52,17 +55,11 @@ NTSTATUS smbd_smb2_request_process_ioctl(struct smbd_smb2_request *req)
 	uint32_t in_flags;
 	struct tevent_req *subreq;
 
-	inhdr = (const uint8_t *)req->in.vector[i+0].iov_base;
-	if (req->in.vector[i+1].iov_len != (expected_body_size & 0xFFFFFFFE)) {
-		return smbd_smb2_request_error(req, NT_STATUS_INVALID_PARAMETER);
+	status = smbd_smb2_request_verify_sizes(req, 0x39);
+	if (!NT_STATUS_IS_OK(status)) {
+		return smbd_smb2_request_error(req, status);
 	}
-
 	inbody = (const uint8_t *)req->in.vector[i+1].iov_base;
-
-	body_size = SVAL(inbody, 0x00);
-	if (body_size != expected_body_size) {
-		return smbd_smb2_request_error(req, NT_STATUS_INVALID_PARAMETER);
-	}
 
 	in_ctl_code		= IVAL(inbody, 0x04);
 	in_file_id_persistent	= BVAL(inbody, 0x08);
@@ -72,7 +69,16 @@ NTSTATUS smbd_smb2_request_process_ioctl(struct smbd_smb2_request *req)
 	in_max_output_length	= IVAL(inbody, 0x2C);
 	in_flags		= IVAL(inbody, 0x30);
 
-	if (in_input_offset != (SMB2_HDR_BODY + (body_size & 0xFFFFFFFE))) {
+	/*
+	 * InputOffset (4 bytes): The offset, in bytes, from the beginning of
+	 * the SMB2 header to the input data buffer. If no input data is
+	 * required for the FSCTL/IOCTL command being issued, the client SHOULD
+	 * set this value to 0.<49>
+	 * <49> If no input data is required for the FSCTL/IOCTL command being
+	 * issued, Windows-based clients set this field to any value.
+	 */
+	if ((in_input_length > 0)
+	 && (in_input_offset != (SMB2_HDR_BODY + req->in.vector[i+1].iov_len))) {
 		return smbd_smb2_request_error(req, NT_STATUS_INVALID_PARAMETER);
 	}
 
@@ -83,20 +89,21 @@ NTSTATUS smbd_smb2_request_process_ioctl(struct smbd_smb2_request *req)
 	in_input_buffer.data = (uint8_t *)req->in.vector[i+2].iov_base;
 	in_input_buffer.length = in_input_length;
 
-	if (req->compat_chain_fsp) {
-		/* skip check */
-	} else if (in_file_id_persistent == UINT64_MAX &&
+	if (in_file_id_persistent == UINT64_MAX &&
 		   in_file_id_volatile == UINT64_MAX) {
 		/* without a handle */
-	} else if (in_file_id_persistent != 0) {
-		return smbd_smb2_request_error(req, NT_STATUS_FILE_CLOSED);
+	} else {
+		in_fsp = file_fsp_smb2(req, in_file_id_persistent,
+					in_file_id_volatile);
+		if (in_fsp == NULL) {
+			return smbd_smb2_request_error(req, NT_STATUS_FILE_CLOSED);
+		}
 	}
 
 	subreq = smbd_smb2_ioctl_send(req,
 				      req->sconn->smb2.event_ctx,
-				      req,
+				      req, in_fsp,
 				      in_ctl_code,
-				      in_file_id_volatile,
 				      in_input_buffer,
 				      in_max_output_length,
 				      in_flags);
@@ -127,6 +134,12 @@ static void smbd_smb2_request_ioctl_done(struct tevent_req *subreq)
 	NTSTATUS error; /* transport error */
 
 	status = smbd_smb2_ioctl_recv(subreq, req, &out_output_buffer);
+
+	DEBUG(10,("smbd_smb2_request_ioctl_done: smbd_smb2_ioctl_recv returned "
+		"%u status %s\n",
+		(unsigned int)out_output_buffer.length,
+		nt_errstr(status) ));
+
 	TALLOC_FREE(subreq);
 	if (NT_STATUS_EQUAL(status, STATUS_BUFFER_OVERFLOW)) {
 		/* also ok */
@@ -211,8 +224,8 @@ static void smbd_smb2_ioctl_pipe_read_done(struct tevent_req *subreq);
 static struct tevent_req *smbd_smb2_ioctl_send(TALLOC_CTX *mem_ctx,
 					       struct tevent_context *ev,
 					       struct smbd_smb2_request *smb2req,
+					       struct files_struct *fsp,
 					       uint32_t in_ctl_code,
-					       uint64_t in_file_id_volatile,
 					       DATA_BLOB in_input,
 					       uint32_t in_max_output,
 					       uint32_t in_flags)
@@ -220,7 +233,6 @@ static struct tevent_req *smbd_smb2_ioctl_send(TALLOC_CTX *mem_ctx,
 	struct tevent_req *req;
 	struct smbd_smb2_ioctl_state *state;
 	struct smb_request *smbreq;
-	files_struct *fsp = NULL;
 	struct tevent_req *subreq;
 
 	req = tevent_req_create(mem_ctx, &state,
@@ -230,36 +242,21 @@ static struct tevent_req *smbd_smb2_ioctl_send(TALLOC_CTX *mem_ctx,
 	}
 	state->smb2req = smb2req;
 	state->smbreq = NULL;
-	state->fsp = NULL;
+	state->fsp = fsp;
 	state->in_input = in_input;
 	state->in_max_output = in_max_output;
 	state->out_output = data_blob_null;
 
-	DEBUG(10,("smbd_smb2_ioctl: file_id[0x%016llX]\n",
-		  (unsigned long long)in_file_id_volatile));
+	DEBUG(10, ("smbd_smb2_ioctl: ctl_code[0x%08x] %s fnum[%d]\n",
+		(unsigned)in_ctl_code,
+		fsp ? fsp_str_dbg(fsp) : "<no handle>",
+		fsp ? fsp->fnum : -1));
 
 	smbreq = smbd_smb2_fake_smb_request(smb2req);
 	if (tevent_req_nomem(smbreq, req)) {
 		return tevent_req_post(req, ev);
 	}
 	state->smbreq = smbreq;
-
-	if (in_file_id_volatile != UINT64_MAX) {
-		fsp = file_fsp(smbreq, (uint16_t)in_file_id_volatile);
-		if (fsp == NULL) {
-			tevent_req_nterror(req, NT_STATUS_FILE_CLOSED);
-			return tevent_req_post(req, ev);
-		}
-		if (smbreq->conn != fsp->conn) {
-			tevent_req_nterror(req, NT_STATUS_FILE_CLOSED);
-			return tevent_req_post(req, ev);
-		}
-		if (smb2req->session->vuid != fsp->vuid) {
-			tevent_req_nterror(req, NT_STATUS_FILE_CLOSED);
-			return tevent_req_post(req, ev);
-		}
-		state->fsp = fsp;
-	}
 
 	switch (in_ctl_code) {
 	case 0x00060194: /* FSCTL_DFS_GET_REFERRALS */
@@ -353,6 +350,9 @@ static struct tevent_req *smbd_smb2_ioctl_send(TALLOC_CTX *mem_ctx,
 			return tevent_req_post(req, ev);
 		}
 
+		DEBUG(10,("smbd_smb2_ioctl_send: np_write_send of size %u\n",
+			(unsigned int)in_input.length ));
+
 		subreq = np_write_send(state, ev,
 				       fsp->fake_file_handle,
 				       in_input.data,
@@ -365,13 +365,42 @@ static struct tevent_req *smbd_smb2_ioctl_send(TALLOC_CTX *mem_ctx,
 					req);
 		return req;
 
-	default:
-		if (IS_IPC(smbreq->conn)) {
-			tevent_req_nterror(req, NT_STATUS_FS_DRIVER_REQUIRED);
+	default: {
+		uint8_t *out_data = NULL;
+		uint32_t out_data_len = 0;
+		NTSTATUS status;
+
+		if (fsp == NULL) {
+			tevent_req_nterror(req, NT_STATUS_FILE_CLOSED);
 			return tevent_req_post(req, ev);
 		}
-		tevent_req_nterror(req, NT_STATUS_INVALID_DEVICE_REQUEST);
+
+		status = smb_fsctl(fsp,
+				       state,
+				       in_ctl_code,
+				       smbreq->flags2,
+				       in_input.data,
+				       in_input.length,
+				       &out_data,
+				       in_max_output,
+				       &out_data_len);
+		state->out_output = data_blob_const(out_data, out_data_len);
+		if (NT_STATUS_IS_OK(status)) {
+			tevent_req_done(req);
+			return tevent_req_post(req, ev);
+		}
+
+		if (NT_STATUS_EQUAL(status, NT_STATUS_NOT_SUPPORTED)) {
+			if (IS_IPC(smbreq->conn)) {
+				status = NT_STATUS_FS_DRIVER_REQUIRED;
+			} else {
+				status = NT_STATUS_INVALID_DEVICE_REQUEST;
+			}
+		}
+
+		tevent_req_nterror(req, status);
 		return tevent_req_post(req, ev);
+	}
 	}
 
 	tevent_req_nterror(req, NT_STATUS_INTERNAL_ERROR);
@@ -388,6 +417,10 @@ static void smbd_smb2_ioctl_pipe_write_done(struct tevent_req *subreq)
 	ssize_t nwritten = -1;
 
 	status = np_write_recv(subreq, &nwritten);
+
+	DEBUG(10,("smbd_smb2_ioctl_pipe_write_done: received %ld\n",
+		(long int)nwritten ));
+
 	TALLOC_FREE(subreq);
 	if (!NT_STATUS_IS_OK(status)) {
 		tevent_req_nterror(req, status);
@@ -405,6 +438,11 @@ static void smbd_smb2_ioctl_pipe_write_done(struct tevent_req *subreq)
 		return;
 	}
 
+	DEBUG(10,("smbd_smb2_ioctl_pipe_write_done: issuing np_read_send "
+		"of size %u\n",
+		(unsigned int)state->out_output.length ));
+
+	TALLOC_FREE(subreq);
 	subreq = np_read_send(state->smbreq->conn,
 			      state->smb2req->sconn->smb2.event_ctx,
 			      state->fsp->fake_file_handle,
@@ -423,10 +461,17 @@ static void smbd_smb2_ioctl_pipe_read_done(struct tevent_req *subreq)
 	struct smbd_smb2_ioctl_state *state = tevent_req_data(req,
 					      struct smbd_smb2_ioctl_state);
 	NTSTATUS status;
-	ssize_t nread;
-	bool is_data_outstanding;
+	ssize_t nread = -1;
+	bool is_data_outstanding = false;
 
 	status = np_read_recv(subreq, &nread, &is_data_outstanding);
+
+	DEBUG(10,("smbd_smb2_ioctl_pipe_read_done: np_read_recv nread = %d "
+		 "is_data_outstanding = %d, status = %s\n",
+		(int)nread,
+		(int)is_data_outstanding,
+		nt_errstr(status) ));
+
 	TALLOC_FREE(subreq);
 	if (!NT_STATUS_IS_OK(status)) {
 		tevent_req_nterror(req, status);
@@ -435,6 +480,11 @@ static void smbd_smb2_ioctl_pipe_read_done(struct tevent_req *subreq)
 
 	state->out_output.length = nread;
 
+	if (is_data_outstanding) {
+		tevent_req_nterror(req, STATUS_BUFFER_OVERFLOW);
+		return;
+	}
+
 	tevent_req_done(req);
 }
 
@@ -442,7 +492,7 @@ static NTSTATUS smbd_smb2_ioctl_recv(struct tevent_req *req,
 				     TALLOC_CTX *mem_ctx,
 				     DATA_BLOB *out_output)
 {
-	NTSTATUS status;
+	NTSTATUS status = NT_STATUS_OK;
 	struct smbd_smb2_ioctl_state *state = tevent_req_data(req,
 					      struct smbd_smb2_ioctl_state);
 

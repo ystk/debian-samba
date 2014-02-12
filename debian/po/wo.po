@@ -14,8 +14,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: wo\n"
-"Report-Msgid-Bugs-To: samba@packages.debian.org\n"
-"POT-Creation-Date: 2009-01-02 12:18-0800\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2012-05-11 19:55+0200\n"
 "PO-Revision-Date: 2007-04-30 18:13+0000\n"
 "Last-Translator: Mouhamadou Mamoune Mbacke <mouhamadoumamoune@gmail.com>\n"
 "Language-Team: Wolof\n"
@@ -25,15 +25,21 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "X-Generator: KBabel 1.11.4\n"
 
-#. Type: boolean
+#. Type: title
 #. Description
 #: ../samba-common.templates:1001
+msgid "Samba server and utilities"
+msgstr ""
+
+#. Type: boolean
+#. Description
+#: ../samba-common.templates:2001
 msgid "Modify smb.conf to use WINS settings from DHCP?"
 msgstr "Ndax nu soppi smb.con ba muy jëfandikoo komfiguraasioŋ bu DHCP?"
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:1001
+#: ../samba-common.templates:2001
 msgid ""
 "If your computer gets IP address information from a DHCP server on the "
 "network, the DHCP server may also provide information about WINS servers "
@@ -49,20 +55,20 @@ msgstr ""
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:1001
+#: ../samba-common.templates:2001
 msgid ""
 "The dhcp3-client package must be installed to take advantage of this feature."
 msgstr "Paket bu dhcp3-client nak wareesna koo istale ngir jariñoo defiin wii."
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:2001
+#: ../samba-common.templates:3001
 msgid "Configure smb.conf automatically?"
 msgstr "Ndax ñu komfigureel smb.conf sunu boppu?"
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:2001
+#: ../samba-common.templates:3001
 msgid ""
 "The rest of the configuration of Samba deals with questions that affect "
 "parameters in /etc/samba/smb.conf, which is the file used to configure the "
@@ -80,7 +86,7 @@ msgstr ""
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:2001
+#: ../samba-common.templates:3001
 msgid ""
 "If you do not choose this option, you will have to handle any configuration "
 "changes yourself, and will not be able to take advantage of periodic "
@@ -92,18 +98,14 @@ msgstr ""
 
 #. Type: string
 #. Description
-#: ../samba-common.templates:3001
+#: ../samba-common.templates:4001
 msgid "Workgroup/Domain Name:"
 msgstr "Grup bu liggéey/Turu domen:"
 
 #. Type: string
 #. Description
-#: ../samba-common.templates:3001
+#: ../samba-common.templates:4001
 #, fuzzy
-#| msgid ""
-#| "Please specify the workgroup you want this server to appear to be in when "
-#| "queried by clients. Note that this parameter also controls the domain "
-#| "name used with the security=domain setting."
 msgid ""
 "Please specify the workgroup for this system.  This setting controls which "
 "workgroup the system will appear in when used as a server, the default "
@@ -116,18 +118,14 @@ msgstr ""
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:4001
+#: ../samba-common.templates:5001
 msgid "Use password encryption?"
 msgstr "Ndax ñu kiripte baatujall yi?"
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:4001
+#: ../samba-common.templates:5001
 #, fuzzy
-#| msgid ""
-#| "All recent Windows clients communicate with SMB servers using encrypted "
-#| "passwords. If you want to use clear text passwords you will need to "
-#| "change a parameter in your Windows registry."
 msgid ""
 "All recent Windows clients communicate with SMB/CIFS servers using encrypted "
 "passwords. If you want to use clear text passwords you will need to change a "
@@ -139,12 +137,8 @@ msgstr ""
 
 #. Type: boolean
 #. Description
-#: ../samba-common.templates:4001
+#: ../samba-common.templates:5001
 #, fuzzy
-#| msgid ""
-#| "Enabling this option is highly recommended. If you do, make sure you have "
-#| "a valid /etc/samba/smbpasswd file and that you set passwords in there for "
-#| "each user using the smbpasswd command."
 msgid ""
 "Enabling this option is highly recommended as support for plain text "
 "passwords is no longer maintained in Microsoft Windows products. If you do, "
@@ -155,49 +149,11 @@ msgstr ""
 "fiise /etc/samba/smbpasswd bu baax, ta nga def foofa baatujall bu "
 "jëfandikukat yéppu. Dangay jëfandikoo komaand bu smbpasswd."
 
-#. Type: boolean
+#. Type: title
 #. Description
 #: ../samba.templates:1001
-msgid "Create samba password database, /var/lib/samba/passdb.tdb?"
+msgid "Samba server"
 msgstr ""
-"Ndax ñu sos baasu done bu baatujall yu samba, /var/lib/samba/passdb.tdb?"
-
-#. Type: boolean
-#. Description
-#: ../samba.templates:1001
-msgid ""
-"To be compatible with the defaults in most versions of Windows, Samba must "
-"be configured to use encrypted passwords.  This requires user passwords to "
-"be stored in a file separate from /etc/passwd.  This file can be created "
-"automatically, but the passwords must be added manually by running smbpasswd "
-"and be kept up-to-date in the future."
-msgstr ""
-"Ngir mana dëppóo ak defóo bu li ëppu ci wersioŋ yu Windows yi, samba deeskoo "
-"wara komfigure muy jëfandikoo baatijall yuñu kiripte. Loolu dafay laaj ñu "
-"deñc baatijall yi ci ab fiise bu bokkul ak /etc/passwd.  Fiise boobu "
-"manessna koo sos sosuk otomatik, waaye kon baatijall yi deesleen ciy wara "
-"dugël ak loxo, doxal smbpasswd, ta buko defee ñu leen di yeesal saa yuñu ko "
-"soxlawaatee."
-
-#. Type: boolean
-#. Description
-#: ../samba.templates:1001
-msgid ""
-"If you do not create it, you will have to reconfigure Samba (and probably "
-"your client machines) to use plaintext passwords."
-msgstr ""
-"Boo ko sosul, kon fawwu nga komfigure Samba (amaana yit sa masin yu kiliyaŋ "
-"yi) def leen ñuy jëfandikoo baatijall yu text normaal (plain text)."
-
-#. Type: boolean
-#. Description
-#: ../samba.templates:1001
-msgid ""
-"See /usr/share/doc/samba-doc/htmldocs/Samba3-Developers-Guide/pwencrypt.html "
-"from the samba-doc package for more details."
-msgstr ""
-"Xoolal /usr/share/doc/samba-doc/htmldocs/Samba3-Developers-Guide/pwencrypt."
-"html bi nekk ci paket bu samba-doc, ngir am yaneen leeral."
 
 #. Type: select
 #. Choices
@@ -226,6 +182,39 @@ msgid ""
 msgstr ""
 "Daemon bu Samba smbd maneesna koo doxal ne ab deamon normaal, maneesna koo "
 "doxale yit ak inetd. Liñuy deŋkaane nak mooy doxalko muy ab daemon."
+
+#~ msgid "Create samba password database, /var/lib/samba/passdb.tdb?"
+#~ msgstr ""
+#~ "Ndax ñu sos baasu done bu baatujall yu samba, /var/lib/samba/passdb.tdb?"
+
+#~ msgid ""
+#~ "To be compatible with the defaults in most versions of Windows, Samba "
+#~ "must be configured to use encrypted passwords.  This requires user "
+#~ "passwords to be stored in a file separate from /etc/passwd.  This file "
+#~ "can be created automatically, but the passwords must be added manually by "
+#~ "running smbpasswd and be kept up-to-date in the future."
+#~ msgstr ""
+#~ "Ngir mana dëppóo ak defóo bu li ëppu ci wersioŋ yu Windows yi, samba "
+#~ "deeskoo wara komfigure muy jëfandikoo baatijall yuñu kiripte. Loolu dafay "
+#~ "laaj ñu deñc baatijall yi ci ab fiise bu bokkul ak /etc/passwd.  Fiise "
+#~ "boobu manessna koo sos sosuk otomatik, waaye kon baatijall yi deesleen "
+#~ "ciy wara dugël ak loxo, doxal smbpasswd, ta buko defee ñu leen di yeesal "
+#~ "saa yuñu ko soxlawaatee."
+
+#~ msgid ""
+#~ "If you do not create it, you will have to reconfigure Samba (and probably "
+#~ "your client machines) to use plaintext passwords."
+#~ msgstr ""
+#~ "Boo ko sosul, kon fawwu nga komfigure Samba (amaana yit sa masin yu "
+#~ "kiliyaŋ yi) def leen ñuy jëfandikoo baatijall yu text normaal (plain "
+#~ "text)."
+
+#~ msgid ""
+#~ "See /usr/share/doc/samba-doc/htmldocs/Samba3-Developers-Guide/pwencrypt."
+#~ "html from the samba-doc package for more details."
+#~ msgstr ""
+#~ "Xoolal /usr/share/doc/samba-doc/htmldocs/Samba3-Developers-Guide/"
+#~ "pwencrypt.html bi nekk ci paket bu samba-doc, ngir am yaneen leeral."
 
 #~ msgid "Chaining passdb backends is not supported"
 #~ msgstr "Ceene passdb backends manula nekk"

@@ -39,9 +39,11 @@ NET_API_STATUS NetJoinDomain(const char * server /* [in] [unique] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -71,7 +73,8 @@ NET_API_STATUS NetJoinDomain(const char * server /* [in] [unique] */,
 		NDR_PRINT_OUT_DEBUG(NetJoinDomain, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -87,9 +90,11 @@ NET_API_STATUS NetUnjoinDomain(const char * server_name /* [in] [unique] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -117,7 +122,8 @@ NET_API_STATUS NetUnjoinDomain(const char * server_name /* [in] [unique] */,
 		NDR_PRINT_OUT_DEBUG(NetUnjoinDomain, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -132,9 +138,11 @@ NET_API_STATUS NetGetJoinInformation(const char * server_name /* [in] [unique] *
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -161,7 +169,8 @@ NET_API_STATUS NetGetJoinInformation(const char * server_name /* [in] [unique] *
 		NDR_PRINT_OUT_DEBUG(NetGetJoinInformation, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -179,9 +188,11 @@ NET_API_STATUS NetGetJoinableOUs(const char * server_name /* [in] [unique] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -211,7 +222,8 @@ NET_API_STATUS NetGetJoinableOUs(const char * server_name /* [in] [unique] */,
 		NDR_PRINT_OUT_DEBUG(NetGetJoinableOUs, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -228,9 +240,11 @@ NET_API_STATUS NetRenameMachineInDomain(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -259,7 +273,8 @@ NET_API_STATUS NetRenameMachineInDomain(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetRenameMachineInDomain, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -274,9 +289,11 @@ NET_API_STATUS NetServerGetInfo(const char * server_name /* [in] [unique] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -303,7 +320,8 @@ NET_API_STATUS NetServerGetInfo(const char * server_name /* [in] [unique] */,
 		NDR_PRINT_OUT_DEBUG(NetServerGetInfo, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -319,9 +337,11 @@ NET_API_STATUS NetServerSetInfo(const char * server_name /* [in] [unique] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -349,7 +369,8 @@ NET_API_STATUS NetServerSetInfo(const char * server_name /* [in] [unique] */,
 		NDR_PRINT_OUT_DEBUG(NetServerSetInfo, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -364,9 +385,11 @@ NET_API_STATUS NetGetDCName(const char * server_name /* [in] [unique] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -393,7 +416,8 @@ NET_API_STATUS NetGetDCName(const char * server_name /* [in] [unique] */,
 		NDR_PRINT_OUT_DEBUG(NetGetDCName, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -408,9 +432,11 @@ NET_API_STATUS NetGetAnyDCName(const char * server_name /* [in] [unique] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -437,7 +463,8 @@ NET_API_STATUS NetGetAnyDCName(const char * server_name /* [in] [unique] */,
 		NDR_PRINT_OUT_DEBUG(NetGetAnyDCName, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -455,9 +482,11 @@ NET_API_STATUS DsGetDcName(const char * server_name /* [in] [unique] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -487,7 +516,8 @@ NET_API_STATUS DsGetDcName(const char * server_name /* [in] [unique] */,
 		NDR_PRINT_OUT_DEBUG(DsGetDcName, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -503,9 +533,11 @@ NET_API_STATUS NetUserAdd(const char * server_name /* [in] [unique] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -533,7 +565,8 @@ NET_API_STATUS NetUserAdd(const char * server_name /* [in] [unique] */,
 		NDR_PRINT_OUT_DEBUG(NetUserAdd, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -547,9 +580,11 @@ NET_API_STATUS NetUserDel(const char * server_name /* [in] [unique] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -575,7 +610,8 @@ NET_API_STATUS NetUserDel(const char * server_name /* [in] [unique] */,
 		NDR_PRINT_OUT_DEBUG(NetUserDel, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -595,9 +631,11 @@ NET_API_STATUS NetUserEnum(const char * server_name /* [in] [unique] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -630,7 +668,8 @@ NET_API_STATUS NetUserEnum(const char * server_name /* [in] [unique] */,
 		NDR_PRINT_OUT_DEBUG(NetUserEnum, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -646,9 +685,11 @@ NET_API_STATUS NetUserChangePassword(const char * domain_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -676,7 +717,8 @@ NET_API_STATUS NetUserChangePassword(const char * domain_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetUserChangePassword, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -692,9 +734,11 @@ NET_API_STATUS NetUserGetInfo(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -722,7 +766,8 @@ NET_API_STATUS NetUserGetInfo(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetUserGetInfo, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -739,9 +784,11 @@ NET_API_STATUS NetUserSetInfo(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -770,7 +817,8 @@ NET_API_STATUS NetUserSetInfo(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetUserSetInfo, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -789,9 +837,11 @@ NET_API_STATUS NetUserGetGroups(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -822,7 +872,8 @@ NET_API_STATUS NetUserGetGroups(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetUserGetGroups, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -839,9 +890,11 @@ NET_API_STATUS NetUserSetGroups(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -870,7 +923,8 @@ NET_API_STATUS NetUserSetGroups(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetUserSetGroups, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -890,9 +944,11 @@ NET_API_STATUS NetUserGetLocalGroups(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -924,7 +980,8 @@ NET_API_STATUS NetUserGetLocalGroups(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetUserGetLocalGroups, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -939,9 +996,11 @@ NET_API_STATUS NetUserModalsGet(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -968,7 +1027,8 @@ NET_API_STATUS NetUserModalsGet(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetUserModalsGet, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -984,9 +1044,11 @@ NET_API_STATUS NetUserModalsSet(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -1014,7 +1076,8 @@ NET_API_STATUS NetUserModalsSet(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetUserModalsSet, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -1033,9 +1096,11 @@ NET_API_STATUS NetQueryDisplayInformation(const char * server_name /* [in] [uniq
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -1066,7 +1131,8 @@ NET_API_STATUS NetQueryDisplayInformation(const char * server_name /* [in] [uniq
 		NDR_PRINT_OUT_DEBUG(NetQueryDisplayInformation, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -1082,9 +1148,11 @@ NET_API_STATUS NetGroupAdd(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -1112,7 +1180,8 @@ NET_API_STATUS NetGroupAdd(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetGroupAdd, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -1126,9 +1195,11 @@ NET_API_STATUS NetGroupDel(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -1154,7 +1225,8 @@ NET_API_STATUS NetGroupDel(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetGroupDel, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -1173,9 +1245,11 @@ NET_API_STATUS NetGroupEnum(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -1207,7 +1281,8 @@ NET_API_STATUS NetGroupEnum(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetGroupEnum, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -1224,9 +1299,11 @@ NET_API_STATUS NetGroupSetInfo(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -1255,7 +1332,8 @@ NET_API_STATUS NetGroupSetInfo(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetGroupSetInfo, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -1271,9 +1349,11 @@ NET_API_STATUS NetGroupGetInfo(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -1301,7 +1381,8 @@ NET_API_STATUS NetGroupGetInfo(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetGroupGetInfo, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -1316,9 +1397,11 @@ NET_API_STATUS NetGroupAddUser(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -1345,7 +1428,8 @@ NET_API_STATUS NetGroupAddUser(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetGroupAddUser, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -1360,9 +1444,11 @@ NET_API_STATUS NetGroupDelUser(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -1389,7 +1475,8 @@ NET_API_STATUS NetGroupDelUser(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetGroupDelUser, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -1409,9 +1496,11 @@ NET_API_STATUS NetGroupGetUsers(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -1444,7 +1533,8 @@ NET_API_STATUS NetGroupGetUsers(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetGroupGetUsers, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -1461,9 +1551,11 @@ NET_API_STATUS NetGroupSetUsers(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -1492,7 +1584,8 @@ NET_API_STATUS NetGroupSetUsers(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetGroupSetUsers, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -1508,9 +1601,11 @@ NET_API_STATUS NetLocalGroupAdd(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -1538,7 +1633,8 @@ NET_API_STATUS NetLocalGroupAdd(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetLocalGroupAdd, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -1552,9 +1648,11 @@ NET_API_STATUS NetLocalGroupDel(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -1580,7 +1678,8 @@ NET_API_STATUS NetLocalGroupDel(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetLocalGroupDel, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -1596,9 +1695,11 @@ NET_API_STATUS NetLocalGroupGetInfo(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -1626,7 +1727,8 @@ NET_API_STATUS NetLocalGroupGetInfo(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetLocalGroupGetInfo, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -1643,9 +1745,11 @@ NET_API_STATUS NetLocalGroupSetInfo(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -1674,7 +1778,8 @@ NET_API_STATUS NetLocalGroupSetInfo(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetLocalGroupSetInfo, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -1693,9 +1798,11 @@ NET_API_STATUS NetLocalGroupEnum(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -1727,7 +1834,8 @@ NET_API_STATUS NetLocalGroupEnum(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetLocalGroupEnum, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -1744,9 +1852,11 @@ NET_API_STATUS NetLocalGroupAddMembers(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -1775,7 +1885,8 @@ NET_API_STATUS NetLocalGroupAddMembers(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetLocalGroupAddMembers, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -1792,9 +1903,11 @@ NET_API_STATUS NetLocalGroupDelMembers(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -1823,7 +1936,8 @@ NET_API_STATUS NetLocalGroupDelMembers(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetLocalGroupDelMembers, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -1843,9 +1957,11 @@ NET_API_STATUS NetLocalGroupGetMembers(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -1878,7 +1994,8 @@ NET_API_STATUS NetLocalGroupGetMembers(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetLocalGroupGetMembers, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -1895,9 +2012,11 @@ NET_API_STATUS NetLocalGroupSetMembers(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -1926,7 +2045,8 @@ NET_API_STATUS NetLocalGroupSetMembers(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetLocalGroupSetMembers, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -1940,9 +2060,11 @@ NET_API_STATUS NetRemoteTOD(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -1968,7 +2090,8 @@ NET_API_STATUS NetRemoteTOD(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetRemoteTOD, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -1984,9 +2107,11 @@ NET_API_STATUS NetShareAdd(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -2014,7 +2139,8 @@ NET_API_STATUS NetShareAdd(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetShareAdd, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -2029,9 +2155,11 @@ NET_API_STATUS NetShareDel(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -2058,7 +2186,8 @@ NET_API_STATUS NetShareDel(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetShareDel, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -2077,9 +2206,11 @@ NET_API_STATUS NetShareEnum(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -2111,7 +2242,8 @@ NET_API_STATUS NetShareEnum(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetShareEnum, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -2127,9 +2259,11 @@ NET_API_STATUS NetShareGetInfo(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -2157,7 +2291,8 @@ NET_API_STATUS NetShareGetInfo(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetShareGetInfo, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -2174,9 +2309,11 @@ NET_API_STATUS NetShareSetInfo(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -2205,7 +2342,8 @@ NET_API_STATUS NetShareSetInfo(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetShareSetInfo, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -2219,9 +2357,11 @@ NET_API_STATUS NetFileClose(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -2247,7 +2387,8 @@ NET_API_STATUS NetFileClose(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetFileClose, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -2263,9 +2404,11 @@ NET_API_STATUS NetFileGetInfo(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -2293,7 +2436,8 @@ NET_API_STATUS NetFileGetInfo(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetFileGetInfo, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -2314,9 +2458,11 @@ NET_API_STATUS NetFileEnum(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -2350,7 +2496,8 @@ NET_API_STATUS NetFileEnum(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetFileEnum, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -2367,9 +2514,11 @@ NET_API_STATUS NetShutdownInit(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -2398,7 +2547,8 @@ NET_API_STATUS NetShutdownInit(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(NetShutdownInit, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -2411,9 +2561,11 @@ NET_API_STATUS NetShutdownAbort(const char * server_name /* [in] */)
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -2438,7 +2590,8 @@ NET_API_STATUS NetShutdownAbort(const char * server_name /* [in] */)
 		NDR_PRINT_OUT_DEBUG(NetShutdownAbort, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -2454,9 +2607,11 @@ NET_API_STATUS I_NetLogonControl(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -2484,7 +2639,8 @@ NET_API_STATUS I_NetLogonControl(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(I_NetLogonControl, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 
 /****************************************************************
@@ -2501,9 +2657,11 @@ NET_API_STATUS I_NetLogonControl2(const char * server_name /* [in] */,
 	struct libnetapi_ctx *ctx = NULL;
 	NET_API_STATUS status;
 	WERROR werr;
+	TALLOC_CTX *frame = talloc_stackframe();
 
 	status = libnetapi_getctx(&ctx);
 	if (status != 0) {
+		TALLOC_FREE(frame);
 		return status;
 	}
 
@@ -2532,6 +2690,7 @@ NET_API_STATUS I_NetLogonControl2(const char * server_name /* [in] */,
 		NDR_PRINT_OUT_DEBUG(I_NetLogonControl2, &r);
 	}
 
-	return r.out.result;
+	TALLOC_FREE(frame);
+	return (NET_API_STATUS)r.out.result;
 }
 

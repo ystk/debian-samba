@@ -111,12 +111,18 @@ static struct tevent_fd *select_event_add_fd(struct tevent_context *ev, TALLOC_C
 							   struct select_event_context);
 	struct tevent_fd *fde;
 
+	if (fd < 0 || fd >= FD_SETSIZE) {
+		errno = EBADF;
+		return NULL;
+	}
+
 	fde = tevent_common_add_fd(ev, mem_ctx, fd, flags,
 				   handler, private_data,
 				   handler_name, location);
 	if (!fde) return NULL;
 
-	if (fde->fd > select_ev->maxfd) {
+	if ((select_ev->maxfd != EVENT_INVALID_MAXFD)
+	    && (fde->fd > select_ev->maxfd)) {
 		select_ev->maxfd = fde->fd;
 	}
 	talloc_set_destructor(fde, select_event_fd_destructor);
@@ -143,6 +149,11 @@ static int select_event_loop_select(struct select_event_context *select_ev, stru
 
 	/* setup any fd events */
 	for (fde = select_ev->ev->fd_events; fde; fde = fde->next) {
+		if (fde->fd < 0 || fde->fd >= FD_SETSIZE) {
+			errno = EBADF;
+			return -1;
+		}
+
 		if (fde->flags & TEVENT_FD_READ) {
 			FD_SET(fde->fd, &r_fds);
 		}
@@ -241,7 +252,7 @@ static const struct tevent_ops select_event_ops = {
 	.loop_wait		= tevent_common_loop_wait,
 };
 
-bool tevent_select_init(void)
+_PRIVATE_ bool tevent_select_init(void)
 {
 	return tevent_register_backend("select", &select_event_ops);
 }

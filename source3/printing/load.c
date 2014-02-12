@@ -18,7 +18,8 @@
 */
 
 #include "includes.h"
-
+#include "printing/pcap.h"
+#include "printing/load.h"
 
 /***************************************************************************
 auto-load some homes and printer services
@@ -29,6 +30,7 @@ static void add_auto_printers(void)
 	int pnum = lp_servicenumber(PRINTERS_NAME);
 	char *str;
 	char *saveptr;
+	char *auto_serv = NULL;
 
 	if (pnum < 0)
 		if (process_registry_service(PRINTERS_NAME))
@@ -37,8 +39,12 @@ static void add_auto_printers(void)
 	if (pnum < 0)
 		return;
 
-	if ((str = SMB_STRDUP(lp_auto_services())) == NULL)
+	auto_serv = lp_auto_services();
+	str = SMB_STRDUP(auto_serv);
+	TALLOC_FREE(auto_serv);
+	if (str == NULL) {
 		return;
+	}
 
 	for (p = strtok_r(str, LIST_SEP, &saveptr); p;
 	     p = strtok_r(NULL, LIST_SEP, &saveptr)) {
@@ -53,12 +59,12 @@ static void add_auto_printers(void)
 }
 
 /***************************************************************************
-load automatic printer services
+load automatic printer services from pre-populated pcap cache
 ***************************************************************************/
-void load_printers(void)
+void load_printers(struct tevent_context *ev,
+		   struct messaging_context *msg_ctx)
 {
-	if (!pcap_cache_loaded())
-		pcap_cache_reload();
+	SMB_ASSERT(pcap_cache_loaded());
 
 	add_auto_printers();
 

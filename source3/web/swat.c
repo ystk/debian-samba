@@ -4,17 +4,17 @@
    Version 3.0.0
    Copyright (C) Andrew Tridgell 1997-2002
    Copyright (C) John H Terpstra 2002
-   
+
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
    the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
-   
+
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
-   
+
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
@@ -28,7 +28,14 @@
  **/
 
 #include "includes.h"
+#include "system/filesys.h"
+#include "popt_common.h"
 #include "web/swat_proto.h"
+#include "printing/pcap.h"
+#include "printing/load.h"
+#include "passdb.h"
+#include "intl/lang_tdb.h"
+#include "../lib/crypto/md5.h"
 
 static int demo_mode = False;
 static int passwd_only = False;
@@ -50,6 +57,9 @@ static int iNumNonAutoPrintServices = 0;
 #define DISABLE_USER_FLAG "disable_user_flag"
 #define ENABLE_USER_FLAG "enable_user_flag"
 #define RHOST "remote_host"
+#define XSRF_TOKEN "xsrf"
+#define XSRF_TIME "xsrf_time"
+#define XSRF_TIMEOUT 300
 
 #define _(x) lang_msg_rotate(talloc_tos(),x)
 
@@ -117,7 +127,7 @@ static char *stripspaceupper(const char *str)
 	char *p = newstring;
 
 	while (*str) {
-		if (*str != ' ') *p++ = toupper_ascii(*str);
+		if (*str != ' ') *p++ = toupper_m(*str);
 		++str;
 	}
 	*p = '\0';
@@ -137,6 +147,89 @@ static char *make_parm_name(const char *label)
 	*p = '\0';
 	return parmname;
 }
+
+void get_xsrf_token(const char *username, const char *pass,
+		    const char *formname, time_t xsrf_time, char token_str[33])
+{
+	struct MD5Context md5_ctx;
+	uint8_t token[16];
+	int i;
+
+	token_str[0] = '\0';
+	ZERO_STRUCT(md5_ctx);
+	MD5Init(&md5_ctx);
+
+	MD5Update(&md5_ctx, (uint8_t *)formname, strlen(formname));
+	MD5Update(&md5_ctx, (uint8_t *)&xsrf_time, sizeof(time_t));
+	if (username != NULL) {
+		MD5Update(&md5_ctx, (uint8_t *)username, strlen(username));
+	}
+	if (pass != NULL) {
+		MD5Update(&md5_ctx, (uint8_t *)pass, strlen(pass));
+	}
+
+	MD5Final(token, &md5_ctx);
+
+	for(i = 0; i < sizeof(token); i++) {
+		char tmp[3];
+
+		snprintf(tmp, sizeof(tmp), "%02x", token[i]);
+		strlcat(token_str, tmp, sizeof(tmp));
+	}
+}
+
+void print_xsrf_token(const char *username, const char *pass,
+		      const char *formname)
+{
+	char token[33];
+	time_t xsrf_time = time(NULL);
+
+	get_xsrf_token(username, pass, formname, xsrf_time, token);
+	printf("<input type=\"hidden\" name=\"%s\" value=\"%s\">\n",
+	       XSRF_TOKEN, token);
+	printf("<input type=\"hidden\" name=\"%s\" value=\"%lld\">\n",
+	       XSRF_TIME, (long long int)xsrf_time);
+}
+
+bool verify_xsrf_token(const char *formname)
+{
+	char expected[33];
+	const char *username = cgi_user_name();
+	const char *pass = cgi_user_pass();
+	const char *token = cgi_variable_nonull(XSRF_TOKEN);
+	const char *time_str = cgi_variable_nonull(XSRF_TIME);
+	char *p = NULL;
+	long long xsrf_time_ll = 0;
+	time_t xsrf_time = 0;
+	time_t now = time(NULL);
+
+	errno = 0;
+	xsrf_time_ll = strtoll(time_str, &p, 10);
+	if (errno != 0) {
+		return false;
+	}
+	if (p == NULL) {
+		return false;
+	}
+	if (PTR_DIFF(p, time_str) > strlen(time_str)) {
+		return false;
+	}
+	if (xsrf_time_ll > _TYPE_MAXIMUM(time_t)) {
+		return false;
+	}
+	if (xsrf_time_ll < _TYPE_MINIMUM(time_t)) {
+		return false;
+	}
+	xsrf_time = xsrf_time_ll;
+
+	if (abs(now - xsrf_time) > XSRF_TIMEOUT) {
+		return false;
+	}
+
+	get_xsrf_token(username, pass, formname, xsrf_time, expected);
+	return (strncmp(expected, token, sizeof(expected)) == 0);
+}
+
 
 /****************************************************************************
   include a lump of html in a page 
@@ -417,9 +510,9 @@ static void show_parameters(int snum, int allparameters, unsigned int parm_filte
 		}
 
 		if ((parm_filter & FLAG_WIZARD) && !(parm->flags & FLAG_WIZARD)) continue;
-		
+
 		if ((parm_filter & FLAG_ADVANCED) && !(parm->flags & FLAG_ADVANCED)) continue;
-		
+
 		if (heading && heading != last_heading) {
 			printf("<tr><td></td></tr><tr><td><b><u>%s</u></b></td></tr>\n", _(heading));
 			last_heading = heading;
@@ -446,7 +539,7 @@ static void write_config(FILE *f, bool show_defaults)
 	fprintf(f, "# Samba config file created using SWAT\n");
 	fprintf(f, "# from %s (%s)\n", cgi_remote_host(), cgi_remote_addr());
 	fprintf(f, "# Date: %s\n\n", current_timestring(ctx, False));
-	
+
 	lp_dump(f, show_defaults, iNumNonAutoPrintServices);
 
 	TALLOC_FREE(ctx);
@@ -490,7 +583,10 @@ static int save_reload(int snum)
                 return 0;
         }
 	iNumNonAutoPrintServices = lp_numservices();
-	load_printers();
+	if (pcap_cache_loaded()) {
+		load_printers(server_event_context(),
+			      server_messaging_context());
+	}
 
 	return 1;
 }
@@ -556,7 +652,7 @@ static void image_link(const char *name, const char *hlink, const char *src)
 static void show_main_buttons(void)
 {
 	char *p;
-	
+
 	if ((p = cgi_user_name()) && strcmp(p, "root")) {
 		printf(_("Logged in as <b>%s</b>"), p);
 		printf("<p>\n");
@@ -611,13 +707,20 @@ static void welcome_page(void)
 static void viewconfig_page(void)
 {
 	int full_view=0;
+	const char form_name[] = "viewconfig";
+
+	if (!verify_xsrf_token(form_name)) {
+		goto output_page;
+	}
 
 	if (cgi_variable("full_view")) {
 		full_view = 1;
 	}
 
+output_page:
 	printf("<H2>%s</H2>\n", _("Current Config"));
 	printf("<form method=post>\n");
+	print_xsrf_token(cgi_user_name(), cgi_user_pass(), form_name);
 
 	if (full_view) {
 		printf("<input type=submit name=\"normal_view\" value=\"%s\">\n", _("Normal View"));
@@ -637,18 +740,25 @@ static void viewconfig_page(void)
 static void wizard_params_page(void)
 {
 	unsigned int parm_filter = FLAG_WIZARD;
+	const char form_name[] = "wizard_params";
 
 	/* Here we first set and commit all the parameters that were selected
  	   in the previous screen. */
 
 	printf("<H2>%s</H2>\n", _("Wizard Parameter Edit Page"));
 
+	if (!verify_xsrf_token(form_name)) {
+		goto output_page;
+	}
+
 	if (cgi_variable("Commit")) {
 		commit_parameters(GLOBAL_SECTION_SNUM);
 		save_reload(-1);
 	}
 
+output_page:
 	printf("<form name=\"swatform\" method=post action=wizard_params>\n");
+	print_xsrf_token(cgi_user_name(), cgi_user_pass(), form_name);
 
 	if (have_write_access) {
 		printf("<input type=submit name=\"Commit\" value=\"Commit Changes\">\n");
@@ -656,7 +766,7 @@ static void wizard_params_page(void)
 
 	printf("<input type=reset name=\"Reset Values\" value=\"Reset\">\n");
 	printf("<p>\n");
-	
+
 	printf("<table>\n");
 	show_parameters(GLOBAL_SECTION_SNUM, 1, parm_filter, 0);
 	printf("</table>\n");
@@ -684,6 +794,11 @@ static void wizard_page(void)
 	int have_home = -1;
 	int HomeExpo = 0;
 	int SerType = 0;
+	const char form_name[] = "wizard";
+
+	if (!verify_xsrf_token(form_name)) {
+		goto output_page;
+	}
 
 	if (cgi_variable("Rewrite")) {
 		(void) rewritecfg_file();
@@ -703,7 +818,7 @@ static void wizard_page(void)
 
 		/* Plain text passwords are too badly broken - use encrypted passwords only */
 		lp_do_parameter( GLOBAL_SECTION_SNUM, "encrypt passwords", "Yes");
-		
+
 		switch ( SerType ){
 			case 0:
 				/* Stand-alone Server */
@@ -774,10 +889,12 @@ static void wizard_page(void)
 		winstype = 3;
 
 	role = lp_server_role();
-	
+
+output_page:
 	/* Here we go ... */
 	printf("<H2>%s</H2>\n", _("Samba Configuration Wizard"));
 	printf("<form method=post action=wizard>\n");
+	print_xsrf_token(cgi_user_name(), cgi_user_pass(), form_name);
 
 	if (have_write_access) {
 		printf("%s\n", _("The \"Rewrite smb.conf file\" button will clear the smb.conf file of all default values and of comments."));
@@ -813,7 +930,7 @@ static void wizard_page(void)
 		const char **wins_servers = lp_wins_server_list();
 		for(i = 0; wins_servers[i]; i++) printf("%s ", wins_servers[i]);
 	}
-	
+
 	printf("\"></td></tr>\n");
 	if (winstype == 3) {
 		printf("<tr><td></td><td colspan=3><font color=\"#ff0000\">%s</font></td></tr>\n", _("Error: WINS Server Mode and WINS Support both set in smb.conf"));
@@ -823,14 +940,14 @@ static void wizard_page(void)
 	printf("<td><input type=radio name=\"HomeExpo\" value=\"1\" %s> Yes</td>", (have_home == -1) ? "" : "checked ");
 	printf("<td><input type=radio name=\"HomeExpo\" value=\"0\" %s> No</td>", (have_home == -1 ) ? "checked" : "");
 	printf("<td></td></tr>\n");
-	
+
 	/* Enable this when we are ready ....
 	 * printf("<tr><td><b>%s:&nbsp;</b></td>\n", _("Is Print Server"));
 	 * printf("<td><input type=radio name=\"PtrSvr\" value=\"1\" %s> Yes</td>");
 	 * printf("<td><input type=radio name=\"PtrSvr\" value=\"0\" %s> No</td>");
 	 * printf("<td></td></tr>\n");
 	 */
-	
+
 	printf("</table></center>");
 	printf("<hr>");
 
@@ -846,8 +963,13 @@ static void globals_page(void)
 {
 	unsigned int parm_filter = FLAG_BASIC;
 	int mode = 0;
+	const char form_name[] = "globals";
 
 	printf("<H2>%s</H2>\n", _("Global Parameters"));
+
+	if (!verify_xsrf_token(form_name)) {
+		goto output_page;
+	}
 
 	if (cgi_variable("Commit")) {
 		commit_parameters(GLOBAL_SECTION_SNUM);
@@ -861,7 +983,9 @@ static void globals_page(void)
 	if ( cgi_variable("AdvMode"))
 		mode = 1;
 
+output_page:
 	printf("<form name=\"swatform\" method=post action=globals>\n");
+	print_xsrf_token(cgi_user_name(), cgi_user_pass(), form_name);
 
 	ViewModeBoxes( mode );
 	switch ( mode ) {
@@ -901,11 +1025,17 @@ static void shares_page(void)
 	int mode = 0;
 	unsigned int parm_filter = FLAG_BASIC;
 	size_t converted_size;
+	const char form_name[] = "shares";
+
+	printf("<H2>%s</H2>\n", _("Share Parameters"));
+
+	if (!verify_xsrf_token(form_name)) {
+		goto output_page;
+	}
 
 	if (share)
 		snum = lp_servicenumber(share);
 
-	printf("<H2>%s</H2>\n", _("Share Parameters"));
 
 	if (cgi_variable("Commit") && snum >= 0) {
 		commit_parameters(snum);
@@ -931,16 +1061,18 @@ static void shares_page(void)
 		}
 	}
 
-	printf("<FORM name=\"swatform\" method=post>\n");
-
-	printf("<table>\n");
-
 	if ( cgi_variable("ViewMode") )
 		mode = atoi(cgi_variable_nonull("ViewMode"));
 	if ( cgi_variable("BasicMode"))
 		mode = 0;
 	if ( cgi_variable("AdvMode"))
 		mode = 1;
+
+output_page:
+	printf("<FORM name=\"swatform\" method=post>\n");
+	print_xsrf_token(cgi_user_name(), cgi_user_pass(), form_name);
+
+	printf("<table>\n");
 
 	ViewModeBoxes( mode );
 	switch ( mode ) {
@@ -1014,7 +1146,7 @@ static bool change_password(const char *remote_machine, const char *user_name,
 		printf("%s\n<p>", _("password change in demo mode rejected"));
 		return False;
 	}
-	
+
 	if (remote_machine != NULL) {
 		ret = remote_password_change(remote_machine, user_name,
 					     old_passwd, new_passwd, &err_str);
@@ -1028,7 +1160,7 @@ static bool change_password(const char *remote_machine, const char *user_name,
 		printf("%s\n<p>", _("Can't setup password database vectors."));
 		return False;
 	}
-	
+
 	ret = local_password_change(user_name, local_flags, new_passwd,
 					&err_str, &msg_str);
 
@@ -1111,7 +1243,6 @@ static void chg_passwd(void)
 	local_flags |= (cgi_variable(DELETE_USER_FLAG) ? LOCAL_DELETE_USER : 0);
 	local_flags |= (cgi_variable(ENABLE_USER_FLAG) ? LOCAL_ENABLE_USER : 0);
 	local_flags |= (cgi_variable(DISABLE_USER_FLAG) ? LOCAL_DISABLE_USER : 0);
-	
 
 	rslt = change_password(host,
 			       cgi_variable_nonull(SWAT_USER),
@@ -1121,14 +1252,12 @@ static void chg_passwd(void)
 	if(cgi_variable(CHG_S_PASSWD_FLAG)) {
 		printf("<p>");
 		if (rslt == True) {
-			printf(_(" The passwd for '%s' has been changed."), cgi_variable_nonull(SWAT_USER));
-			printf("\n");
+			printf("%s\n", _(" The passwd has been changed."));
 		} else {
-			printf(_(" The passwd for '%s' has NOT been changed."), cgi_variable_nonull(SWAT_USER));
-			printf("\n");
+			printf("%s\n", _(" The passwd has NOT been changed."));
 		}
 	}
-	
+
 	return;
 }
 
@@ -1138,20 +1267,15 @@ static void chg_passwd(void)
 static void passwd_page(void)
 {
 	const char *new_name = cgi_user_name();
-
-	/* 
-	 * After the first time through here be nice. If the user
-	 * changed the User box text to another users name, remember it.
-	 */
-	if (cgi_variable(SWAT_USER)) {
-		new_name = cgi_variable_nonull(SWAT_USER);
-	} 
+	const char passwd_form[] = "passwd";
+	const char rpasswd_form[] = "rpasswd";
 
 	if (!new_name) new_name = "";
 
 	printf("<H2>%s</H2>\n", _("Server Password Management"));
 
 	printf("<FORM name=\"swatform\" method=post>\n");
+	print_xsrf_token(cgi_user_name(), cgi_user_pass(), passwd_form);
 
 	printf("<table>\n");
 
@@ -1191,14 +1315,16 @@ static void passwd_page(void)
 	 * Do some work if change, add, disable or enable was
 	 * requested. It could be this is the first time through this
 	 * code, so there isn't anything to do.  */
-	if ((cgi_variable(CHG_S_PASSWD_FLAG)) || (cgi_variable(ADD_USER_FLAG)) || (cgi_variable(DELETE_USER_FLAG)) ||
-	    (cgi_variable(DISABLE_USER_FLAG)) || (cgi_variable(ENABLE_USER_FLAG))) {
+	if (verify_xsrf_token(passwd_form) &&
+	   ((cgi_variable(CHG_S_PASSWD_FLAG)) || (cgi_variable(ADD_USER_FLAG)) || (cgi_variable(DELETE_USER_FLAG)) ||
+	    (cgi_variable(DISABLE_USER_FLAG)) || (cgi_variable(ENABLE_USER_FLAG)))) {
 		chg_passwd();		
 	}
 
 	printf("<H2>%s</H2>\n", _("Client/Server Password Management"));
 
 	printf("<FORM name=\"swatform\" method=post>\n");
+	print_xsrf_token(cgi_user_name(), cgi_user_pass(), rpasswd_form);
 
 	printf("<table>\n");
 
@@ -1231,7 +1357,7 @@ static void passwd_page(void)
 	 * password somewhere other than the server. It could be this
 	 * is the first time through this code, so there isn't
 	 * anything to do.  */
-	if (cgi_variable(CHG_R_PASSWD_FLAG)) {
+	if (verify_xsrf_token(passwd_form) && cgi_variable(CHG_R_PASSWD_FLAG)) {
 		chg_passwd();		
 	}
 
@@ -1248,17 +1374,14 @@ static void printers_page(void)
 	int i;
 	int mode = 0;
 	unsigned int parm_filter = FLAG_BASIC;
+	const char form_name[] = "printers";
+
+	if (!verify_xsrf_token(form_name)) {
+		goto output_page;
+	}
 
 	if (share)
 		snum = lp_servicenumber(share);
-
-        printf("<H2>%s</H2>\n", _("Printer Parameters"));
- 
-        printf("<H3>%s</H3>\n", _("Important Note:"));
-        printf("%s",_("Printer names marked with [*] in the Choose Printer drop-down box "));
-        printf("%s",_("are autoloaded printers from "));
-        printf("<A HREF=\"/swat/help/smb.conf.5.html#printcapname\" target=\"docs\">%s</A>\n", _("Printcap Name"));
-        printf("%s\n", _("Attempting to delete these printers from SWAT will have no effect."));
 
 	if (cgi_variable("Commit") && snum >= 0) {
 		commit_parameters(snum);
@@ -1288,14 +1411,25 @@ static void printers_page(void)
 		}
 	}
 
-	printf("<FORM name=\"swatform\" method=post>\n");
-
 	if ( cgi_variable("ViewMode") )
 		mode = atoi(cgi_variable_nonull("ViewMode"));
         if ( cgi_variable("BasicMode"))
                 mode = 0;
         if ( cgi_variable("AdvMode"))
                 mode = 1;
+
+output_page:
+        printf("<H2>%s</H2>\n", _("Printer Parameters"));
+
+        printf("<H3>%s</H3>\n", _("Important Note:"));
+        printf("%s",_("Printer names marked with [*] in the Choose Printer drop-down box "));
+        printf("%s",_("are autoloaded printers from "));
+        printf("<A HREF=\"/swat/help/smb.conf.5.html#printcapname\" target=\"docs\">%s</A>\n", _("Printcap Name"));
+        printf("%s\n", _("Attempting to delete these printers from SWAT will have no effect."));
+
+
+	printf("<FORM name=\"swatform\" method=post>\n");
+	print_xsrf_token(cgi_user_name(), cgi_user_pass(), form_name);
 
 	ViewModeBoxes( mode );
 	switch ( mode ) {
@@ -1413,13 +1547,15 @@ const char *lang_msg_rotate(TALLOC_CTX *ctx, const char *msgid)
 	/* we don't want any SIGPIPE messages */
 	BlockSignals(True,SIGPIPE);
 
-	dbf = x_fopen("/dev/null", O_WRONLY, 0);
-	if (!dbf) dbf = x_stderr;
+	debug_set_logfile("/dev/null");
 
 	/* we don't want stderr screwing us up */
 	close(2);
 	open("/dev/null", O_WRONLY);
+	setup_logging("swat", DEBUG_FILE);
 
+	load_case_tables();
+	
 	pc = poptGetContext("swat", argc, (const char **) argv, long_options, 0);
 
 	/* Parse command line options */
@@ -1428,13 +1564,15 @@ const char *lang_msg_rotate(TALLOC_CTX *ctx, const char *msgid)
 
 	poptFreeContext(pc);
 
-	load_case_tables();
-
-	setup_logging(argv[0],False);
+	/* This should set a more apporiate log file */
 	load_config(True);
+	reopen_logs();
 	load_interfaces();
 	iNumNonAutoPrintServices = lp_numservices();
-	load_printers();
+	if (pcap_cache_loaded()) {
+		load_printers(server_event_context(),
+			      server_messaging_context());
+	}
 
 	cgi_setup(get_dyn_SWATDIR(), !demo_mode);
 

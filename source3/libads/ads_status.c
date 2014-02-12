@@ -22,6 +22,8 @@
 
 #include "includes.h"
 #include "smb_krb5.h"
+#include "smb_ldap.h"
+#include "libads/ads_status.h"
 
 /*
   build a ADS_STATUS structure
@@ -78,6 +80,9 @@ NTSTATUS ads_ntstatus(ADS_STATUS status)
 	case ENUM_ADS_ERROR_LDAP:
 		if (status.err.rc == LDAP_SUCCESS) {
 			return NT_STATUS_OK;
+		}
+		if (status.err.rc == LDAP_TIMELIMIT_EXCEEDED) {
+			return NT_STATUS_IO_TIMEOUT;
 		}
 		return NT_STATUS_LDAP(status.err.rc);
 #endif

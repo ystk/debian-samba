@@ -18,6 +18,8 @@
  */
 
 #include "includes.h"
+#include "smbd/smbd.h"
+#include "system/filesys.h"
 
 #undef DBGC_CLASS
 #define DBGC_CLASS DBGC_VFS
@@ -655,13 +657,58 @@ static int streams_depot_unlink(vfs_handle_struct *handle,
 	return ret;
 }
 
+static int streams_depot_rmdir(vfs_handle_struct *handle, const char *path)
+{
+	struct smb_filename *smb_fname_base = NULL;
+	NTSTATUS status;
+	int ret = -1;
+
+	DEBUG(10, ("streams_depot_rmdir called for %s\n", path));
+
+	/*
+	 * We potentially need to delete the per-inode streams directory
+	 */
+
+	status = create_synthetic_smb_fname(talloc_tos(), path,
+					    NULL, NULL, &smb_fname_base);
+	if (!NT_STATUS_IS_OK(status)) {
+		errno = map_errno_from_nt_status(status);
+		return -1;
+	}
+
+	if (lp_posix_pathnames()) {
+		ret = SMB_VFS_NEXT_LSTAT(handle, smb_fname_base);
+	} else {
+		ret = SMB_VFS_NEXT_STAT(handle, smb_fname_base);
+	}
+
+	if (ret == -1) {
+		TALLOC_FREE(smb_fname_base);
+		return -1;
+	}
+
+	if (smb_fname_base->st.st_ex_nlink == 2) {
+		char *dirname = stream_dir(handle, smb_fname_base,
+					   &smb_fname_base->st, false);
+
+		if (dirname != NULL) {
+			SMB_VFS_NEXT_RMDIR(handle, dirname);
+		}
+		TALLOC_FREE(dirname);
+	}
+
+	ret = SMB_VFS_NEXT_RMDIR(handle, path);
+
+	TALLOC_FREE(smb_fname_base);
+	return ret;
+}
+
 static int streams_depot_rename(vfs_handle_struct *handle,
 				const struct smb_filename *smb_fname_src,
 				const struct smb_filename *smb_fname_dst)
 {
 	struct smb_filename *smb_fname_src_stream = NULL;
 	struct smb_filename *smb_fname_dst_stream = NULL;
-	struct smb_filename *smb_fname_dst_mod = NULL;
 	bool src_is_stream, dst_is_stream;
 	NTSTATUS status;
 	int ret = -1;
@@ -692,23 +739,7 @@ static int streams_depot_rename(vfs_handle_struct *handle,
 		goto done;
 	}
 
-	/*
-	 * Handle passing in a stream name without the base file.  This is
-	 * exercised by the NTRENAME streams rename path.
-	 */
-	if (StrCaseCmp(smb_fname_dst->base_name, "./") == 0) {
-		status = create_synthetic_smb_fname(talloc_tos(),
-						    smb_fname_src->base_name,
-						    smb_fname_dst->stream_name,
-						    NULL, &smb_fname_dst_mod);
-		if (!NT_STATUS_IS_OK(status)) {
-			errno = map_errno_from_nt_status(status);
-			goto done;
-		}
-	}
-
-	status = stream_smb_fname(handle, (smb_fname_dst_mod ?
-					   smb_fname_dst_mod : smb_fname_dst),
+	status = stream_smb_fname(handle, smb_fname_dst,
 				  &smb_fname_dst_stream, false);
 	if (!NT_STATUS_IS_OK(status)) {
 		errno = map_errno_from_nt_status(status);
@@ -721,7 +752,6 @@ static int streams_depot_rename(vfs_handle_struct *handle,
 done:
 	TALLOC_FREE(smb_fname_src_stream);
 	TALLOC_FREE(smb_fname_dst_stream);
-	TALLOC_FREE(smb_fname_dst_mod);
 	return ret;
 }
 
@@ -843,20 +873,8 @@ static NTSTATUS streams_depot_streaminfo(vfs_handle_struct *handle,
 		goto out;
 	}
 
-	state.streams = NULL;
-	state.num_streams = 0;
-
-	if (!S_ISDIR(smb_fname_base->st.st_ex_mode)) {
-		if (!add_one_stream(mem_ctx,
-				    &state.num_streams, &state.streams,
-				    "::$DATA", smb_fname_base->st.st_ex_size,
-				    SMB_VFS_GET_ALLOC_SIZE(handle->conn, fsp,
-						       &smb_fname_base->st))) {
-			status = NT_STATUS_NO_MEMORY;
-			goto out;
-		}
-	}
-
+	state.streams = *pstreams;
+	state.num_streams = *pnum_streams;
 	state.mem_ctx = mem_ctx;
 	state.handle = handle;
 	state.status = NT_STATUS_OK;
@@ -877,7 +895,7 @@ static NTSTATUS streams_depot_streaminfo(vfs_handle_struct *handle,
 
 	*pnum_streams = state.num_streams;
 	*pstreams = state.streams;
-	status = NT_STATUS_OK;
+	status = SMB_VFS_NEXT_STREAMINFO(handle, fsp, fname, mem_ctx, pnum_streams, pstreams);
 
  out:
 	TALLOC_FREE(smb_fname_base);
@@ -892,10 +910,11 @@ static uint32_t streams_depot_fs_capabilities(struct vfs_handle_struct *handle,
 
 static struct vfs_fn_pointers vfs_streams_depot_fns = {
 	.fs_capabilities = streams_depot_fs_capabilities,
-	.open = streams_depot_open,
+	.open_fn = streams_depot_open,
 	.stat = streams_depot_stat,
 	.lstat = streams_depot_lstat,
 	.unlink = streams_depot_unlink,
+	.rmdir = streams_depot_rmdir,
 	.rename = streams_depot_rename,
 	.streaminfo = streams_depot_streaminfo,
 };

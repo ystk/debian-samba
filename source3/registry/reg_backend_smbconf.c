@@ -19,6 +19,8 @@
  */
 
 #include "includes.h"
+#include "registry.h"
+#include "lib/privileges.h"
 
 #undef DBGC_CLASS
 #define DBGC_CLASS DBGC_REGISTRY
@@ -57,9 +59,9 @@ static bool smbconf_store_values(const char *key, struct regval_ctr *val)
 
 static bool smbconf_reg_access_check(const char *keyname, uint32 requested,
 				     uint32 *granted,
-				     const struct nt_user_token *token)
+				     const struct security_token *token)
 {
-	if (!(user_has_privileges(token, &se_disk_operators))) {
+	if (!security_token_has_privilege(token, SEC_PRIV_DISK_OPERATOR)) {
 		return False;
 	}
 
@@ -79,6 +81,15 @@ static WERROR smbconf_set_secdesc(const char *key,
 	return regdb_ops.set_secdesc(key, secdesc);
 }
 
+static bool smbconf_subkeys_need_update(struct regsubkey_ctr *subkeys)
+{
+	return regdb_ops.subkeys_need_update(subkeys);
+}
+
+static bool smbconf_values_need_update(struct regval_ctr *values)
+{
+	return regdb_ops.values_need_update(values);
+}
 
 /*
  * Table of function pointers for accessing smb.conf data
@@ -94,4 +105,6 @@ struct registry_ops smbconf_reg_ops = {
 	.reg_access_check = smbconf_reg_access_check,
 	.get_secdesc = smbconf_get_secdesc,
 	.set_secdesc = smbconf_set_secdesc,
+	.subkeys_need_update = smbconf_subkeys_need_update,
+	.values_need_update = smbconf_values_need_update,
 };

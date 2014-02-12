@@ -18,10 +18,11 @@
  */
 
 #include "includes.h"
+#include "../lib/util/tevent_unix.h"
 
 #if WITH_PTHREADPOOL
 
-#include "pthreadpool.h"
+#include "lib/pthreadpool/pthreadpool.h"
 
 struct fncall_state {
 	struct fncall_context *ctx;
@@ -86,7 +87,7 @@ struct fncall_context *fncall_context_init(TALLOC_CTX *mem_ctx,
 	}
 	talloc_set_destructor(ctx, fncall_context_destructor);
 
-	ctx->sig_fd = pthreadpool_sig_fd(ctx->pool);
+	ctx->sig_fd = pthreadpool_signal_fd(ctx->pool);
 	if (ctx->sig_fd == -1) {
 		TALLOC_FREE(ctx);
 		return NULL;
@@ -279,8 +280,7 @@ static void fncall_handler(struct tevent_context *ev, struct tevent_fd *fde,
 	int i, num_pending;
 	int job_id;
 
-	job_id = pthreadpool_finished_job(ctx->pool);
-	if (job_id <= 0) {
+	if (pthreadpool_finished_job(ctx->pool, &job_id) != 0) {
 		return;
 	}
 
