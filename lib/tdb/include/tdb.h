@@ -212,9 +212,12 @@ void tdb_set_max_dead(struct tdb_context *tdb, int max_dead);
  * This can be used after a fork to ensure that we have an independent seek
  * pointer from our parent and to re-establish locks.
  *
- * @param[in]  tdb      The database to reopen.
+ * @param[in]  tdb      The database to reopen. It will be free'd on error!
  *
  * @return              0 on success, -1 on error.
+ *
+ * @note Don't call tdb_error() after this function cause the tdb context will
+ *       be freed on error.
  */
 int tdb_reopen(struct tdb_context *tdb);
 
@@ -361,9 +364,12 @@ int tdb_append(struct tdb_context *tdb, TDB_DATA key, TDB_DATA new_dbuf);
 /**
  * @brief Close a database.
  *
- * @param[in]  tdb      The database to close.
+ * @param[in]  tdb      The database to close. The context will be free'd.
  *
  * @return              0 for success, -1 on error.
+ *
+ * @note Don't call tdb_error() after this function cause the tdb context will
+ *       be freed on error.
  */
 int tdb_close(struct tdb_context *tdb);
 
@@ -813,6 +819,28 @@ unsigned int tdb_jenkins_hash(TDB_DATA *key);
 int tdb_check(struct tdb_context *tdb,
 	      int (*check) (TDB_DATA key, TDB_DATA data, void *private_data),
 	      void *private_data);
+
+/**
+ * @brief Dump all possible records in a corrupt database.
+ *
+ * This is the only way to get data out of a database where tdb_check() fails.
+ * It will call walk() with anything which looks like a database record; this
+ * may well include invalid, incomplete or duplicate records.
+ *
+ * @param[in]  tdb      The database to check.
+ *
+ * @param[in]  walk     The walk function to use.
+ *
+ * @param[in]  private_data the private data to pass to the walk function.
+ *
+ * @return              0 on success, -1 on error with error code set.
+ *
+ * @see tdb_error()
+ * @see tdb_errorstr()
+ */
+int tdb_rescue(struct tdb_context *tdb,
+	       void (*walk) (TDB_DATA key, TDB_DATA data, void *private_data),
+	       void *private_data);
 
 /* @} ******************************************************************/
 

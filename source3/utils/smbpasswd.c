@@ -107,6 +107,7 @@ static int process_options(int argc, char **argv, int local_flags)
 			break;
 		case 'c':
 			configfile = optarg;
+			set_dyn_CONFIGFILE(optarg);
 			break;
 		case 'a':
 			local_flags |= LOCAL_ADD_USER;
@@ -136,6 +137,7 @@ static int process_options(int argc, char **argv, int local_flags)
 		case 'n':
 			local_flags |= LOCAL_SET_NO_PASSWORD;
 			local_flags &= ~LOCAL_SET_PASSWORD;
+			SAFE_FREE(new_passwd);
 			new_passwd = smb_xstrdup("NO PASSWORD");
 			break;
 		case 'r':
@@ -152,7 +154,7 @@ static int process_options(int argc, char **argv, int local_flags)
 			fstrcpy(ldap_secret, optarg);
 			break;
 		case 'R':
-			lp_set_name_resolve_order(optarg);
+			lp_set_cmdline("name resolve order", optarg);
 			break;
 		case 'D':
 			lp_set_cmdline("log level", optarg);
@@ -195,7 +197,7 @@ static int process_options(int argc, char **argv, int local_flags)
 		usage();
 	}
 
-	if (!lp_load(configfile,True,False,False,True)) {
+	if (!lp_load_global(configfile)) {
 		fprintf(stderr, "Can't load %s - run testparm to debug it\n", 
 			configfile);
 		exit(1);
@@ -215,11 +217,17 @@ static char *prompt_for_new_password(bool stdin_get)
 	ZERO_ARRAY(new_pw);
 
 	p = get_pass("New SMB password:", stdin_get);
+	if (p == NULL) {
+		return NULL;
+	}
 
 	fstrcpy(new_pw, p);
 	SAFE_FREE(p);
 
 	p = get_pass("Retype new SMB password:", stdin_get);
+	if (p == NULL) {
+		return NULL;
+	}
 
 	if (strcmp(p, new_pw)) {
 		fprintf(stderr, "Mismatch - password unchanged.\n");
@@ -285,7 +293,7 @@ static bool store_ldap_admin_pw (char* pw)
 	if (!secrets_init())
 		return False;
 
-	return secrets_store_ldap_pw(lp_ldap_admin_dn(), pw);
+	return secrets_store_ldap_pw(lp_ldap_admin_dn(talloc_tos()), pw);
 }
 
 
@@ -300,7 +308,7 @@ static int process_root(int local_flags)
 	char *old_passwd = NULL;
 
 	if (local_flags & LOCAL_SET_LDAP_ADMIN_PW) {
-		char *ldap_admin_dn = lp_ldap_admin_dn();
+		char *ldap_admin_dn = lp_ldap_admin_dn(talloc_tos());
 		if ( ! *ldap_admin_dn ) {
 			DEBUG(0,("ERROR: 'ldap admin dn' not defined! Please check your smb.conf\n"));
 			goto done;
@@ -309,6 +317,10 @@ static int process_root(int local_flags)
 		printf("Setting stored password for \"%s\" in secrets.tdb\n", ldap_admin_dn);
 		if ( ! *ldap_secret ) {
 			new_passwd = prompt_for_new_password(stdin_passwd_get);
+			if (new_passwd == NULL) {
+				fprintf(stderr, "Failed to read new password!\n");
+				exit(1);
+			}
 			fstrcpy(ldap_secret, new_passwd);
 		}
 		if (!store_ldap_admin_pw(ldap_secret)) {
@@ -369,7 +381,11 @@ static int process_root(int local_flags)
 		if (local_flags & LOCAL_ADD_USER) {
 		        SAFE_FREE(new_passwd);
 			new_passwd = smb_xstrdup(user_name);
-			strlower_m(new_passwd);
+			if (!strlower_m(new_passwd)) {
+				fprintf(stderr, "strlower_m %s failed\n",
+					new_passwd);
+				exit(1);
+			}
 		}
 
 		/*
@@ -378,7 +394,7 @@ static int process_root(int local_flags)
 		 */
 
 		slprintf(buf, sizeof(buf)-1, "%s$", user_name);
-		fstrcpy(user_name, buf);
+		strlcpy(user_name, buf, sizeof(user_name));
 	} else if (local_flags & LOCAL_INTERDOM_ACCOUNT) {
 		static fstring buf;
 
@@ -395,7 +411,7 @@ static int process_root(int local_flags)
 
 		/* prepare uppercased and '$' terminated username */
 		slprintf(buf, sizeof(buf) - 1, "%s$", user_name);
-		fstrcpy(user_name, buf);
+		strlcpy(user_name, buf, sizeof(user_name));
 
 	} else {
 
@@ -532,6 +548,10 @@ static int process_nonroot(int local_flags)
 
 	if (remote_machine != NULL) {
 		old_pw = get_pass("Old SMB password:",stdin_passwd_get);
+		if (old_pw == NULL) {
+			fprintf(stderr, "Unable to get old password.\n");
+			exit(1);
+		}
 	}
 
 	if (!new_passwd) {
@@ -600,11 +620,16 @@ int main(int argc, char **argv)
 	}
 
 	if (local_flags & LOCAL_AM_ROOT) {
-		secrets_init();
-		return process_root(local_flags);
-	} 
+		bool ok;
 
-	ret = process_nonroot(local_flags);
+		ok = secrets_init();
+		if (!ok) {
+			return 1;
+		}
+		ret = process_root(local_flags);
+	} else {
+		ret = process_nonroot(local_flags);
+	}
 	TALLOC_FREE(frame);
 	return ret;
 }

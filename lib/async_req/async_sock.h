@@ -26,6 +26,7 @@
 
 #include <talloc.h>
 #include <tevent.h>
+#include "system/network.h"
 
 struct tevent_req *sendto_send(TALLOC_CTX *mem_ctx, struct tevent_context *ev,
 			       int fd, const void *buf, size_t len, int flags,
@@ -39,10 +40,12 @@ struct tevent_req *recvfrom_send(TALLOC_CTX *mem_ctx,
 				 socklen_t *addr_len);
 ssize_t recvfrom_recv(struct tevent_req *req, int *perrno);
 
-struct tevent_req *async_connect_send(TALLOC_CTX *mem_ctx,
-				      struct tevent_context *ev,
-				      int fd, const struct sockaddr *address,
-				      socklen_t address_len);
+struct tevent_req *async_connect_send(
+	TALLOC_CTX *mem_ctx, struct tevent_context *ev, int fd,
+	const struct sockaddr *address, socklen_t address_len,
+	void (*before_connect)(void *private_data),
+	void (*after_connect)(void *private_data),
+	void *private_data);
 int async_connect_recv(struct tevent_req *req, int *perrno);
 
 struct tevent_req *writev_send(TALLOC_CTX *mem_ctx, struct tevent_context *ev,
@@ -60,5 +63,10 @@ struct tevent_req *read_packet_send(TALLOC_CTX *mem_ctx,
 				    void *private_data);
 ssize_t read_packet_recv(struct tevent_req *req, TALLOC_CTX *mem_ctx,
 			 uint8_t **pbuf, int *perrno);
+
+struct tevent_req *wait_for_read_send(TALLOC_CTX *mem_ctx,
+				      struct tevent_context *ev,
+				      int fd);
+bool wait_for_read_recv(struct tevent_req *req, int *perr);
 
 #endif

@@ -27,6 +27,7 @@
 #include "system/time.h"
 #include "torture/rpc/torture_rpc.h"
 #include "auth/gensec/gensec.h"
+#include "auth/gensec/schannel.h"
 #include "libcli/auth/libcli_auth.h"
 #include "libcli/samsync/samsync.h"
 #include "libcli/security/security.h"
@@ -94,7 +95,7 @@ static NTSTATUS test_SamLogon(struct torture_context *tctx,
 	r.in.computer_name = workstation;
 	r.in.credential = &auth;
 	r.in.return_authenticator = &auth2;
-	r.in.logon_level = 2;
+	r.in.logon_level = NetlogonNetworkInformation;
 	r.in.logon = &logon;
 	r.out.validation = &validation;
 	r.out.authoritative = &authoritative;
@@ -422,6 +423,15 @@ static bool samsync_handle_policy(struct torture_context *tctx,
 {
 	struct netr_DELTA_POLICY *policy = delta->delta_union.policy;
 
+	switch (database_id) {
+	case SAM_DATABASE_DOMAIN:
+	case SAM_DATABASE_BUILTIN:
+		break;
+	case SAM_DATABASE_PRIVS:
+		torture_comment(tctx, "DOMAIN entry on privs DB!\n");
+		return false;
+	}
+
 	samsync_state->seq_num[database_id] =
 		policy->sequence_num;
 
@@ -458,10 +468,21 @@ static bool samsync_handle_user(struct torture_context *tctx, TALLOC_CTX *mem_ct
 	struct samr_Password nt_hash;
 	struct samr_Password *lm_hash_p = NULL;
 	struct samr_Password *nt_hash_p = NULL;
-	const char *domain = samsync_state->domain_name[database_id];
+	const char *domain;
 	const char *username = user->account_name.string;
 	NTSTATUS nt_status;
 	bool ret = true;
+
+	switch (database_id) {
+	case SAM_DATABASE_DOMAIN:
+	case SAM_DATABASE_BUILTIN:
+		break;
+	case SAM_DATABASE_PRIVS:
+		torture_comment(tctx, "DOMAIN entry on privs DB!\n");
+		return false;
+	}
+
+	domain = samsync_state->domain_name[database_id];
 
 	struct samr_OpenUser r;
 	struct samr_QueryUserInfo q;
@@ -471,7 +492,8 @@ static bool samsync_handle_user(struct torture_context *tctx, TALLOC_CTX *mem_ct
 	struct samr_GetGroupsForUser getgroups;
 	struct samr_RidWithAttributeArray *rids;
 
-	if (!samsync_state->domain_name || !samsync_state->domain_handle[database_id]) {
+	if (domain == NULL ||
+	    samsync_state->domain_handle[database_id] == NULL) {
 		torture_comment(tctx, "SamSync needs domain information before the users\n");
 		return false;
 	}
@@ -683,8 +705,8 @@ static bool samsync_handle_user(struct torture_context *tctx, TALLOC_CTX *mem_ct
 		TEST_STRING_EQUAL(user->logon_script, info3->base.logon_script);
 
 
-		TEST_TIME_EQUAL(user->last_logon, info3->base.last_logon);
-		TEST_TIME_EQUAL(user->acct_expiry, info3->base.acct_expiry);
+		TEST_TIME_EQUAL(user->last_logon, info3->base.logon_time);
+		TEST_TIME_EQUAL(user->acct_expiry, info3->base.kickoff_time);
 		TEST_TIME_EQUAL(user->last_password_change, info3->base.last_password_change);
 		TEST_TIME_EQUAL(info->info21.force_password_change, info3->base.force_password_change);
 
@@ -695,8 +717,8 @@ static bool samsync_handle_user(struct torture_context *tctx, TALLOC_CTX *mem_ct
 		/* This copes with the two different versions of 0 I see */
 		/* with NT4 sp6 we have the || case */
 		if (!((user->last_logoff == 0)
-		      || (info3->base.last_logoff == 0x7fffffffffffffffLL))) {
-			TEST_TIME_EQUAL(user->last_logoff, info3->base.last_logoff);
+		      || (info3->base.logoff_time == 0x7fffffffffffffffLL))) {
+			TEST_TIME_EQUAL(user->last_logoff, info3->base.logoff_time);
 		}
 
 		TEST_INT_EQUAL(rids->count, info3->base.groups.count);
@@ -746,7 +768,17 @@ static bool samsync_handle_alias(struct torture_context *tctx,
 	union samr_AliasInfo *info;
 	struct policy_handle alias_handle;
 
-	if (!samsync_state->domain_name || !samsync_state->domain_handle[database_id]) {
+	switch (database_id) {
+	case SAM_DATABASE_DOMAIN:
+	case SAM_DATABASE_BUILTIN:
+		break;
+	case SAM_DATABASE_PRIVS:
+		torture_comment(tctx, "DOMAIN entry on privs DB!\n");
+		return false;
+	}
+
+	if (samsync_state->domain_name[database_id] == NULL ||
+	    samsync_state->domain_handle[database_id] == NULL) {
 		torture_comment(tctx, "SamSync needs domain information before the users\n");
 		return false;
 	}
@@ -799,7 +831,17 @@ static bool samsync_handle_group(struct torture_context *tctx,
 	union samr_GroupInfo *info;
 	struct policy_handle group_handle;
 
-	if (!samsync_state->domain_name || !samsync_state->domain_handle[database_id]) {
+	switch (database_id) {
+	case SAM_DATABASE_DOMAIN:
+	case SAM_DATABASE_BUILTIN:
+		break;
+	case SAM_DATABASE_PRIVS:
+		torture_comment(tctx, "DOMAIN entry on privs DB!\n");
+		return false;
+	}
+
+	if (samsync_state->domain_name[database_id] == NULL ||
+	    samsync_state->domain_handle[database_id] == NULL) {
 		torture_comment(tctx, "SamSync needs domain information before the users\n");
 		return false;
 	}

@@ -187,7 +187,9 @@ static int parse_quota_set(TALLOC_CTX *ctx,
 
 	switch (todo) {
 		case PARSE_LIM:
-			if (sscanf(p,"%"PRIu64"/%"PRIu64,&pqt->softlim,&pqt->hardlim)!=2) {
+			if (sscanf(p,"%"SCNu64"/%"SCNu64,&pqt->softlim,
+			    &pqt->hardlim) != 2)
+			{
 				return -1;
 			}
 
@@ -504,11 +506,8 @@ static int do_quota(struct cli_state *cli,
 static struct cli_state *connect_one(const char *share)
 {
 	struct cli_state *c;
-	struct sockaddr_storage ss;
 	NTSTATUS nt_status;
 	uint32_t flags = 0;
-
-	zero_sockaddr(&ss);
 
 	if (get_cmdline_auth_info_use_machine_account(smbcquotas_auth_info) &&
 	    !set_cmdline_auth_info_machine_account_creds(smbcquotas_auth_info)) {
@@ -523,8 +522,8 @@ static struct cli_state *connect_one(const char *share)
 
 	set_cmdline_auth_info_getpass(smbcquotas_auth_info);
 
-	nt_status = cli_full_connection(&c, global_myname(), server, 
-					    &ss, 0,
+	nt_status = cli_full_connection(&c, lp_netbios_name(), server,
+					    NULL, 0,
 					    share, "?????",
 					    get_cmdline_auth_info_username(smbcquotas_auth_info),
 					    lp_workgroup(),
@@ -583,7 +582,7 @@ FSQLIM:<softlimit>/<hardlimit> for filesystem defaults\n\
 FSQFLAGS:QUOTA_ENABLED/DENY_DISK/LOG_SOFTLIMIT/LOG_HARD_LIMIT", "SETSTRING" },
 		{ "numeric", 'n', POPT_ARG_NONE, NULL, 'n', "Don't resolve sids or limits to names" },
 		{ "verbose", 'v', POPT_ARG_NONE, NULL, 'v', "be verbose" },
-		{ "test-args", 't', POPT_ARG_NONE, NULL, 'r', "Test arguments"},
+		{ "test-args", 't', POPT_ARG_NONE, NULL, 't', "Test arguments"},
 		POPT_COMMON_SAMBA
 		POPT_COMMON_CREDENTIALS
 		{ NULL }
@@ -599,9 +598,9 @@ FSQFLAGS:QUOTA_ENABLED/DENY_DISK/LOG_SOFTLIMIT/LOG_HARD_LIMIT", "SETSTRING" },
 
 	setlinebuf(stdout);
 
-	fault_setup(NULL);
+	fault_setup();
 
-	lp_load(get_dyn_CONFIGFILE(),True,False,False,True);
+	lp_load_global(get_dyn_CONFIGFILE());
 	load_interfaces();
 
 	smbcquotas_auth_info = user_auth_info_init(frame);
@@ -690,6 +689,9 @@ FSQFLAGS:QUOTA_ENABLED/DENY_DISK/LOG_SOFTLIMIT/LOG_HARD_LIMIT", "SETSTRING" },
 		printf("Out of memory\n");
 		exit(EXIT_PARSE_ERROR);
 	}
+
+	poptFreeContext(pc);
+	popt_burn_cmdline_password(argc, argv);
 
 	string_replace(path, '/', '\\');
 

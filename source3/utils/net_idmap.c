@@ -22,7 +22,8 @@
 #include "utils/net.h"
 #include "secrets.h"
 #include "idmap.h"
-#include "dbwrap.h"
+#include "dbwrap/dbwrap.h"
+#include "dbwrap/dbwrap_open.h"
 #include "../libcli/security/security.h"
 #include "net_idmap_check.h"
 #include "util_tdb.h"
@@ -34,63 +35,146 @@
 		return -1; \
 	} } while(0)
 
-/***********************************************************
- Helper function for net_idmap_dump. Dump one entry.
- **********************************************************/
-static int net_idmap_dump_one_entry(struct db_record *rec,
-				    void *unused)
+enum idmap_dump_backend {
+	TDB,
+	AUTORID
+};
+
+struct idmap_dump_ctx {
+	enum idmap_dump_backend backend;
+};
+
+static int net_idmap_dump_one_autorid_entry(struct db_record *rec,
+					    void *unused)
 {
-	if (strcmp((char *)rec->key.dptr, "USER HWM") == 0) {
-		printf(_("USER HWM %d\n"), IVAL(rec->value.dptr,0));
+	TDB_DATA key;
+	TDB_DATA value;
+
+	key = dbwrap_record_get_key(rec);
+	value = dbwrap_record_get_value(rec);
+
+	if (strncmp((char *)key.dptr, "CONFIG", 6) == 0) {
+		char *config = talloc_array(talloc_tos(), char, value.dsize+1);
+		memcpy(config, value.dptr, value.dsize);
+		config[value.dsize] = '\0';
+		printf("CONFIG: %s\n", config);
+		talloc_free(config);
 		return 0;
 	}
 
-	if (strcmp((char *)rec->key.dptr, "GROUP HWM") == 0) {
-		printf(_("GROUP HWM %d\n"), IVAL(rec->value.dptr,0));
+	if (strncmp((char *)key.dptr, "NEXT RANGE", 10) == 0) {
+		printf("RANGE HWM: %"PRIu32"\n", IVAL(value.dptr, 0));
 		return 0;
 	}
 
-	if (strncmp((char *)rec->key.dptr, "S-", 2) != 0)
+	if (strncmp((char *)key.dptr, "NEXT ALLOC UID", 14) == 0) {
+		printf("UID HWM: %"PRIu32"\n", IVAL(value.dptr, 0));
 		return 0;
+	}
 
-	printf("%s %s\n", rec->value.dptr, rec->key.dptr);
+	if (strncmp((char *)key.dptr, "NEXT ALLOC GID", 14) == 0) {
+		printf("GID HWM: %"PRIu32"\n", IVAL(value.dptr, 0));
+		return 0;
+	}
+
+	if (strncmp((char *)key.dptr, "UID", 3) == 0 ||
+	    strncmp((char *)key.dptr, "GID", 3) == 0)
+	{
+		/* mapped entry from allocation pool */
+		printf("%s %s\n", value.dptr, key.dptr);
+		return 0;
+	}
+
+	if ((strncmp((char *)key.dptr, "S-1-5-", 6) == 0 ||
+	     strncmp((char *)key.dptr, "ALLOC", 5) == 0) &&
+	    value.dsize == sizeof(uint32_t))
+	{
+		/* this is a domain range assignment */
+		uint32_t range = IVAL(value.dptr, 0);
+		printf("RANGE %"PRIu32": %s\n", range, key.dptr);
+		return 0;
+	}
+
 	return 0;
 }
 
-static const char* net_idmap_dbfile(struct net_context *c)
+/***********************************************************
+ Helper function for net_idmap_dump. Dump one entry.
+ **********************************************************/
+static int net_idmap_dump_one_tdb_entry(struct db_record *rec,
+					void *unused)
+{
+	TDB_DATA key;
+	TDB_DATA value;
+
+	key = dbwrap_record_get_key(rec);
+	value = dbwrap_record_get_value(rec);
+
+	if (strcmp((char *)key.dptr, "USER HWM") == 0) {
+		printf(_("USER HWM %d\n"), IVAL(value.dptr,0));
+		return 0;
+	}
+
+	if (strcmp((char *)key.dptr, "GROUP HWM") == 0) {
+		printf(_("GROUP HWM %d\n"), IVAL(value.dptr,0));
+		return 0;
+	}
+
+	if (strncmp((char *)key.dptr, "S-", 2) != 0) {
+		return 0;
+	}
+
+	printf("%s %s\n", value.dptr, key.dptr);
+	return 0;
+}
+
+static const char* net_idmap_dbfile(struct net_context *c,
+				    struct idmap_dump_ctx *ctx)
 {
 	const char* dbfile = NULL;
+	const char *backend = NULL;
+
+	backend = lp_idmap_default_backend();
+	if (!backend) {
+		d_printf(_("Internal error: 'idmap config * : backend' is not set!\n"));
+		return NULL;
+	}
 
 	if (c->opt_db != NULL) {
 		dbfile = talloc_strdup(talloc_tos(), c->opt_db);
 		if (dbfile == NULL) {
 			d_fprintf(stderr, _("Out of memory!\n"));
 		}
-	} else if (strequal(lp_idmap_backend(), "tdb")) {
+	} else if (strequal(backend, "tdb")) {
 		dbfile = state_path("winbindd_idmap.tdb");
 		if (dbfile == NULL) {
 			d_fprintf(stderr, _("Out of memory!\n"));
 		}
-	} else if (strequal(lp_idmap_backend(), "tdb2")) {
-		dbfile = lp_parm_talloc_string(-1, "tdb", "idmap2.tdb", NULL);
-		if (dbfile == NULL) {
-			dbfile = talloc_asprintf(talloc_tos(), "%s/idmap2.tdb",
-						 lp_private_dir());
-		}
+		ctx->backend = TDB;
+	} else if (strequal(backend, "tdb2")) {
+		dbfile = talloc_asprintf(talloc_tos(), "%s/idmap2.tdb",
+					 lp_private_dir());
 		if (dbfile == NULL) {
 			d_fprintf(stderr, _("Out of memory!\n"));
 		}
+		ctx->backend = TDB;
+	} else if (strequal(backend, "autorid")) {
+		dbfile = state_path("autorid.tdb");
+		if (dbfile == NULL) {
+			d_fprintf(stderr, _("Out of memory!\n"));
+		}
+		ctx->backend = AUTORID;
 	} else {
-		char* backend = talloc_strdup(talloc_tos(), lp_idmap_backend());
-		char* args = strchr(backend, ':');
+		char *_backend = talloc_strdup(talloc_tos(), backend);
+		char* args = strchr(_backend, ':');
 		if (args != NULL) {
 			*args = '\0';
 		}
 
 		d_printf(_("Sorry, 'idmap backend = %s' is currently not supported\n"),
-			 backend);
+			   _backend);
 
-		talloc_free(backend);
+		talloc_free(_backend);
 	}
 
 	return dbfile;
@@ -104,7 +188,9 @@ static int net_idmap_dump(struct net_context *c, int argc, const char **argv)
 	struct db_context *db;
 	TALLOC_CTX *mem_ctx;
 	const char* dbfile;
+	NTSTATUS status;
 	int ret = -1;
+	struct idmap_dump_ctx ctx = { .backend = TDB };
 
 	if ( argc > 1  || c->display_usage) {
 		d_printf("%s\n%s",
@@ -117,20 +203,35 @@ static int net_idmap_dump(struct net_context *c, int argc, const char **argv)
 
 	mem_ctx = talloc_stackframe();
 
-	dbfile = (argc > 0) ? argv[0] : net_idmap_dbfile(c);
+	dbfile = (argc > 0) ? argv[0] : net_idmap_dbfile(c, &ctx);
 	if (dbfile == NULL) {
 		goto done;
 	}
 	d_fprintf(stderr, _("dumping id mapping from %s\n"), dbfile);
 
-	db = db_open(mem_ctx, dbfile, 0, TDB_DEFAULT, O_RDONLY, 0);
+	db = db_open(mem_ctx, dbfile, 0, TDB_DEFAULT, O_RDONLY, 0,
+		     DBWRAP_LOCK_ORDER_1);
 	if (db == NULL) {
 		d_fprintf(stderr, _("Could not open idmap db (%s): %s\n"),
 			  dbfile, strerror(errno));
 		goto done;
 	}
 
-	db->traverse_read(db, net_idmap_dump_one_entry, NULL);
+	if (ctx.backend == AUTORID) {
+		status = dbwrap_traverse_read(db,
+					      net_idmap_dump_one_autorid_entry,
+					      NULL, NULL);
+	} else {
+		status = dbwrap_traverse_read(db,
+					      net_idmap_dump_one_tdb_entry,
+					      NULL, NULL);
+	}
+	if (!NT_STATUS_IS_OK(status)) {
+		d_fprintf(stderr, _("error traversing the database\n"));
+		ret = -1;
+		goto done;
+	}
+
 	ret = 0;
 
 done:
@@ -191,6 +292,7 @@ static int net_idmap_restore(struct net_context *c, int argc, const char **argv)
 	struct db_context *db;
 	const char *dbfile = NULL;
 	int ret = 0;
+	struct idmap_dump_ctx ctx = { .backend = TDB };
 
 	if (c->display_usage) {
 		d_printf("%s\n%s",
@@ -205,9 +307,16 @@ static int net_idmap_restore(struct net_context *c, int argc, const char **argv)
 
 	mem_ctx = talloc_stackframe();
 
-	dbfile = net_idmap_dbfile(c);
+	dbfile = net_idmap_dbfile(c, &ctx);
 
 	if (dbfile == NULL) {
+		ret = -1;
+		goto done;
+	}
+
+	if (ctx.backend != TDB) {
+		d_fprintf(stderr, _("Sorry, restoring of non-TDB databases is "
+				    "currently not supported\n"));
 		ret = -1;
 		goto done;
 	}
@@ -226,7 +335,8 @@ static int net_idmap_restore(struct net_context *c, int argc, const char **argv)
 		input = stdin;
 	}
 
-	db = db_open(mem_ctx, dbfile, 0, TDB_DEFAULT, O_RDWR|O_CREAT, 0644);
+	db = db_open(mem_ctx, dbfile, 0, TDB_DEFAULT, O_RDWR|O_CREAT, 0644,
+		     DBWRAP_LOCK_ORDER_1);
 	if (db == NULL) {
 		d_fprintf(stderr, _("Could not open idmap db (%s): %s\n"),
 			  dbfile, strerror(errno));
@@ -234,7 +344,7 @@ static int net_idmap_restore(struct net_context *c, int argc, const char **argv)
 		goto done;
 	}
 
-	if (db->transaction_start(db) != 0) {
+	if (dbwrap_transaction_start(db) != 0) {
 		d_fprintf(stderr, _("Failed to start transaction.\n"));
 		ret = -1;
 		goto done;
@@ -244,6 +354,7 @@ static int net_idmap_restore(struct net_context *c, int argc, const char **argv)
 		char line[128], sid_string[128];
 		int len;
 		unsigned long idval;
+		NTSTATUS status;
 
 		if (fgets(line, 127, input) == NULL)
 			break;
@@ -268,16 +379,21 @@ static int net_idmap_restore(struct net_context *c, int argc, const char **argv)
 				break;
 			}
 		} else if (sscanf(line, "USER HWM %lu", &idval) == 1) {
-			ret = dbwrap_store_int32(db, "USER HWM", idval);
-			if (ret != 0) {
-				d_fprintf(stderr, _("Could not store USER HWM.\n"));
+			status = dbwrap_store_int32_bystring(
+				db, "USER HWM", idval);
+			if (!NT_STATUS_IS_OK(status)) {
+				d_fprintf(stderr,
+					  _("Could not store USER HWM: %s\n"),
+					  nt_errstr(status));
 				break;
 			}
 		} else if (sscanf(line, "GROUP HWM %lu", &idval) == 1) {
-			ret = dbwrap_store_int32(db, "GROUP HWM", idval);
-			if (ret != 0) {
+			status = dbwrap_store_int32_bystring(
+				db, "GROUP HWM", idval);
+			if (!NT_STATUS_IS_OK(status)) {
 				d_fprintf(stderr,
-					  _("Could not store GROUP HWM.\n"));
+					  _("Could not store GROUP HWM: %s\n"),
+					  nt_errstr(status));
 				break;
 			}
 		} else {
@@ -288,12 +404,12 @@ static int net_idmap_restore(struct net_context *c, int argc, const char **argv)
 	}
 
 	if (ret == 0) {
-		if(db->transaction_commit(db) != 0) {
+		if(dbwrap_transaction_commit(db) != 0) {
 			d_fprintf(stderr, _("Failed to commit transaction.\n"));
 			ret = -1;
 		}
 	} else {
-		if (db->transaction_cancel(db) != 0) {
+		if (dbwrap_transaction_cancel(db) != 0) {
 			d_fprintf(stderr, _("Failed to cancel transaction.\n"));
 		}
 	}
@@ -310,62 +426,66 @@ done:
 static
 NTSTATUS dbwrap_delete_mapping(struct db_context *db, TDB_DATA key1, bool force)
 {
-	TALLOC_CTX* mem_ctx = talloc_tos();
-	struct db_record *rec1=NULL, *rec2=NULL;
-	TDB_DATA key2;
+	TALLOC_CTX *mem_ctx = talloc_stackframe();
 	bool is_valid_mapping;
 	NTSTATUS status = NT_STATUS_OK;
+	TDB_DATA val1, val2;
 
-	rec1 = db->fetch_locked(db, mem_ctx, key1);
-	if (rec1 == NULL) {
+	ZERO_STRUCT(val1);
+	ZERO_STRUCT(val2);
+
+	status = dbwrap_fetch(db, mem_ctx, key1, &val1);
+	if (!NT_STATUS_IS_OK(status)) {
 		DEBUG(1, ("failed to fetch: %.*s\n", (int)key1.dsize, key1.dptr));
-		status = NT_STATUS_NO_MEMORY;
 		goto done;
 	}
-	key2 = rec1->value;
-	if (key2.dptr == NULL) {
-		DEBUG(1, ("could not find %.*s\n", (int)key1.dsize, key1.dptr));
-		status = NT_STATUS_NOT_FOUND;
+
+	if (val1.dptr == NULL) {
+		DEBUG(1, ("invalid mapping: %.*s -> empty value\n",
+			  (int)key1.dsize, key1.dptr));
+		status = NT_STATUS_FILE_INVALID;
 		goto done;
 	}
 
 	DEBUG(2, ("mapping: %.*s -> %.*s\n",
-		  (int)key1.dsize, key1.dptr, (int)key2.dsize, key2.dptr));
+		  (int)key1.dsize, key1.dptr, (int)val1.dsize, val1.dptr));
 
-	rec2 = db->fetch_locked(db, mem_ctx, key2);
-	if (rec2 == NULL) {
-		DEBUG(1, ("failed to fetch: %.*s\n", (int)key2.dsize, key2.dptr));
-		status = NT_STATUS_NO_MEMORY;
+	status = dbwrap_fetch(db, mem_ctx, val1, &val2);
+	if (!NT_STATUS_IS_OK(status)) {
+		DEBUG(1, ("failed to fetch: %.*s\n", (int)val1.dsize, val1.dptr));
 		goto done;
 	}
 
-	is_valid_mapping = tdb_data_equal(key1, rec2->value);
+	is_valid_mapping = tdb_data_equal(key1, val2);
 
 	if (!is_valid_mapping) {
 		DEBUG(1, ("invalid mapping: %.*s -> %.*s -> %.*s\n",
-			  (int)key1.dsize, key1.dptr, (int)key2.dsize, key2.dptr,
-			  (int)rec2->value.dsize, rec2->value.dptr ));
+			  (int)key1.dsize, key1.dptr,
+			  (int)val1.dsize, val1.dptr,
+			  (int)val2.dsize, val2.dptr));
 		if ( !force ) {
 			status = NT_STATUS_FILE_INVALID;
 			goto done;
 		}
 	}
 
-	status = rec1->delete_rec(rec1);
+	status = dbwrap_delete(db, key1);
 	if (!NT_STATUS_IS_OK(status)) {
 		DEBUG(1, ("failed to delete: %.*s\n", (int)key1.dsize, key1.dptr));
 		goto done;
 	}
 
-	if (is_valid_mapping) {
-		status = rec2->delete_rec(rec2);
-		if (!NT_STATUS_IS_OK(status)) {
-			DEBUG(1, ("failed to delete: %.*s\n", (int)key2.dsize, key2.dptr));
-		}
+	if (!is_valid_mapping) {
+		goto done;
 	}
+
+	status = dbwrap_delete(db, val1);
+	if (!NT_STATUS_IS_OK(status)) {
+		DEBUG(1, ("failed to delete: %.*s\n", (int)val1.dsize, val1.dptr));
+	}
+
 done:
-	TALLOC_FREE(rec1);
-	TALLOC_FREE(rec2);
+	talloc_free(mem_ctx);
 	return status;
 }
 
@@ -404,6 +524,7 @@ static int net_idmap_delete(struct net_context *c, int argc, const char **argv)
 	TDB_DATA key;
 	NTSTATUS status;
 	const char* dbfile;
+	struct idmap_dump_ctx ctx = { .backend = TDB };
 
 	if ( !delete_args_ok(argc,argv) || c->display_usage) {
 		d_printf("%s\n%s",
@@ -418,13 +539,14 @@ static int net_idmap_delete(struct net_context *c, int argc, const char **argv)
 
 	mem_ctx = talloc_stackframe();
 
-	dbfile = net_idmap_dbfile(c);
+	dbfile = net_idmap_dbfile(c, &ctx);
 	if (dbfile == NULL) {
 		goto done;
 	}
 	d_fprintf(stderr, _("deleting id mapping from %s\n"), dbfile);
 
-	db = db_open(mem_ctx, dbfile, 0, TDB_DEFAULT, O_RDWR, 0);
+	db = db_open(mem_ctx, dbfile, 0, TDB_DEFAULT, O_RDWR, 0,
+		     DBWRAP_LOCK_ORDER_1);
 	if (db == NULL) {
 		d_fprintf(stderr, _("Could not open idmap db (%s): %s\n"),
 			  dbfile, strerror(errno));
@@ -466,7 +588,11 @@ static bool idmap_store_secret(const char *backend,
 
 	if (r < 0) return false;
 
-	strupper_m(tmp); /* make sure the key is case insensitive */
+	/* make sure the key is case insensitive */
+	if (!strupper_m(tmp)) {
+		free(tmp);
+		return false;
+	}
 	ret = secrets_store_generic(tmp, identity, secret);
 
 	free(tmp);
@@ -508,9 +634,11 @@ static int net_idmap_secret(struct net_context *c, int argc, const char **argv)
 	backend = talloc_strdup(ctx, lp_parm_const_string(-1, opt, "backend", "tdb"));
 	ALLOC_CHECK(backend);
 
-	if ( ( ! backend) || ( ! strequal(backend, "ldap"))) {
+	if ((!backend) || (!strequal(backend, "ldap") &&
+			   !strequal(backend, "rfc2307"))) {
 		d_fprintf(stderr,
-			  _("The only currently supported backend is LDAP\n"));
+			  _("The only currently supported backend are LDAP "
+			    "and rfc2307\n"));
 		talloc_free(ctx);
 		return -1;
 	}
@@ -540,6 +668,7 @@ static int net_idmap_check(struct net_context *c, int argc, const char **argv)
 {
 	const char* dbfile;
 	struct check_options opts;
+	struct idmap_dump_ctx ctx = { .backend = TDB };
 
 	if ( argc > 1 || c->display_usage) {
 		d_printf("%s\n%s",
@@ -556,10 +685,17 @@ static int net_idmap_check(struct net_context *c, int argc, const char **argv)
 		return c->display_usage ? 0 : -1;
 	}
 
-	dbfile = (argc > 0) ? argv[0] : net_idmap_dbfile(c);
+	dbfile = (argc > 0) ? argv[0] : net_idmap_dbfile(c, &ctx);
 	if (dbfile == NULL) {
 		return -1;
 	}
+
+	if (ctx.backend != TDB) {
+		d_fprintf(stderr, _("Sorry, checking of non-TDB databases is "
+				    "currently not supported\n"));
+		return -1;
+	}
+
 	d_fprintf(stderr, _("check database: %s\n"), dbfile);
 
 	opts = (struct check_options) {
@@ -572,70 +708,6 @@ static int net_idmap_check(struct net_context *c, int argc, const char **argv)
 	};
 
 	return net_idmap_check_db(dbfile, &opts);
-}
-
-static int net_idmap_aclmapset(struct net_context *c, int argc, const char **argv)
-{
-	TALLOC_CTX *mem_ctx;
-	int result = -1;
-	struct dom_sid src_sid, dst_sid;
-	char *src, *dst;
-	struct db_context *db;
-	struct db_record *rec;
-	NTSTATUS status;
-
-	if (argc != 3 || c->display_usage) {
-		d_fprintf(stderr, "%s net idmap aclmapset <tdb> "
-			  "<src-sid> <dst-sid>\n", _("Usage:"));
-		return -1;
-	}
-
-	if (!(mem_ctx = talloc_init("net idmap aclmapset"))) {
-		d_fprintf(stderr, _("talloc_init failed\n"));
-		return -1;
-	}
-
-	if (!(db = db_open(mem_ctx, argv[0], 0, TDB_DEFAULT,
-			   O_RDWR|O_CREAT, 0600))) {
-		d_fprintf(stderr, _("db_open failed: %s\n"), strerror(errno));
-		goto fail;
-	}
-
-	if (!string_to_sid(&src_sid, argv[1])) {
-		d_fprintf(stderr, _("%s is not a valid sid\n"), argv[1]);
-		goto fail;
-	}
-
-	if (!string_to_sid(&dst_sid, argv[2])) {
-		d_fprintf(stderr, _("%s is not a valid sid\n"), argv[2]);
-		goto fail;
-	}
-
-	if (!(src = sid_string_talloc(mem_ctx, &src_sid))
-	    || !(dst = sid_string_talloc(mem_ctx, &dst_sid))) {
-		d_fprintf(stderr, _("talloc_strdup failed\n"));
-		goto fail;
-	}
-
-	if (!(rec = db->fetch_locked(
-		      db, mem_ctx, string_term_tdb_data(src)))) {
-		d_fprintf(stderr, _("could not fetch db record\n"));
-		goto fail;
-	}
-
-	status = rec->store(rec, string_term_tdb_data(dst), 0);
-	TALLOC_FREE(rec);
-
-	if (!NT_STATUS_IS_OK(status)) {
-		d_fprintf(stderr, _("could not store record: %s\n"),
-			  nt_errstr(status));
-		goto fail;
-	}
-
-	result = 0;
-fail:
-	TALLOC_FREE(mem_ctx);
-	return result;
 }
 
 /***********************************************************
@@ -683,14 +755,6 @@ int net_idmap(struct net_context *c, int argc, const char **argv)
 			N_("Set secret for specified domain"),
 			N_("net idmap secret <DOMAIN> <secret>\n"
 			   "  Set secret for specified domain")
-		},
-		{
-			"aclmapset",
-			net_idmap_aclmapset,
-			NET_TRANSPORT_LOCAL,
-			N_("Set acl map"),
-			N_("net idmap aclmapset\n"
-			   "  Set acl map")
 		},
 		{
 			"check",

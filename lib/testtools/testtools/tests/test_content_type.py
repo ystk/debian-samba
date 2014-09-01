@@ -1,8 +1,12 @@
-# Copyright (c) 2008 Jonathan M. Lange. See LICENSE for details.
+# Copyright (c) 2008, 2012 testtools developers. See LICENSE for details.
 
 from testtools import TestCase
 from testtools.matchers import Equals, MatchesException, Raises
-from testtools.content_type import ContentType, UTF8_TEXT
+from testtools.content_type import (
+    ContentType,
+    JSON,
+    UTF8_TEXT,
+    )
 
 
 class TestContentType(TestCase):
@@ -31,6 +35,16 @@ class TestContentType(TestCase):
         self.assertTrue(content_type1.__eq__(content_type2))
         self.assertFalse(content_type1.__eq__(content_type3))
 
+    def test_basic_repr(self):
+        content_type = ContentType('text', 'plain')
+        self.assertThat(repr(content_type), Equals('text/plain'))
+
+    def test_extended_repr(self):
+        content_type = ContentType(
+            'text', 'plain', {'foo': 'bar', 'baz': 'qux'})
+        self.assertThat(
+            repr(content_type), Equals('text/plain; baz="qux", foo="bar"'))
+
 
 class TestBuiltinContentTypes(TestCase):
 
@@ -39,6 +53,12 @@ class TestBuiltinContentTypes(TestCase):
         self.assertThat(UTF8_TEXT.type, Equals('text'))
         self.assertThat(UTF8_TEXT.subtype, Equals('plain'))
         self.assertThat(UTF8_TEXT.parameters, Equals({'charset': 'utf8'}))
+
+    def test_json_content(self):
+        # The JSON content type represents implictly UTF-8 application/json.
+        self.assertThat(JSON.type, Equals('application'))
+        self.assertThat(JSON.subtype, Equals('json'))
+        self.assertThat(JSON.parameters, Equals({}))
 
 
 def test_suite():

@@ -25,6 +25,7 @@
 #include "libcli/auth/libcli_auth.h"
 #include "../libcli/samsync/samsync.h"
 #include "auth/gensec/gensec.h"
+#include "auth/gensec/schannel.h"
 #include "auth/credentials/credentials.h"
 #include "libcli/auth/schannel.h"
 #include "librpc/gen_ndr/ndr_netlogon.h"
@@ -269,7 +270,7 @@ NTSTATUS libnet_SamSync_netlogon(struct libnet_context *ctx, TALLOC_CTX *mem_ctx
 		} while (NT_STATUS_EQUAL(dbsync_nt_status, STATUS_MORE_ENTRIES));
 		
 		if (!NT_STATUS_IS_OK(dbsync_nt_status)) {
-			r->out.error_string = talloc_asprintf(mem_ctx, "libnet_SamSync_netlogon failed: unexpected inconsistancy. Should not get error %s here", nt_errstr(nt_status));
+			r->out.error_string = talloc_asprintf(mem_ctx, "libnet_SamSync_netlogon failed: unexpected inconsistency. Should not get error %s here", nt_errstr(dbsync_nt_status));
 			talloc_free(samsync_ctx);
 			return dbsync_nt_status;
 		}

@@ -51,34 +51,6 @@ static NTSTATUS smbcli_link_internal(struct smbcli_tree *tree,
 }
 
 /****************************************************************************
- Map standard UNIX permissions onto wire representations.
-****************************************************************************/
-uint32_t unix_perms_to_wire(mode_t perms)
-{
-        unsigned int ret = 0;
-
-        ret |= ((perms & S_IXOTH) ?  UNIX_X_OTH : 0);
-        ret |= ((perms & S_IWOTH) ?  UNIX_W_OTH : 0);
-        ret |= ((perms & S_IROTH) ?  UNIX_R_OTH : 0);
-        ret |= ((perms & S_IXGRP) ?  UNIX_X_GRP : 0);
-        ret |= ((perms & S_IWGRP) ?  UNIX_W_GRP : 0);
-        ret |= ((perms & S_IRGRP) ?  UNIX_R_GRP : 0);
-        ret |= ((perms & S_IXUSR) ?  UNIX_X_USR : 0);
-        ret |= ((perms & S_IWUSR) ?  UNIX_W_USR : 0);
-        ret |= ((perms & S_IRUSR) ?  UNIX_R_USR : 0);
-#ifdef S_ISVTX
-        ret |= ((perms & S_ISVTX) ?  UNIX_STICKY : 0);
-#endif
-#ifdef S_ISGID
-        ret |= ((perms & S_ISGID) ?  UNIX_SET_GID : 0);
-#endif
-#ifdef S_ISUID
-        ret |= ((perms & S_ISUID) ?  UNIX_SET_UID : 0);
-#endif
-        return ret;
-}
-
-/****************************************************************************
  Symlink a file (UNIX extensions).
 ****************************************************************************/
 NTSTATUS smbcli_unix_symlink(struct smbcli_tree *tree, const char *fname_src, 
@@ -681,9 +653,10 @@ int smbcli_ctemp(struct smbcli_tree *tree, const char *path, char **tmp_path)
 	union smb_open open_parms;
 	TALLOC_CTX *mem_ctx;
 	NTSTATUS status;
+	int ret = -1;
 
 	mem_ctx = talloc_init("raw_open");
-	if (!mem_ctx) return -1;
+	if (!mem_ctx) return ret;
 
 	open_parms.openx.level = RAW_OPEN_CTEMP;
 	open_parms.ctemp.in.attrib = 0;
@@ -691,12 +664,12 @@ int smbcli_ctemp(struct smbcli_tree *tree, const char *path, char **tmp_path)
 	open_parms.ctemp.in.write_time = 0;
 
 	status = smb_raw_open(tree, mem_ctx, &open_parms);
-	if (tmp_path) {
-		*tmp_path = strdup(open_parms.ctemp.out.name);
+	if (NT_STATUS_IS_OK(status)) {
+		if (tmp_path) {
+			*tmp_path = strdup(open_parms.ctemp.out.name);
+		}
+		ret = open_parms.ctemp.out.file.fnum;
 	}
 	talloc_free(mem_ctx);
-	if (NT_STATUS_IS_OK(status)) {
-		return open_parms.ctemp.out.file.fnum;
-	}
-	return -1;
+	return ret;
 }

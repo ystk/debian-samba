@@ -34,7 +34,7 @@
 #include "libcli/auth/schannel.h"
 #include "smbd/process_model.h"
 #include "param/secrets.h"
-#include "smbd/pidfile.h"
+#include "lib/util/pidfile.h"
 #include "param/param.h"
 #include "dsdb/samdb/samdb.h"
 #include "auth/session.h"
@@ -42,6 +42,8 @@
 #include "librpc/gen_ndr/ndr_irpc.h"
 #include "cluster/cluster.h"
 #include "dynconfig/dynconfig.h"
+#include "lib/util/samba_modules.h"
+#include "nsswitch/winbind_client.h"
 
 /*
   recursively delete a directory tree
@@ -178,13 +180,8 @@ _NORETURN_ static void max_runtime_handler(struct tevent_context *ev,
 					   struct timeval t, void *private_data)
 {
 	const char *binary_name = (const char *)private_data;
-	struct timeval tv;
-	struct timezone tz;
-	if (gettimeofday(&tv, &tz) == 0) {
-		DEBUG(0,("%s: maximum runtime exceeded - terminating, current ts: %d\n", binary_name, (int)tv.tv_sec));
-	} else {
-		DEBUG(0,("%s: maximum runtime exceeded - terminating\n", binary_name));
-	}
+	DEBUG(0,("%s: maximum runtime exceeded - terminating at %llu, current ts: %llu\n",
+		 binary_name, (unsigned long long)t.tv_sec, (unsigned long long) time(NULL)));
 	exit(0);
 }
 
@@ -221,15 +218,18 @@ static NTSTATUS samba_terminate(struct irpc_message *msg,
 static NTSTATUS setup_parent_messaging(struct tevent_context *event_ctx, 
 				       struct loadparm_context *lp_ctx)
 {
-	struct messaging_context *msg;
+	struct imessaging_context *msg;
 	NTSTATUS status;
 
-	msg = messaging_init(talloc_autofree_context(), 
-			     lpcfg_messaging_path(event_ctx, lp_ctx),
-			     cluster_id(0, SAMBA_PARENT_TASKID), event_ctx);
+	msg = imessaging_init(talloc_autofree_context(),
+			      lp_ctx,
+			      cluster_id(0, SAMBA_PARENT_TASKID), event_ctx, false);
 	NT_STATUS_HAVE_NO_MEMORY(msg);
 
-	irpc_add_name(msg, "samba");
+	status = irpc_add_name(msg, "samba");
+	if (!NT_STATUS_IS_OK(status)) {
+		return status;
+	}
 
 	status = IRPC_REGISTER(msg, irpc, SAMBA_TERMINATE,
 			       samba_terminate, NULL);
@@ -257,9 +257,10 @@ static void show_build(void)
 		CONFIG_OPTION(DATADIR),
 		CONFIG_OPTION(MODULESDIR),
 		CONFIG_OPTION(LOCKDIR),
+		CONFIG_OPTION(STATEDIR),
+		CONFIG_OPTION(CACHEDIR),
 		CONFIG_OPTION(PIDDIR),
 		CONFIG_OPTION(PRIVATE_DIR),
-		CONFIG_OPTION(SWATDIR),
 		CONFIG_OPTION(CODEPAGEDIR),
 		CONFIG_OPTION(SETUPDIR),
 		CONFIG_OPTION(WINBINDD_SOCKET_DIR),
@@ -301,6 +302,7 @@ static int binary_smbd_main(const char *binary_name, int argc, const char *argv[
 	NTSTATUS status;
 	const char *model = "standard";
 	int max_runtime = 0;
+	struct stat st;
 	enum {
 		OPT_DAEMON = 1000,
 		OPT_INTERACTIVE,
@@ -366,7 +368,7 @@ static int binary_smbd_main(const char *binary_name, int argc, const char *argv[
 	umask(0);
 
 	DEBUG(0,("%s version %s started.\n", binary_name, SAMBA_VERSION_STRING));
-	DEBUGADD(0,("Copyright Andrew Tridgell and the Samba Team 1992-2011\n"));
+	DEBUGADD(0,("Copyright Andrew Tridgell and the Samba Team 1992-2013\n"));
 
 	if (sizeof(uint16_t) < 2 || sizeof(uint32_t) < 4 || sizeof(uint64_t) < 8) {
 		DEBUG(0,("ERROR: Samba is not configured correctly for the word size on your machine\n"));
@@ -388,23 +390,26 @@ static int binary_smbd_main(const char *binary_name, int argc, const char *argv[
 
 	pidfile_create(lpcfg_piddir(cmdline_lp_ctx), binary_name);
 
-	/* Do *not* remove this, until you have removed
-	 * passdb/secrets.c, and proved that Samba still builds... */
-	/* Setup the SECRETS subsystem */
-	if (secrets_init(talloc_autofree_context(), cmdline_lp_ctx) == NULL) {
+	/* Set up a database to hold a random seed, in case we don't
+	 * have /dev/urandom */
+	if (!randseed_init(talloc_autofree_context(), cmdline_lp_ctx)) {
 		return 1;
 	}
 
-	if (lpcfg_server_role(cmdline_lp_ctx) == ROLE_DOMAIN_CONTROLLER) {
-		if (!open_schannel_session_store(talloc_autofree_context(), lpcfg_private_dir(cmdline_lp_ctx))) {
-			DEBUG(0,("ERROR: Samba cannot open schannel store for secured NETLOGON operations.\n"));
-			exit(1);
+	if (lpcfg_server_role(cmdline_lp_ctx) == ROLE_ACTIVE_DIRECTORY_DC) {
+		if (!open_schannel_session_store(talloc_autofree_context(), cmdline_lp_ctx)) {
+			exit_daemon("Samba cannot open schannel store for secured NETLOGON operations.", EACCES);
 		}
 	}
 
-	gensec_init(cmdline_lp_ctx); /* FIXME: */
+	/* make sure we won't go through nss_winbind */
+	if (!winbind_off()) {
+		exit_daemon("Samba failed to disable recusive winbindd calls.", EACCES);
+	}
 
-	ntptr_init(cmdline_lp_ctx);	/* FIXME: maybe run this in the initialization function 
+	gensec_init(); /* FIXME: */
+
+	ntptr_init();	/* FIXME: maybe run this in the initialization function 
 						of the spoolss RPC server instead? */
 
 	ntvfs_init(cmdline_lp_ctx); 	/* FIXME: maybe run this in the initialization functions 
@@ -412,7 +417,7 @@ static int binary_smbd_main(const char *binary_name, int argc, const char *argv[
 
 	process_model_init(cmdline_lp_ctx); 
 
-	shared_init = load_samba_modules(NULL, cmdline_lp_ctx, "service");
+	shared_init = load_samba_modules(NULL, "service");
 
 	run_init_functions(static_init);
 	run_init_functions(shared_init);
@@ -424,8 +429,7 @@ static int binary_smbd_main(const char *binary_name, int argc, const char *argv[
 	event_ctx = s4_event_context_init(talloc_autofree_context());
 
 	if (event_ctx == NULL) {
-		DEBUG(0,("Initializing event context failed\n"));
-		return 1;
+		exit_daemon("Initializing event context failed", EACCES);
 	}
 
 	if (opt_interactive) {
@@ -440,31 +444,45 @@ static int binary_smbd_main(const char *binary_name, int argc, const char *argv[
 #ifdef SIGTTIN
 	signal(SIGTTIN, SIG_IGN);
 #endif
-	tevent_add_fd(event_ctx, event_ctx, 0, stdin_event_flags,
-		      server_stdin_handler,
-		      discard_const(binary_name));
+
+	if (fstat(0, &st) != 0) {
+		exit_daemon("Samba failed to set standard input handler", ENOTTY);
+	}
+
+	if (S_ISFIFO(st.st_mode) || S_ISSOCK(st.st_mode)) {
+		tevent_add_fd(event_ctx,
+				event_ctx,
+				0,
+				stdin_event_flags,
+				server_stdin_handler,
+				discard_const(binary_name));
+	}
 
 	if (max_runtime) {
-		struct timeval tv;
-		struct timezone tz;
-
-		if (gettimeofday(&tv, &tz) == 0) {
-			DEBUG(0,("Called with maxruntime %d - current ts %d\n", max_runtime, (int)tv.tv_sec));
-		} else {
-			DEBUG(0,("Called with maxruntime %d\n", max_runtime));
-		}
+		DEBUG(0,("Called with maxruntime %d - current ts %llu\n",
+		      max_runtime, (unsigned long long) time(NULL)));
 		tevent_add_timer(event_ctx, event_ctx,
 				 timeval_current_ofs(max_runtime, 0),
 				 max_runtime_handler,
 				 discard_const(binary_name));
 	}
 
+	if (lpcfg_server_role(cmdline_lp_ctx) != ROLE_ACTIVE_DIRECTORY_DC
+	    && !lpcfg_parm_bool(cmdline_lp_ctx, NULL, "server role check", "inhibit", false)
+	    && !str_list_check_ci(lpcfg_server_services(cmdline_lp_ctx), "smb") 
+	    && !str_list_check_ci(lpcfg_dcerpc_endpoint_servers(cmdline_lp_ctx), "remote")
+	    && !str_list_check_ci(lpcfg_dcerpc_endpoint_servers(cmdline_lp_ctx), "mapiproxy")) {
+		DEBUG(0, ("At this time the 'samba' binary should only be used for either:\n"));
+		DEBUGADD(0, ("'server role = active directory domain controller' or to access the ntvfs file server with 'server services = +smb' or the rpc proxy with 'dcerpc endpoint servers = remote'\n"));
+		DEBUGADD(0, ("You should start smbd/nmbd/winbindd instead for domain member and standalone file server tasks\n"));
+		exit_daemon("Samba detected misconfigured 'server role' and exited. Check logs for details", EINVAL);
+	};
+
 	prime_ldb_databases(event_ctx);
 
 	status = setup_parent_messaging(event_ctx, cmdline_lp_ctx);
 	if (!NT_STATUS_IS_OK(status)) {
-		DEBUG(0,("Failed to setup parent messaging - %s\n", nt_errstr(status)));
-		return 1;
+		exit_daemon("Samba failed to setup parent messaging", NT_STATUS_V(status));
 	}
 
 	DEBUG(0,("%s: using '%s' process model\n", binary_name, model));
@@ -472,8 +490,11 @@ static int binary_smbd_main(const char *binary_name, int argc, const char *argv[
 	status = server_service_startup(event_ctx, cmdline_lp_ctx, model, 
 					lpcfg_server_services(cmdline_lp_ctx));
 	if (!NT_STATUS_IS_OK(status)) {
-		DEBUG(0,("Starting Services failed - %s\n", nt_errstr(status)));
-		return 1;
+		exit_daemon("Samba failed to start services", NT_STATUS_V(status));
+	}
+
+	if (opt_daemon) {
+		daemon_ready("samba");
 	}
 
 	/* wait for events - this is where smbd sits for most of its

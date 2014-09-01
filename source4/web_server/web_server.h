@@ -29,6 +29,7 @@ struct web_server_data {
 	void (*http_process_input)(struct web_server_data *wdata, 
 				   struct websrv_context *web);
 	void *private_data;
+	struct task_server *task;
 };
 
 struct http_header {
@@ -66,7 +67,7 @@ struct websrv_context {
 bool wsgi_initialize(struct web_server_data *wdata);
 void http_error(struct websrv_context *web, const char *status, const char *info);
 void websrv_output_headers(struct websrv_context *web, const char *status, struct http_header *headers);
-void websrv_output(struct websrv_context *web, void *data, size_t length);
+void websrv_output(struct websrv_context *web, const void *data, size_t length);
 NTSTATUS http_parse_header(struct websrv_context *web, const char *line);
 
 #endif /* __WEB_SERVER_H__ */

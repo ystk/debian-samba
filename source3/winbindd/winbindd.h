@@ -28,7 +28,6 @@
 #include "librpc/gen_ndr/wbint.h"
 
 #include "talloc_dict.h"
-#include "smb_ldap.h"
 
 #include "../lib/util/tevent_ntstatus.h"
 
@@ -138,8 +137,8 @@ struct winbindd_child {
 	struct tevent_queue *queue;
 	struct dcerpc_binding_handle *binding_handle;
 
-	struct timed_event *lockout_policy_event;
-	struct timed_event *machine_password_change_event;
+	struct tevent_timer *lockout_policy_event;
+	struct tevent_timer *machine_password_change_event;
 
 	const struct winbindd_child_dispatch_table *table;
 };
@@ -147,9 +146,9 @@ struct winbindd_child {
 /* Structures to hold per domain information */
 
 struct winbindd_domain {
-	fstring name;                          /* Domain name (NetBIOS) */
-	fstring alt_name;                      /* alt Domain name, if any (FQDN for ADS) */
-	fstring forest_name;                   /* Name of the AD forest we're in */
+	char *name;                            /* Domain name (NetBIOS) */
+	char *alt_name;                        /* alt Domain name, if any (FQDN for ADS) */
+	char *forest_name;                     /* Name of the AD forest we're in */
 	struct dom_sid sid;                           /* SID for this domain */
 	uint32 domain_flags;                   /* Domain flags from netlogon.h */
 	uint32 domain_type;                    /* Domain type from netlogon.h */
@@ -194,7 +193,7 @@ struct winbindd_domain {
 
 	/* A working DC */
 	pid_t dc_probe_pid; /* Child we're using to detect the DC. */
-	fstring dcname;
+	char *dcname;
 	struct sockaddr_storage dcaddr;
 
 	/* Sequence number stuff */
@@ -214,7 +213,7 @@ struct winbindd_domain {
 	/* Callback we use to try put us back online. */
 
 	uint32 check_online_timeout;
-	struct timed_event *check_online_event;
+	struct tevent_timer *check_online_event;
 
 	/* Linked list info */
 
@@ -387,7 +386,7 @@ struct WINBINDD_CCACHE_ENTRY {
 	time_t create_time;
 	time_t renew_until;
 	time_t refresh_time;
-	struct timed_event *event;
+	struct tevent_timer *event;
 };
 
 #include "winbindd/winbindd_proto.h"
@@ -396,7 +395,5 @@ struct WINBINDD_CCACHE_ENTRY {
 #define WINBINDD_RESCAN_FREQ lp_winbind_cache_time()
 #define WINBINDD_PAM_AUTH_KRB5_RENEW_TIME 2592000 /* one month */
 #define DOM_SEQUENCE_NONE ((uint32)-1)
-
-#define winbind_event_context server_event_context
 
 #endif /* _WINBINDD_H */

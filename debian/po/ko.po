@@ -1,11 +1,11 @@
-# Sunjae Park <darehanl@gmail.com>, 2006.
+# Sunjae Park <darehanl@gmail.com>, 2006 - 2008.
 #
 msgid ""
 msgstr ""
 "Project-Id-Version: samba\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2012-05-11 19:55+0200\n"
-"PO-Revision-Date: 2007-03-14 09:28-0400\n"
+"POT-Creation-Date: 2013-10-22 20:32+0200\n"
+"PO-Revision-Date: 2008-06-24 18:36-0400\n"
 "Last-Translator: Sunjae Park <darehanl@gmail.com>\n"
 "Language-Team: Korean <debian-l10n-korean@lists.debian.org>\n"
 "Language: ko\n"
@@ -13,6 +13,121 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
+
+#. Type: boolean
+#. Description
+#: ../samba-ad-dc.templates:1001
+msgid "Upgrade from Samba 3?"
+msgstr "삼바3로부터 업그레이드할까요?"
+
+#. Type: boolean
+#. Description
+#: ../samba-ad-dc.templates:1001
+msgid ""
+"It is possible to migrate the existing configuration files from Samba 3 to "
+"Samba 4. This is likely to fail for complex setups, but should provide a "
+"good starting point for most existing installations."
+msgstr ""
+"삼바3의 기존 설정파일을 삼바4로 이전 시키는 것이 가능합니다. 복잡하게 설정되"
+"어있는 경우에는 실패할 가능성이 높지만, 대부분의 경우 이것으로 시작하기 편할 "
+"것입니다."
+
+#. Type: select
+#. Description
+#: ../samba-ad-dc.templates:2001
+msgid "Server role"
+msgstr ""
+
+#. Type: select
+#. Description
+#: ../samba-ad-dc.templates:2001
+msgid ""
+"Domain controllers manage NT4-style or Active Directory domains and provide "
+"services such as identity management and domain logons. Each domain needs to "
+"have a at least one domain controller."
+msgstr ""
+
+#. Type: select
+#. Description
+#: ../samba-ad-dc.templates:2001
+msgid ""
+"Member servers can be part of a NT4-style or Active Directory domain but do "
+"not provide any domain services. Workstations and file or print servers are "
+"usually regular domain members."
+msgstr ""
+
+#. Type: select
+#. Description
+#: ../samba-ad-dc.templates:2001
+msgid ""
+"A standalone server can not be used in a domain and only supports file "
+"sharing and Windows for Workgroups-style logins."
+msgstr ""
+
+#. Type: select
+#. Description
+#: ../samba-ad-dc.templates:2001
+msgid ""
+"If no server role is specified, the Samba server will not be provisioned, so "
+"this can be done manually by the user."
+msgstr ""
+
+#. Type: string
+#. Description
+#: ../samba-ad-dc.templates:3001
+#, fuzzy
+msgid "Realm name:"
+msgstr "영역:"
+
+#. Type: string
+#. Description
+#: ../samba-ad-dc.templates:3001
+msgid ""
+"Please specify the Kerberos realm for the domain that this domain controller "
+"controls."
+msgstr ""
+
+#. Type: string
+#. Description
+#: ../samba-ad-dc.templates:3001
+msgid "Usually this is the a capitalized version of your DNS hostname."
+msgstr ""
+
+#. Type: password
+#. Description
+#: ../samba-ad-dc.templates:4001
+msgid "New password for the Samba \"administrator\" user:"
+msgstr ""
+
+#. Type: password
+#. Description
+#: ../samba-ad-dc.templates:4001
+msgid "If this field is left blank, a random password will be generated."
+msgstr ""
+
+#. Type: password
+#. Description
+#: ../samba-ad-dc.templates:4001
+msgid "A password can be set later by running, as root:"
+msgstr ""
+
+#. Type: password
+#. Description
+#: ../samba-ad-dc.templates:5001
+msgid "Repeat password for the Samba \"administrator\" user:"
+msgstr ""
+
+#. Type: error
+#. Description
+#: ../samba-ad-dc.templates:6001
+msgid "Password input error"
+msgstr ""
+
+#. Type: error
+#. Description
+#: ../samba-ad-dc.templates:6001
+msgid "The two passwords you entered were not the same. Please try again."
+msgstr ""
 
 #. Type: title
 #. Description
@@ -46,8 +161,8 @@ msgstr ""
 #. Description
 #: ../samba-common.templates:2001
 msgid ""
-"The dhcp3-client package must be installed to take advantage of this feature."
-msgstr "이 기능을 사용하기 위해서는 dhcp3-client 꾸러미를 설치해야 합니다."
+"The dhcp-client package must be installed to take advantage of this feature."
+msgstr "이 기능을 사용하기 위해서는 dhcp-client 꾸러미를 설치해야 합니다."
 
 #. Type: boolean
 #. Description
@@ -92,83 +207,55 @@ msgstr "작업그룹/도메인 이름:"
 #. Type: string
 #. Description
 #: ../samba-common.templates:4001
-#, fuzzy
 msgid ""
 "Please specify the workgroup for this system.  This setting controls which "
 "workgroup the system will appear in when used as a server, the default "
 "workgroup to be used when browsing with various frontends, and the domain "
 "name used with the \"security=domain\" setting."
 msgstr ""
-"클라이언트에서 질의가 들어올 때 이 서버가 소속된 작업그룹을 지정해주십시오. "
-"참고로 security=domain 방식의 설정을 사용할 경우 사용하는 도메인 이름도 이 매"
-"개변수를 통해 설정합니다."
 
-#. Type: boolean
-#. Description
-#: ../samba-common.templates:5001
-msgid "Use password encryption?"
-msgstr "비밀번호 암호화 기능을 사용할까요?"
+#~ msgid "Use password encryption?"
+#~ msgstr "비밀번호 암호화 기능을 사용할까요?"
 
-#. Type: boolean
-#. Description
-#: ../samba-common.templates:5001
-#, fuzzy
-msgid ""
-"All recent Windows clients communicate with SMB/CIFS servers using encrypted "
-"passwords. If you want to use clear text passwords you will need to change a "
-"parameter in your Windows registry."
-msgstr ""
-"최신 윈도우 클라이언트들은 모두 암호화된 비밀번호를 통해 SMB 서버와 통신합니"
-"다. 암호화 안 된 클리어텍스트 비밀번호를 사용하려면 윈도우 레지스트리에 있는 "
-"매개변수를 변경하셔야 합니다."
+#~ msgid "daemons"
+#~ msgstr "데몬"
 
-#. Type: boolean
-#. Description
-#: ../samba-common.templates:5001
-#, fuzzy
-msgid ""
-"Enabling this option is highly recommended as support for plain text "
-"passwords is no longer maintained in Microsoft Windows products. If you do, "
-"make sure you have a valid /etc/samba/smbpasswd file and that you set "
-"passwords in there for each user using the smbpasswd command."
-msgstr ""
-"이 기능을 활성화할 것을 강력히 권장합니다. 활성화할 경우, /etc/samba/"
-"smbpasswd 파일이 제대로이고 smbpasswd 명령을 사용하여 각 사용자들의 비밀번호"
-"를 전부 담고 있는지 확인하십시오."
+#~ msgid "inetd"
+#~ msgstr "inetd"
 
-#. Type: title
-#. Description
-#: ../samba.templates:1001
-msgid "Samba server"
-msgstr ""
+#~ msgid "How do you want to run Samba?"
+#~ msgstr "Samba를 어떻게 실행하시겠습니까?"
 
-#. Type: select
-#. Choices
-#: ../samba.templates:2001
-msgid "daemons"
-msgstr "데몬"
+#~ msgid ""
+#~ "The Samba daemon smbd can run as a normal daemon or from inetd. Running "
+#~ "as a daemon is the recommended approach."
+#~ msgstr ""
+#~ "Samba의 데몬인 smbd은 일반적인 데몬으로 실행할 수도 있고 inetd을 통해 실행"
+#~ "할 수도 있습니다. 데몬으로 실행할 것을 권장합니다."
 
-#. Type: select
-#. Choices
-#: ../samba.templates:2001
-msgid "inetd"
-msgstr "inetd"
+#~ msgid "Set up Samba 4 as a PDC?"
+#~ msgstr "삼바4를 PDC로 설정할까요?"
 
-#. Type: select
-#. Description
-#: ../samba.templates:2002
-msgid "How do you want to run Samba?"
-msgstr "Samba를 어떻게 실행하시겠습니까?"
+#~ msgid ""
+#~ "Even when using this option, you will need to set up DNS such that it "
+#~ "serves the data from the zone file in that directory before you can use "
+#~ "the Active Directory domain."
+#~ msgstr ""
+#~ "이 옵션을 사용하는 경우에도 Active Directory 도메인을 사용하기 전 DNS를 설"
+#~ "정하여 해당 디렉토리의 zone파일의 데이터를 사용하도록 해야 합니다."
 
-#. Type: select
-#. Description
-#: ../samba.templates:2002
-msgid ""
-"The Samba daemon smbd can run as a normal daemon or from inetd. Running as a "
-"daemon is the recommended approach."
-msgstr ""
-"Samba의 데몬인 smbd은 일반적인 데몬으로 실행할 수도 있고 inetd을 통해 실행할 "
-"수도 있습니다. 데몬으로 실행할 것을 권장합니다."
+#~ msgid ""
+#~ "Please specify the Kerberos realm this server will be in. In many cases,  "
+#~ "this will be the same as the DNS domain name."
+#~ msgstr ""
+#~ "이 서버가 소속될 Kerberos 영역을 지정해 주십시오. 많은 경우 DNS 도메인 이"
+#~ "름과 같을 것입니다."
+
+#~ msgid ""
+#~ "Please specify the domain you want this server to appear to be in when "
+#~ "queried by clients."
+#~ msgstr ""
+#~ "클라이언트에서 질의가 들어올 때 이 서버가 소속된 도메인을 지정해주십시오. "
 
 #~ msgid "Create samba password database, /var/lib/samba/passdb.tdb?"
 #~ msgstr "samba의 비밀번호 데이터베이스 /var/lib/samba/passdb.tdb를 만들까요?"

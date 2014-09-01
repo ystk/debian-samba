@@ -250,6 +250,8 @@ out:
 	return (int)ret;
 }
 
+#ifdef HAVE_ADS
+
 /**********************************************************************
  Adds a single service principal, i.e. 'host' to the system keytab
 ***********************************************************************/
@@ -261,9 +263,15 @@ int ads_keytab_add_entry(ADS_STRUCT *ads, const char *srvPrinc)
 	krb5_keytab keytab = NULL;
 	krb5_data password;
 	krb5_kvno kvno;
-        krb5_enctype enctypes[4] = {
+        krb5_enctype enctypes[6] = {
 		ENCTYPE_DES_CBC_CRC,
 		ENCTYPE_DES_CBC_MD5,
+#ifdef HAVE_ENCTYPE_AES128_CTS_HMAC_SHA1_96
+		ENCTYPE_AES128_CTS_HMAC_SHA1_96,
+#endif
+#ifdef HAVE_ENCTYPE_AES256_CTS_HMAC_SHA1_96
+		ENCTYPE_AES256_CTS_HMAC_SHA1_96,
+#endif
 		ENCTYPE_ARCFOUR_HMAC,
 		0
 	};
@@ -314,7 +322,7 @@ int ads_keytab_add_entry(ADS_STRUCT *ads, const char *srvPrinc)
 		goto out;
 	}
 
-	my_fqdn = ads_get_dnshostname(ads, tmpctx, global_myname());
+	my_fqdn = ads_get_dnshostname(ads, tmpctx, lp_netbios_name());
 	if (!my_fqdn) {
 		DEBUG(0, (__location__ ": unable to determine machine "
 			  "account's dns name in AD!\n"));
@@ -322,7 +330,7 @@ int ads_keytab_add_entry(ADS_STRUCT *ads, const char *srvPrinc)
 		goto out;
 	}
 
-	machine_name = ads_get_samaccountname(ads, tmpctx, global_myname());
+	machine_name = ads_get_samaccountname(ads, tmpctx, lp_netbios_name());
 	if (!machine_name) {
 		DEBUG(0, (__location__ ": unable to determine machine "
 			  "account's short name in AD!\n"));
@@ -362,7 +370,7 @@ int ads_keytab_add_entry(ADS_STRUCT *ads, const char *srvPrinc)
 		short_princ_s = talloc_asprintf(tmpctx, "%s/%s@%s",
 						srvPrinc, machine_name,
 						lp_realm());
-		if (!princ_s) {
+		if (short_princ_s == NULL) {
 			ret = -1;
 			goto out;
 		}
@@ -378,7 +386,7 @@ int ads_keytab_add_entry(ADS_STRUCT *ads, const char *srvPrinc)
 				  "'%s'\n", princ_s));
 
 			aderr = ads_add_service_principal_name(ads,
-					global_myname(), my_fqdn, srvPrinc);
+					lp_netbios_name(), my_fqdn, srvPrinc);
 			if (!ADS_ERR_OK(aderr)) {
 				DEBUG(1, (__location__ ": failed to "
 					 "ads_add_service_principal_name.\n"));
@@ -387,7 +395,7 @@ int ads_keytab_add_entry(ADS_STRUCT *ads, const char *srvPrinc)
 		}
 	}
 
-	kvno = (krb5_kvno)ads_get_machine_kvno(ads, global_myname());
+	kvno = (krb5_kvno)ads_get_machine_kvno(ads, lp_netbios_name());
 	if (kvno == -1) {
 		/* -1 indicates failure, everything else is OK */
 		DEBUG(1, (__location__ ": ads_get_machine_kvno failed to "
@@ -456,7 +464,7 @@ int ads_keytab_flush(ADS_STRUCT *ads)
 		goto out;
 	}
 
-	kvno = (krb5_kvno)ads_get_machine_kvno(ads, global_myname());
+	kvno = (krb5_kvno)ads_get_machine_kvno(ads, lp_netbios_name());
 	if (kvno == -1) {
 		/* -1 indicates a failure */
 		DEBUG(1, (__location__ ": Error determining the kvno.\n"));
@@ -470,7 +478,7 @@ int ads_keytab_flush(ADS_STRUCT *ads)
 		goto out;
 	}
 
-	aderr = ads_clear_service_principal_names(ads, global_myname());
+	aderr = ads_clear_service_principal_names(ads, lp_netbios_name());
 	if (!ADS_ERR_OK(aderr)) {
 		DEBUG(1, (__location__ ": Error while clearing service "
 			  "principal listings in LDAP.\n"));
@@ -545,7 +553,7 @@ int ads_keytab_create_default(ADS_STRUCT *ads)
 		goto done;
 	}
 
-	machine_name = talloc_strdup(tmpctx, global_myname());
+	machine_name = talloc_strdup(tmpctx, lp_netbios_name());
 	if (!machine_name) {
 		ret = -1;
 		goto done;
@@ -562,7 +570,10 @@ int ads_keytab_create_default(ADS_STRUCT *ads)
 
 	/* upper case the sAMAccountName to make it easier for apps to
 	   know what case to use in the keytab file */
-	strupper_m(sam_account_name);
+	if (!strupper_m(sam_account_name)) {
+		ret = -1;
+		goto done;
+	}
 
 	ret = ads_keytab_add_entry(ads, sam_account_name);
 	if (ret != 0) {
@@ -724,6 +735,8 @@ done:
 	return ret;
 }
 
+#endif /* HAVE_ADS */
+
 /**********************************************************************
  List system keytab.
 ***********************************************************************/
@@ -760,7 +773,7 @@ int ads_keytab_list(const char *keytab_name)
 		goto out;
 	}
 
-	printf("Vno  Type        Principal\n");
+	printf("Vno  Type                                        Principal\n");
 
 	while (krb5_kt_next_entry(context, keytab, &kt_entry, &cursor) == 0) {
 
@@ -783,7 +796,7 @@ int ads_keytab_list(const char *keytab_name)
 			goto out;
 		}
 
-		printf("%3d  %s\t\t %s\n", kt_entry.vno, etype_s, princ_s);
+		printf("%3d  %-43s %s\n", kt_entry.vno, etype_s, princ_s);
 
 		TALLOC_FREE(princ_s);
 		SAFE_FREE(etype_s);

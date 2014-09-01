@@ -1,4 +1,4 @@
-# Copyright (c) 2008, 2009, 2010 Jonathan M. Lange. See LICENSE for details.
+# Copyright (c) 2008-2012 testtools developers. See LICENSE for details.
 
 """Extensions to the standard Python unittest library."""
 
@@ -6,14 +6,20 @@ __all__ = [
     'clone_test_with_new_id',
     'ConcurrentTestSuite',
     'ErrorHolder',
+    'ExpectedException',
     'ExtendedToOriginalDecorator',
+    'FixtureSuite',
     'iterate_tests',
     'MultipleExceptions',
     'MultiTestResult',
     'PlaceHolder',
     'run_test_with',
+    'Tagger',
     'TestCase',
+    'TestCommand',
+    'TestByTestResult',
     'TestResult',
+    'TestResultDecorator',
     'TextTestResult',
     'RunTest',
     'skip',
@@ -28,15 +34,19 @@ from testtools.helpers import (
     try_import,
     try_imports,
     )
-from testtools.matchers import (
+from testtools.matchers._impl import (
     Matcher,
     )
+# Shut up, pyflakes. We are importing for documentation, not for namespacing.
+Matcher
+
 from testtools.runtest import (
     MultipleExceptions,
     RunTest,
     )
 from testtools.testcase import (
     ErrorHolder,
+    ExpectedException,
     PlaceHolder,
     TestCase,
     clone_test_with_new_id,
@@ -48,14 +58,21 @@ from testtools.testcase import (
 from testtools.testresult import (
     ExtendedToOriginalDecorator,
     MultiTestResult,
+    Tagger,
+    TestByTestResult,
     TestResult,
+    TestResultDecorator,
     TextTestResult,
     ThreadsafeForwardingResult,
     )
 from testtools.testsuite import (
     ConcurrentTestSuite,
+    FixtureSuite,
     iterate_tests,
     )
+from testtools.distutilscmd import (
+    TestCommand,
+)
 
 # same format as sys.version_info: "A tuple containing the five components of
 # the version number: major, minor, micro, releaselevel, and serial. All
@@ -69,4 +86,4 @@ from testtools.testsuite import (
 # If the releaselevel is 'final', then the tarball will be major.minor.micro.
 # Otherwise it is major.minor.micro~$(revno).
 
-__version__ = (0, 9, 9, 'dev', 0)
+__version__ = (0, 9, 25, 'dev', 0)

@@ -1,6 +1,6 @@
 #ifndef _PROFILE_H_
 #define _PROFILE_H_
-/* 
+/*
    Unix SMB/CIFS implementation.
    store smbd profiling information in shared memory
    Copyright (C) Andrew Tridgell 1999
@@ -10,12 +10,12 @@
    it under the terms of the GNU General Public License as published by
    the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
-   
+
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
-   
+
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
@@ -26,7 +26,7 @@
 
 #define PROF_SHMEM_KEY ((key_t)0x07021999)
 #define PROF_SHM_MAGIC 0x6349985
-#define PROF_SHM_VERSION 12
+#define PROF_SHM_VERSION 13
 
 /* time values in the following structure are in microseconds */
 
@@ -563,11 +563,6 @@ enum profile_stats_values
 #define SMBinvalid_count __profile_stats_value(PR_VALUE_SMBINVALID, count)
 #define SMBinvalid_time __profile_stats_value(PR_VALUE_SMBINVALID, time)
 
-/* Pathworks setdir command */
-	PR_VALUE_PATHWORKS_SETDIR,
-#define pathworks_setdir_count __profile_stats_value(PR_VALUE_PATHWORKS_SETDIR, count)
-#define pathworks_setdir_time __profile_stats_value(PR_VALUE_PATHWORKS_SETDIR, time)
-
 /* These are the TRANS2 sub commands */
 	PR_VALUE_TRANS2_OPEN,
 #define Trans2_open_count __profile_stats_value(PR_VALUE_TRANS2_OPEN, count)
@@ -935,12 +930,19 @@ static inline uint64_t profile_timestamp(void)
 		ADD_PROFILE_COUNT(x,n); \
 	}
 
+#define START_PROFILE_RAW(x, _stamp, _count) \
+	_stamp = 0; \
+	if (do_profile_flag) { \
+		_stamp = do_profile_times ? profile_timestamp() : 0;\
+		INC_PROFILE_COUNT(_count); \
+	}
+
+#define START_PROFILE_STAMP(x, _stamp) \
+	START_PROFILE_RAW(x, _stamp, x##_count)
+
 #define START_PROFILE(x) \
 	uint64_t __profstamp_##x = 0; \
-	if (do_profile_flag) { \
-		__profstamp_##x = do_profile_times ? profile_timestamp() : 0;\
-		INC_PROFILE_COUNT(x##_count); \
-  	}
+	START_PROFILE_RAW(x, __profstamp_##x, x##_count)
 
 #define START_PROFILE_BYTES(x,n) \
 	uint64_t __profstamp_##x = 0; \
@@ -950,19 +952,28 @@ static inline uint64_t profile_timestamp(void)
 		ADD_PROFILE_COUNT(x##_bytes, n); \
   	}
 
-#define END_PROFILE(x) \
+#define END_PROFILE_RAW(x, _stamp, _time) \
 	if (do_profile_times) { \
-		ADD_PROFILE_COUNT(x##_time, \
-		    profile_timestamp() - __profstamp_##x); \
+		ADD_PROFILE_COUNT(_time, \
+		    profile_timestamp() - _stamp); \
 	}
+
+#define END_PROFILE_STAMP(x, _stamp) \
+	END_PROFILE_RAW(x, _stamp, x##_time)
+
+#define END_PROFILE(x) \
+	END_PROFILE_RAW(x, __profstamp_##x, x##_time)
+
 #else /* WITH_PROFILE */
 
 #define DO_PROFILE_INC(x)
 #define DO_PROFILE_DEC(x)
 #define DO_PROFILE_DEC_INC(x,y)
 #define DO_PROFILE_ADD(x,n)
+#define START_PROFILE_STAMP(x, _stamp)
 #define START_PROFILE(x)
 #define START_PROFILE_BYTES(x,n)
+#define END_PROFILE_STAMP(x, _stamp)
 #define END_PROFILE(x)
 #endif /* WITH_PROFILE */
 

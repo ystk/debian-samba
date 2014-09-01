@@ -33,7 +33,7 @@ bool run_posix_append(int dummy)
 	const char *fname = "append";
 	NTSTATUS status;
 	uint16_t fnum;
-	SMB_OFF_T size;
+	off_t size;
 	uint8_t c = '\0';
 	bool ret = false;
 
@@ -57,7 +57,7 @@ bool run_posix_append(int dummy)
 		FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
 		FILE_OVERWRITE_IF,
 		FILE_NON_DIRECTORY_FILE|FILE_DELETE_ON_CLOSE,
-		0, &fnum);
+		0, &fnum, NULL);
 
 	if (!NT_STATUS_IS_OK(status)) {
 		printf("cli_ntcreate failed: %s\n", nt_errstr(status));

@@ -41,15 +41,6 @@ configure_smb_conf() {
 			s/^\([[:space:]]*\)workgroup[[:space:]]*=.*/\1workgroup = ${WORKGROUP}/i" \
 		"$CONFIG"
 
-	# Encrypt passwords?
-	db_get samba-common/encrypt_passwords || true
-	ENCRYPT_PASSWORDS="${RET}"
-
-	sed -i -e "s/^\([[:space:]]*\)\[global\]/\1\[global\]/i
-		/^[[:space:]]*\[global\]/,/^[[:space:]]*\[/ \
-		        s/^\([[:space:]]*\)encrypt passwords[[:space:]]*=.*/\1encrypt passwords = ${ENCRYPT_PASSWORDS}/i" \
-		"$CONFIG"
-
 	# Install DHCP support
 	db_get samba-common/dhcp
 	if [ "$RET" = true ] && \
@@ -105,3 +96,13 @@ fi
 db_stop
 
 #DEBHELPER#
+
+# Clean up the now-empty dir which our conffile was previously in,
+# since it wasn't empty at the time dpkg could automatically remove it
+# for us.
+if dpkg --compare-versions "$2" lt-nl 2:4.1.4+dfsg-2~
+then
+	rmdir -p --ignore-fail-on-non-empty /etc/dhcp3/dhclient-enter-hooks.d
+fi
+
+

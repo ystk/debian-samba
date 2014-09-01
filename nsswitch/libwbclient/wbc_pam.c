@@ -23,6 +23,7 @@
 
 /* Required Headers */
 
+#define UID_WRAPPER_NOT_REPLACE
 #include "replace.h"
 #include "libwbclient.h"
 #include "../winbind_client.h"
@@ -363,7 +364,7 @@ wbcErr wbcAuthenticateUserEx(const struct wbcAuthUserParams *params,
 		BAIL_ON_WBC_ERROR(wbc_status);
 	}
 
-	if (!params->account_name) {
+	if (params->level != WBC_AUTH_USER_LEVEL_PAC && !params->account_name) {
 		wbc_status = WBC_ERR_INVALID_PARAM;
 		BAIL_ON_WBC_ERROR(wbc_status);
 	}
@@ -490,6 +491,20 @@ wbcErr wbcAuthenticateUserEx(const struct wbcAuthUserParams *params,
 			       request.data.auth_crap.nt_resp_len);
 		}
 		break;
+
+	case WBC_AUTH_USER_LEVEL_PAC:
+		cmd = WINBINDD_PAM_AUTH_CRAP;
+		request.flags = WBFLAG_PAM_AUTH_PAC | WBFLAG_PAM_INFO3_TEXT;
+		request.extra_data.data = malloc(params->password.pac.length);
+		if (request.extra_data.data == NULL) {
+			wbc_status = WBC_ERR_NO_MEMORY;
+			BAIL_ON_WBC_ERROR(wbc_status);
+		}
+		memcpy(request.extra_data.data, params->password.pac.data,
+		       params->password.pac.length);
+		request.extra_len = params->password.pac.length;
+		break;
+
 	default:
 		break;
 	}
@@ -611,6 +626,16 @@ wbcErr wbcChangeTrustCredentials(const char *domain,
  */
 wbcErr wbcPingDc(const char *domain, struct wbcAuthErrorInfo **error)
 {
+	return wbcPingDc2(domain, error, NULL);
+}
+
+/*
+ * Trigger a no-op NETLOGON call. Lightweight version of
+ * wbcCheckTrustCredentials, optionally return attempted DC
+ */
+wbcErr wbcPingDc2(const char *domain, struct wbcAuthErrorInfo **error,
+		  char **dcname)
+{
 	struct winbindd_request request;
 	struct winbindd_response response;
 	wbcErr wbc_status = WBC_ERR_UNKNOWN_FAILURE;
@@ -632,6 +657,17 @@ wbcErr wbcPingDc(const char *domain, struct wbcAuthErrorInfo **error)
 	wbc_status = wbcRequestResponse(WINBINDD_PING_DC,
 					&request,
 					&response);
+
+	if (dcname && response.extra_data.data) {
+		size_t len;
+
+		len = response.length - sizeof(struct winbindd_response);
+		*dcname = wbcAllocateMemory(1, len, NULL);
+		BAIL_ON_PTR_ERROR(*dcname, wbc_status);
+
+		strlcpy(*dcname, response.extra_data.data, len);
+	}
+
 	if (response.data.auth.nt_status != 0) {
 		if (error) {
 			wbc_status = wbc_create_error_info(&response,
@@ -1160,9 +1196,8 @@ wbcErr wbcCredentialCache(struct wbcCredentialCacheParams *params,
 	ZERO_STRUCT(request);
 	ZERO_STRUCT(response);
 
-	if (info != NULL) {
-		*info = NULL;
-	}
+	*info = NULL;
+
 	if (error != NULL) {
 		*error = NULL;
 	}
@@ -1171,6 +1206,25 @@ wbcErr wbcCredentialCache(struct wbcCredentialCacheParams *params,
 	    || (params->level != WBC_CREDENTIAL_CACHE_LEVEL_NTLMSSP)) {
 		status = WBC_ERR_INVALID_PARAM;
 		goto fail;
+	}
+
+	for (i=0; i<params->num_blobs; i++) {
+		if (strcasecmp(params->blobs[i].name, "initial_blob") == 0) {
+			if (initial_blob != NULL) {
+				status = WBC_ERR_INVALID_PARAM;
+				goto fail;
+			}
+			initial_blob = &params->blobs[i];
+			continue;
+		}
+		if (strcasecmp(params->blobs[i].name, "challenge_blob") == 0) {
+			if (challenge_blob != NULL) {
+				status = WBC_ERR_INVALID_PARAM;
+				goto fail;
+			}
+			challenge_blob = &params->blobs[i];
+			continue;
+		}
 	}
 
 	if (params->domain_name != NULL) {
@@ -1189,17 +1243,6 @@ wbcErr wbcCredentialCache(struct wbcCredentialCacheParams *params,
 			sizeof(request.data.ccache_ntlm_auth.user)-1);
 	}
 	request.data.ccache_ntlm_auth.uid = getuid();
-
-	for (i=0; i<params->num_blobs; i++) {
-		if (strcasecmp(params->blobs[i].name, "initial_blob") == 0) {
-			initial_blob = &params->blobs[i];
-			break;
-		}
-		if (strcasecmp(params->blobs[i].name, "challenge_blob") == 0) {
-			challenge_blob = &params->blobs[i];
-			break;
-		}
-	}
 
 	request.data.ccache_ntlm_auth.initial_blob_len = 0;
 	request.data.ccache_ntlm_auth.challenge_blob_len = 0;

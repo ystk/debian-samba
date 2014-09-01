@@ -4,6 +4,7 @@
 
    Copyright (C) Stefan Metzmacher <metze@samba.org> 2006-2007
    Copyright (C) Andrew Bartlett <abartlet@samba.org> 2006-2008
+   Copyright (C) Matthieu Patou <mat@matws.net> 2011
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -29,6 +30,11 @@
 #include "librpc/gen_ndr/ndr_misc.h"
 #include "lib/util/tsort.h"
 
+/* change this when we change something in our schema code that
+ * requires a re-index of the database
+ */
+#define SAMDB_INDEXING_VERSION "2"
+
 /*
   override the name to attribute handler function
  */
@@ -44,8 +50,13 @@ const struct ldb_schema_attribute *dsdb_attribute_handler_override(struct ldb_co
 	}
 	return a->ldb_schema_attribute;
 }
-
-static int dsdb_schema_set_attributes(struct ldb_context *ldb, struct dsdb_schema *schema, bool write_attributes)
+/*
+ * Set the attribute handlers onto the LDB, and potentially write the
+ * @INDEXLIST, @IDXONE and @ATTRIBUTES records.  The @ATTRIBUTES records
+ * are required so we can operate on a schema-less database (say the
+ * backend during emergency fixes) and during the schema load.
+ */
+static int dsdb_schema_set_indices_and_attributes(struct ldb_context *ldb, struct dsdb_schema *schema, bool write_indices_and_attributes)
 {
 	int ret = LDB_SUCCESS;
 	struct ldb_result *res;
@@ -59,7 +70,7 @@ static int dsdb_schema_set_attributes(struct ldb_context *ldb, struct dsdb_schem
 	/* setup our own attribute name to schema handler */
 	ldb_schema_attribute_set_override_handler(ldb, dsdb_attribute_handler_override, schema);
 
-	if (!write_attributes) {
+	if (!write_indices_and_attributes) {
 		return ret;
 	}
 
@@ -90,6 +101,12 @@ static int dsdb_schema_set_attributes(struct ldb_context *ldb, struct dsdb_schem
 	}
 
 	ret = ldb_msg_add_string(msg_idx, "@IDXONE", "1");
+	if (ret != LDB_SUCCESS) {
+		goto op_error;
+	}
+
+
+	ret = ldb_msg_add_string(msg_idx, "@IDXVERSION", SAMDB_INDEXING_VERSION);
 	if (ret != LDB_SUCCESS) {
 		goto op_error;
 	}
@@ -199,6 +216,45 @@ op_error:
 	return ldb_operr(ldb);
 }
 
+
+/*
+  create extra attribute shortcuts
+ */
+static void dsdb_setup_attribute_shortcuts(struct ldb_context *ldb, struct dsdb_schema *schema)
+{
+	struct dsdb_attribute *attribute;
+
+	/* setup fast access to one_way_link and DN format */
+	for (attribute=schema->attributes; attribute; attribute=attribute->next) {
+		attribute->dn_format = dsdb_dn_oid_to_format(attribute->syntax->ldap_oid);
+
+		if (attribute->dn_format == DSDB_INVALID_DN) {
+			attribute->one_way_link = false;
+			continue;
+		}
+
+		/* these are not considered to be one way links for
+		   the purpose of DN link fixups */
+		if (ldb_attr_cmp("distinguishedName", attribute->lDAPDisplayName) == 0 ||
+		    ldb_attr_cmp("objectCategory", attribute->lDAPDisplayName) == 0) {
+			attribute->one_way_link = false;
+			continue;
+		}
+
+		if (attribute->linkID == 0) {
+			attribute->one_way_link = true;
+			continue;
+		}
+		/* handle attributes with a linkID but no backlink */
+		if ((attribute->linkID & 1) == 0 &&
+		    dsdb_attribute_by_linkID(schema, attribute->linkID + 1) == NULL) {
+			attribute->one_way_link = true;
+			continue;
+		}
+		attribute->one_way_link = false;
+	}
+}
+
 static int uint32_cmp(uint32_t c1, uint32_t c2)
 {
 	if (c1 == c2) return 0;
@@ -271,6 +327,21 @@ int dsdb_setup_sorted_accessors(struct ldb_context *ldb,
 	struct dsdb_attribute *a;
 	unsigned int i;
 	unsigned int num_int_id;
+	int ret;
+
+	for (i=0; i < schema->classes_to_remove_size; i++) {
+		DLIST_REMOVE(schema->classes, schema->classes_to_remove[i]);
+		TALLOC_FREE(schema->classes_to_remove[i]);
+	}
+	for (i=0; i < schema->attributes_to_remove_size; i++) {
+		DLIST_REMOVE(schema->attributes, schema->attributes_to_remove[i]);
+		TALLOC_FREE(schema->attributes_to_remove[i]);
+	}
+
+	TALLOC_FREE(schema->classes_to_remove);
+	schema->classes_to_remove_size = 0;
+	TALLOC_FREE(schema->attributes_to_remove);
+	schema->attributes_to_remove_size = 0;
 
 	/* free all caches */
 	dsdb_sorted_accessors_free(schema);
@@ -353,6 +424,14 @@ int dsdb_setup_sorted_accessors(struct ldb_context *ldb,
 	TYPESAFE_QSORT(schema->attributes_by_attributeID_oid, schema->num_attributes, dsdb_compare_attribute_by_attributeID_oid);
 	TYPESAFE_QSORT(schema->attributes_by_linkID, schema->num_attributes, dsdb_compare_attribute_by_linkID);
 
+	dsdb_setup_attribute_shortcuts(ldb, schema);
+
+	ret = schema_fill_constructed(schema);
+	if (ret != LDB_SUCCESS) {
+		dsdb_sorted_accessors_free(schema);
+		return ret;
+	}
+
 	return LDB_SUCCESS;
 
 failed:
@@ -360,21 +439,23 @@ failed:
 	return ldb_oom(ldb);
 }
 
-int dsdb_setup_schema_inversion(struct ldb_context *ldb, struct dsdb_schema *schema)
+/**
+ * Attach the schema to an opaque pointer on the ldb,
+ * so ldb modules can find it
+ */
+int dsdb_set_schema_refresh_function(struct ldb_context *ldb,
+				     dsdb_schema_refresh_fn refresh_fn,
+				     struct ldb_module *module)
 {
-	/* Walk the list of schema classes */
+	int ret = ldb_set_opaque(ldb, "dsdb_schema_refresh_fn", refresh_fn);
+	if (ret != LDB_SUCCESS) {
+		return ret;
+	}
 
-	/*  For each subClassOf, add us to subclasses of the parent */
-
-	/* collect these subclasses into a recursive list of total subclasses, preserving order */
-
-	/* For each subclass under 'top', write the index from it's
-	 * order as an integer in the dsdb_class (for sorting
-	 * objectClass lists efficiently) */
-
-	/* Walk the list of schema classes */
-
-	/*  Create a 'total possible superiors' on each class */
+	ret = ldb_set_opaque(ldb, "dsdb_schema_refresh_fn_private_data", module);
+	if (ret != LDB_SUCCESS) {
+		return ret;
+	}
 	return LDB_SUCCESS;
 }
 
@@ -388,11 +469,6 @@ int dsdb_set_schema(struct ldb_context *ldb, struct dsdb_schema *schema)
 	int ret;
 
 	ret = dsdb_setup_sorted_accessors(ldb, schema);
-	if (ret != LDB_SUCCESS) {
-		return ret;
-	}
-
-	ret = schema_fill_constructed(schema);
 	if (ret != LDB_SUCCESS) {
 		return ret;
 	}
@@ -411,13 +487,15 @@ int dsdb_set_schema(struct ldb_context *ldb, struct dsdb_schema *schema)
 		talloc_steal(ldb, schema);
 	}
 
+	talloc_steal(ldb, schema);
+
 	ret = ldb_set_opaque(ldb, "dsdb_use_global_schema", NULL);
 	if (ret != LDB_SUCCESS) {
 		return ret;
 	}
 
 	/* Set the new attributes based on the new schema */
-	ret = dsdb_schema_set_attributes(ldb, schema, true);
+	ret = dsdb_schema_set_indices_and_attributes(ldb, schema, true);
 	if (ret != LDB_SUCCESS) {
 		return ret;
 	}
@@ -432,9 +510,13 @@ static struct dsdb_schema *global_schema;
 
 /**
  * Make this ldb use a specified schema, already fully calculated and belonging to another ldb
+ *
+ * The write_indices_and_attributes controls writing of the @ records
+ * because we cannot write to a database that does not yet exist on
+ * disk.
  */
 int dsdb_reference_schema(struct ldb_context *ldb, struct dsdb_schema *schema,
-			  bool write_attributes)
+			  bool write_indices_and_attributes)
 {
 	int ret;
 	struct dsdb_schema *old_schema;
@@ -458,7 +540,17 @@ int dsdb_reference_schema(struct ldb_context *ldb, struct dsdb_schema *schema,
 		return ret;
 	}
 
-	ret = dsdb_schema_set_attributes(ldb, schema, write_attributes);
+	ret = ldb_set_opaque(ldb, "dsdb_refresh_fn", NULL);
+	if (ret != LDB_SUCCESS) {
+		return ret;
+	}
+
+	ret = ldb_set_opaque(ldb, "dsdb_refresh_fn_private_data", NULL);
+	if (ret != LDB_SUCCESS) {
+		return ret;
+	}
+
+	ret = dsdb_schema_set_indices_and_attributes(ldb, schema, write_indices_and_attributes);
 	if (ret != LDB_SUCCESS) {
 		return ret;
 	}
@@ -473,16 +565,17 @@ int dsdb_set_global_schema(struct ldb_context *ldb)
 {
 	int ret;
 	void *use_global_schema = (void *)1;
-	if (!global_schema) {
-		return LDB_SUCCESS;
-	}
 	ret = ldb_set_opaque(ldb, "dsdb_use_global_schema", use_global_schema);
 	if (ret != LDB_SUCCESS) {
 		return ret;
 	}
 
+	if (global_schema == NULL) {
+		return LDB_SUCCESS;
+	}
+
 	/* Set the new attributes based on the new schema */
-	ret = dsdb_schema_set_attributes(ldb, global_schema, false /* Don't write attributes, it's expensive */);
+	ret = dsdb_schema_set_indices_and_attributes(ldb, global_schema, false /* Don't write indices and attributes, it's expensive */);
 	if (ret == LDB_SUCCESS) {
 		/* Keep a reference to this schema, just in case the original copy is replaced */
 		if (talloc_reference(ldb, global_schema) == NULL) {
@@ -507,11 +600,13 @@ bool dsdb_uses_global_schema(struct ldb_context *ldb)
 struct dsdb_schema *dsdb_get_schema(struct ldb_context *ldb, TALLOC_CTX *reference_ctx)
 {
 	const void *p;
-	struct dsdb_schema *schema_out;
-	struct dsdb_schema *schema_in;
+	struct dsdb_schema *schema_out = NULL;
+	struct dsdb_schema *schema_in = NULL;
+	dsdb_schema_refresh_fn refresh_fn;
+	struct ldb_module *loaded_from_module;
 	bool use_global_schema;
 	TALLOC_CTX *tmp_ctx = talloc_new(reference_ctx);
-	if (!tmp_ctx) {
+	if (tmp_ctx == NULL) {
 		return NULL;
 	}
 
@@ -521,29 +616,38 @@ struct dsdb_schema *dsdb_get_schema(struct ldb_context *ldb, TALLOC_CTX *referen
 		schema_in = global_schema;
 	} else {
 		p = ldb_get_opaque(ldb, "dsdb_schema");
-
-		schema_in = talloc_get_type(p, struct dsdb_schema);
-		if (!schema_in) {
-			talloc_free(tmp_ctx);
-			return NULL;
+		if (p != NULL) {
+			schema_in = talloc_get_type_abort(p, struct dsdb_schema);
 		}
 	}
 
-	if (schema_in->refresh_fn && !schema_in->refresh_in_progress) {
-		if (!talloc_reference(tmp_ctx, schema_in)) {
-			/*
-			 * ensure that the schema_in->refresh_in_progress
-			 * remains valid for the right amount of time
-			 */
-			talloc_free(tmp_ctx);
-			return NULL;
+	refresh_fn = ldb_get_opaque(ldb, "dsdb_schema_refresh_fn");
+	if (refresh_fn) {
+		loaded_from_module = ldb_get_opaque(ldb, "dsdb_schema_refresh_fn_private_data");
+
+		SMB_ASSERT(loaded_from_module && (ldb_module_get_ctx(loaded_from_module) == ldb));
+	}
+
+	if (refresh_fn) {
+		/* We need to guard against recurisve calls here */
+		if (ldb_set_opaque(ldb, "dsdb_schema_refresh_fn", NULL) != LDB_SUCCESS) {
+			ldb_debug_set(ldb, LDB_DEBUG_FATAL,
+				      "dsdb_get_schema: clearing dsdb_schema_refresh_fn failed");
+		} else {
+			schema_out = refresh_fn(loaded_from_module,
+						ldb_get_event_context(ldb),
+						schema_in,
+						use_global_schema);
 		}
-		schema_in->refresh_in_progress = true;
-		/* This may change schema, if it needs to reload it from disk */
-		schema_out = schema_in->refresh_fn(schema_in->loaded_from_module,
-						   schema_in,
-						   use_global_schema);
-		schema_in->refresh_in_progress = false;
+		if (ldb_set_opaque(ldb, "dsdb_schema_refresh_fn", refresh_fn) != LDB_SUCCESS) {
+			ldb_debug_set(ldb, LDB_DEBUG_FATAL,
+				      "dsdb_get_schema: re-setting dsdb_schema_refresh_fn failed");
+		}
+		if (!schema_out) {
+			schema_out = schema_in;
+			ldb_debug_set(ldb, LDB_DEBUG_FATAL,
+				      "dsdb_get_schema: refresh_fn() failed");
+		}
 	} else {
 		schema_out = schema_in;
 	}
@@ -623,21 +727,54 @@ int dsdb_schema_fill_extended_dn(struct ldb_context *ldb, struct dsdb_schema *sc
 }
 
 /**
- * Add an element to the schema (attribute or class) from an LDB message
+ * @brief Add a new element to the schema and checks if it's a duplicate
+ *
+ * This function will add a new element to the schema and checks for existing
+ * duplicates.
+ *
+ * @param[in]  ldb                A pointer to an LDB context
+ *
+ * @param[in]  schema             A pointer to the dsdb_schema where the element
+ *                                will be added.
+ *
+ * @param[in]  msg                The ldb_message object representing the element
+ *                                to add.
+ *
+ * @param[in]  checkdups          A boolean to indicate if checks for duplicates
+ *                                should be done.
+ *
+ * @return                        A WERROR code
  */
-WERROR dsdb_schema_set_el_from_ldb_msg(struct ldb_context *ldb, struct dsdb_schema *schema,
-				       struct ldb_message *msg)
+WERROR dsdb_schema_set_el_from_ldb_msg_dups(struct ldb_context *ldb, struct dsdb_schema *schema,
+					    struct ldb_message *msg, bool checkdups)
 {
+	const char* tstring;
+	time_t ts;
+	tstring = ldb_msg_find_attr_as_string(msg, "whenChanged", NULL);
+	/* keep a trace of the ts of the most recently changed object */
+	if (tstring) {
+		ts = ldb_string_to_time(tstring);
+		if (ts > schema->ts_last_change) {
+			schema->ts_last_change = ts;
+		}
+	}
 	if (samdb_find_attribute(ldb, msg,
 				 "objectclass", "attributeSchema") != NULL) {
-		return dsdb_attribute_from_ldb(ldb, schema, msg);
+
+		return dsdb_set_attribute_from_ldb_dups(ldb, schema, msg, checkdups);
 	} else if (samdb_find_attribute(ldb, msg,
 				 "objectclass", "classSchema") != NULL) {
-		return dsdb_class_from_ldb(schema, msg);
+		return dsdb_set_class_from_ldb_dups(schema, msg, checkdups);
 	}
-
 	/* Don't fail on things not classes or attributes */
 	return WERR_OK;
+}
+
+WERROR dsdb_schema_set_el_from_ldb_msg(struct ldb_context *ldb,
+				       struct dsdb_schema *schema,
+				       struct ldb_message *msg)
+{
+	return dsdb_schema_set_el_from_ldb_msg_dups(ldb, schema, msg, false);
 }
 
 /**
@@ -646,7 +783,9 @@ WERROR dsdb_schema_set_el_from_ldb_msg(struct ldb_context *ldb, struct dsdb_sche
  * schema itself to the directory.
  */
 
-WERROR dsdb_set_schema_from_ldif(struct ldb_context *ldb, const char *pf, const char *df)
+WERROR dsdb_set_schema_from_ldif(struct ldb_context *ldb,
+				 const char *pf, const char *df,
+				 const char *dn)
 {
 	struct ldb_ldif *ldif;
 	struct ldb_message *msg;
@@ -665,9 +804,12 @@ WERROR dsdb_set_schema_from_ldif(struct ldb_context *ldb, const char *pf, const 
 	}
 
 	schema = dsdb_new_schema(mem_ctx);
-
+	if (!schema) {
+		goto nomem;
+	}
 	schema->fsmo.we_are_master = true;
-	schema->fsmo.master_dn = ldb_dn_new_fmt(schema, ldb, "@PROVISION_SCHEMA_MASTER");
+	schema->fsmo.update_allowed = true;
+	schema->fsmo.master_dn = ldb_dn_new(schema, ldb, "@PROVISION_SCHEMA_MASTER");
 	if (!schema->fsmo.master_dn) {
 		goto nomem;
 	}
@@ -707,6 +849,7 @@ WERROR dsdb_set_schema_from_ldif(struct ldb_context *ldb, const char *pf, const 
 		goto failed;
 	}
 
+	schema->ts_last_change = 0;
 	/* load the attribute and class definitions out of df */
 	while ((ldif = ldb_ldif_read_string(ldb, &df))) {
 		talloc_steal(mem_ctx, ldif);

@@ -48,7 +48,7 @@ lp = sambaopts.get_loadparm()
 creds = credopts.get_credentials(lp)
 
 
-class SchemaTests(unittest.TestCase):
+class SchemaTests(samba.tests.TestCase):
 
     def setUp(self):
         super(SchemaTests, self).setUp()
@@ -67,8 +67,9 @@ class SchemaTests(unittest.TestCase):
 
     def test_generated_schema_is_operational(self):
         """Testing we don't get the generated schema via LDAP by default"""
+        # Must keep the "*" form
         res = self.ldb.search("cn=aggregate,"+self.schema_dn, scope=SCOPE_BASE,
-                attrs=["*"])
+                              attrs=["*"])
         self.assertEquals(len(res), 1)
         self.assertFalse("dITContentRules" in res[0])
         self.assertFalse("objectClasses" in res[0])
@@ -94,10 +95,20 @@ isSingleValued: TRUE
 systemOnly: FALSE
 """
         self.ldb.add_ldif(ldif)
+        # We must do a schemaUpdateNow otherwise it's not 100% sure that the schema
+        # will contain the new attribute
+        ldif = """
+dn:
+changetype: modify
+add: schemaUpdateNow
+schemaUpdateNow: 1
+"""
+        self.ldb.modify_ldif(ldif)
 
         # Search for created attribute
         res = []
-        res = self.ldb.search("cn=%s,%s" % (attr_name, self.schema_dn), scope=SCOPE_BASE, attrs=["*"])
+        res = self.ldb.search("cn=%s,%s" % (attr_name, self.schema_dn), scope=SCOPE_BASE,
+                              attrs=["lDAPDisplayName","schemaIDGUID"])
         self.assertEquals(len(res), 1)
         self.assertEquals(res[0]["lDAPDisplayName"][0], attr_ldap_display_name)
         self.assertTrue("schemaIDGUID" in res[0])
@@ -151,7 +162,8 @@ systemOnly: FALSE
 
         # Search for created objectclass
         res = []
-        res = self.ldb.search("cn=%s,%s" % (class_name, self.schema_dn), scope=SCOPE_BASE, attrs=["*"])
+        res = self.ldb.search("cn=%s,%s" % (class_name, self.schema_dn), scope=SCOPE_BASE,
+                              attrs=["lDAPDisplayName", "defaultObjectCategory", "schemaIDGUID", "distinguishedName"])
         self.assertEquals(len(res), 1)
         self.assertEquals(res[0]["lDAPDisplayName"][0], class_ldap_display_name)
         self.assertEquals(res[0]["defaultObjectCategory"][0], res[0]["distinguishedName"][0])
@@ -184,7 +196,7 @@ name: """ + object_name + """
 
         # Search for created object
         res = []
-        res = self.ldb.search("cn=%s,cn=Users,%s" % (object_name, self.base_dn), scope=SCOPE_BASE, attrs=["*"])
+        res = self.ldb.search("cn=%s,cn=Users,%s" % (object_name, self.base_dn), scope=SCOPE_BASE, attrs=["dn"])
         self.assertEquals(len(res), 1)
         # Delete the object
         delete_force(self.ldb, "cn=%s,cn=Users,%s" % (object_name, self.base_dn))
@@ -214,7 +226,9 @@ systemOnly: FALSE
 
         # Search for created objectclass
         res = []
-        res = self.ldb.search("cn=%s,%s" % (class_name, self.schema_dn), scope=SCOPE_BASE, attrs=["*"])
+        res = self.ldb.search("cn=%s,%s" % (class_name, self.schema_dn), scope=SCOPE_BASE,
+                              attrs=["lDAPDisplayName", "defaultObjectCategory",
+                                     "schemaIDGUID", "distinguishedName"])
         self.assertEquals(len(res), 1)
         self.assertEquals(res[0]["lDAPDisplayName"][0], class_ldap_display_name)
         self.assertEquals(res[0]["defaultObjectCategory"][0], res[0]["distinguishedName"][0])
@@ -240,18 +254,20 @@ instanceType: 4
 
         # Search for created object
         res = []
-        res = self.ldb.search("ou=%s,%s" % (object_name, self.base_dn), scope=SCOPE_BASE, attrs=["*"])
+        res = self.ldb.search("ou=%s,%s" % (object_name, self.base_dn), scope=SCOPE_BASE, attrs=["dn"])
         self.assertEquals(len(res), 1)
         # Delete the object
         delete_force(self.ldb, "ou=%s,%s" % (object_name, self.base_dn))
 
 
-class SchemaTests_msDS_IntId(unittest.TestCase):
+class SchemaTests_msDS_IntId(samba.tests.TestCase):
 
     def setUp(self):
         super(SchemaTests_msDS_IntId, self).setUp()
         self.ldb = ldb
-        res = ldb.search(base="", expression="", scope=SCOPE_BASE, attrs=["*"])
+        res = ldb.search(base="", expression="", scope=SCOPE_BASE,
+                         attrs=["schemaNamingContext", "defaultNamingContext",
+                                "forestFunctionality"])
         self.assertEquals(len(res), 1)
         self.schema_dn = res[0]["schemaNamingContext"][0]
         self.base_dn = res[0]["defaultNamingContext"][0]
@@ -330,7 +346,8 @@ systemOnly: FALSE
 
         # Search for created attribute
         res = []
-        res = self.ldb.search(attr_dn, scope=SCOPE_BASE, attrs=["*"])
+        res = self.ldb.search(attr_dn, scope=SCOPE_BASE,
+                              attrs=["lDAPDisplayName", "msDS-IntId", "systemFlags"])
         self.assertEquals(len(res), 1)
         self.assertEquals(res[0]["lDAPDisplayName"][0], attr_ldap_name)
         if self.forest_level >= DS_DOMAIN_FUNCTION_2003:
@@ -372,7 +389,8 @@ systemOnly: FALSE
 
         # Search for created attribute
         res = []
-        res = self.ldb.search(attr_dn, scope=SCOPE_BASE, attrs=["*"])
+        res = self.ldb.search(attr_dn, scope=SCOPE_BASE,
+                              attrs=["lDAPDisplayName", "msDS-IntId"])
         self.assertEquals(len(res), 1)
         self.assertEquals(res[0]["lDAPDisplayName"][0], attr_ldap_name)
         if self.forest_level >= DS_DOMAIN_FUNCTION_2003:
@@ -427,7 +445,7 @@ systemOnly: FALSE
         self.ldb.add_ldif(ldif_add)
         self._ldap_schemaUpdateNow()
 
-        res = self.ldb.search(class_dn, scope=SCOPE_BASE, attrs=["*"])
+        res = self.ldb.search(class_dn, scope=SCOPE_BASE, attrs=["msDS-IntId"])
         self.assertEquals(len(res), 1)
         self.assertEquals(res[0]["msDS-IntId"][0], "-1993108831")
 
@@ -439,7 +457,7 @@ systemOnly: FALSE
         self._ldap_schemaUpdateNow()
 
         # Search for created Class
-        res = self.ldb.search(class_dn, scope=SCOPE_BASE, attrs=["*"])
+        res = self.ldb.search(class_dn, scope=SCOPE_BASE, attrs=["msDS-IntId"])
         self.assertEquals(len(res), 1)
         self.assertFalse("msDS-IntId" in res[0])
 
@@ -464,7 +482,7 @@ systemOnly: FALSE
         ldif_add = ldif + "msDS-IntId: -1993108831\n"
         self.ldb.add_ldif(ldif_add)
 
-        res = self.ldb.search(class_dn, scope=SCOPE_BASE, attrs=["*"])
+        res = self.ldb.search(class_dn, scope=SCOPE_BASE, attrs=["msDS-IntId"])
         self.assertEquals(len(res), 1)
         self.assertEquals(res[0]["msDS-IntId"][0], "-1993108831")
 
@@ -477,7 +495,7 @@ systemOnly: FALSE
         self._ldap_schemaUpdateNow()
 
         # Search for created Class
-        res = self.ldb.search(class_dn, scope=SCOPE_BASE, attrs=["*"])
+        res = self.ldb.search(class_dn, scope=SCOPE_BASE, attrs=["msDS-IntId"])
         self.assertEquals(len(res), 1)
         self.assertFalse("msDS-IntId" in res[0])
 
@@ -489,7 +507,7 @@ systemOnly: FALSE
             self.fail("Modifying msDS-IntId should return error")
         except LdbError, (num, _):
             self.assertEquals(num, ERR_CONSTRAINT_VIOLATION)
-        res = self.ldb.search(class_dn, scope=SCOPE_BASE, attrs=["*"])
+        res = self.ldb.search(class_dn, scope=SCOPE_BASE, attrs=["msDS-IntId"])
         self.assertEquals(len(res), 1)
         self.assertFalse("msDS-IntId" in res[0])
 
@@ -518,12 +536,12 @@ systemOnly: FALSE
                 self.assertTrue("msDS-IntId" not in ldb_msg)
 
 
-class SchemaTests_msDS_isRODC(unittest.TestCase):
+class SchemaTests_msDS_isRODC(samba.tests.TestCase):
 
     def setUp(self):
         super(SchemaTests_msDS_isRODC, self).setUp()
         self.ldb = ldb
-        res = ldb.search(base="", expression="", scope=SCOPE_BASE, attrs=["*"])
+        res = ldb.search(base="", expression="", scope=SCOPE_BASE, attrs=["defaultNamingContext"])
         self.assertEquals(len(res), 1)
         self.base_dn = res[0]["defaultNamingContext"][0]
 

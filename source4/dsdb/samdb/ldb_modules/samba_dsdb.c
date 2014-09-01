@@ -150,6 +150,8 @@ static int samba_dsdb_init(struct ldb_module *module)
 	  - extended_dn_in must be before objectclass.c, as it resolves the DN
 	  - objectclass must be before password_hash and samldb since these LDB
 	    modules require the expanded "objectClass" list
+	  - objectclass must be before descriptor and acl, as both assume that
+	    objectClass values are sorted
 	  - objectclass_attrs must be behind operational in order to see all
 	    attributes (the operational module protects and therefore
 	    suppresses per default some important ones)
@@ -162,7 +164,9 @@ static int samba_dsdb_init(struct ldb_module *module)
 	*/
 	static const char *modules_list[] = {"resolve_oids",
 					     "rootdse",
+					     "schema_load",
 					     "lazy_commit",
+					     "dirsync",
 					     "paged_results",
 					     "ranged_results",
 					     "anr",
@@ -177,7 +181,6 @@ static int samba_dsdb_init(struct ldb_module *module)
 					     "samldb",
 					     "password_hash",
 					     "operational",
-					     "schema_load",
 					     "instancetype",
 					     "objectclass_attrs",
 					     NULL };
@@ -211,8 +214,8 @@ static int samba_dsdb_init(struct ldb_module *module)
 	static const char *openldap_backend_modules[] = {
 		"entryuuid", "paged_searches", "simple_dn", NULL };
 
-	static const char *samba_dsdb_attrs[] = { "backendType", "serverRole", NULL };
-	const char *backendType, *serverRole;
+	static const char *samba_dsdb_attrs[] = { "backendType", NULL };
+	const char *backendType;
 
 	if (!tmp_ctx) {
 		return ldb_oom(ldb);
@@ -242,10 +245,8 @@ static int samba_dsdb_init(struct ldb_module *module)
 	                            samba_dsdb_attrs, DSDB_FLAG_NEXT_MODULE, NULL);
 	if (ret == LDB_ERR_NO_SUCH_OBJECT) {
 		backendType = "ldb";
-		serverRole = "domain controller";
 	} else if (ret == LDB_SUCCESS) {
 		backendType = ldb_msg_find_attr_as_string(res->msgs[0], "backendType", "ldb");
-		serverRole = ldb_msg_find_attr_as_string(res->msgs[0], "serverRole", "domain controller");
 	} else {
 		talloc_free(tmp_ctx);
 		return ret;
@@ -299,18 +300,6 @@ static int samba_dsdb_init(struct ldb_module *module)
 
 	partition_msg = ldb_msg_new(tmp_ctx);
 	partition_msg->dn = ldb_dn_new(partition_msg, ldb, "@" DSDB_OPAQUE_PARTITION_MODULE_MSG_OPAQUE_NAME);
-
-	ret = prepare_modules_line(ldb, tmp_ctx,
-				   rootdse_msg,
-				   partition_msg, "defaultNamingContext",
-				   "pdc_fsmo", backend_modules);
-	CHECK_LDB_RET(ret);
-
-	ret = prepare_modules_line(ldb, tmp_ctx,
-				   rootdse_msg,
-				   partition_msg, "configurationNamingContext",
-				   "naming_fsmo", backend_modules);
-	CHECK_LDB_RET(ret);
 
 	ret = prepare_modules_line(ldb, tmp_ctx,
 				   rootdse_msg,

@@ -42,11 +42,12 @@ char *stdin_new_passwd( void)
 	 * the newline that ends the password, then replace the newline with
 	 * a null terminator.
 	 */
-	if ( fgets(new_pw, sizeof(new_pw), stdin) != NULL) {
-		if ((len = strlen(new_pw)) > 0) {
-			if(new_pw[len-1] == '\n')
-				new_pw[len - 1] = 0;
-		}
+	if ( fgets(new_pw, sizeof(new_pw), stdin) == NULL) {
+		return NULL;
+	}
+	if ((len = strlen(new_pw)) > 0) {
+		if(new_pw[len-1] == '\n')
+			new_pw[len - 1] = 0;
 	}
 	return(new_pw);
 }
@@ -58,11 +59,21 @@ char *stdin_new_passwd( void)
 *************************************************************/
 char *get_pass( const char *prompt, bool stdin_get)
 {
+	char pwd[256] = {0};
 	char *p;
+	int rc;
+
 	if (stdin_get) {
 		p = stdin_new_passwd();
+		if (p == NULL) {
+			return NULL;
+		}
 	} else {
-		p = getpass( prompt);
+		rc = samba_getpass(prompt, pwd, sizeof(pwd), false, false);
+		if (rc < 0) {
+			return NULL;
+		}
+		p = pwd;
 	}
 	return smb_xstrdup( p);
 }

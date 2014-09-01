@@ -40,14 +40,14 @@ WERROR rpccli_spoolss_openprinter_ex(struct rpc_pipe_client *cli,
 	NTSTATUS status;
 	WERROR werror;
 	struct spoolss_DevmodeContainer devmode_ctr;
-	union spoolss_UserLevel userlevel;
+	struct spoolss_UserLevelCtr userlevel_ctr;
 	struct spoolss_UserLevel1 level1;
 	struct dcerpc_binding_handle *b = cli->binding_handle;
 
 	ZERO_STRUCT(devmode_ctr);
 
 	level1.size	= 28;
-	level1.client	= talloc_asprintf(mem_ctx, "\\\\%s", global_myname());
+	level1.client	= talloc_asprintf(mem_ctx, "\\\\%s", lp_netbios_name());
 	W_ERROR_HAVE_NO_MEMORY(level1.client);
 	level1.user	= cli->auth->user_name;
 	level1.build	= 1381;
@@ -55,15 +55,15 @@ WERROR rpccli_spoolss_openprinter_ex(struct rpc_pipe_client *cli,
 	level1.minor	= 0;
 	level1.processor = 0;
 
-	userlevel.level1 = &level1;
+	userlevel_ctr.level = 1;
+	userlevel_ctr.user_info.level1 = &level1;
 
 	status = dcerpc_spoolss_OpenPrinterEx(b, mem_ctx,
 					      printername,
 					      NULL,
 					      devmode_ctr,
 					      access_desired,
-					      1, /* level */
-					      userlevel,
+					      userlevel_ctr,
 					      handle,
 					      &werror);
 
@@ -230,7 +230,7 @@ WERROR rpccli_spoolss_addprinterex(struct rpc_pipe_client *cli,
 	level1.major		= 2;
 	level1.minor		= 0;
 	level1.processor	= 0;
-	level1.client		= talloc_asprintf(mem_ctx, "\\\\%s", global_myname());
+	level1.client		= talloc_asprintf(mem_ctx, "\\\\%s", lp_netbios_name());
 	W_ERROR_HAVE_NO_MEMORY(level1.client);
 	level1.user		= cli->auth->user_name;
 

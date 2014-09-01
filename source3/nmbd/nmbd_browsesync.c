@@ -119,8 +119,11 @@ static void announce_local_master_browser_to_domain_master_browser( struct work_
 	SCVAL(p,0,ANN_MasterAnnouncement);
 	p++;
 
-	unstrcpy(myname, global_myname());
-	strupper_m(myname);
+	unstrcpy(myname, lp_netbios_name());
+	if (!strupper_m(myname)) {
+		DEBUG(2,("strupper_m %s failed\n", myname));
+		return;
+	}
 	myname[15]='\0';
 	/* The call below does CH_UNIX -> CH_DOS conversion. JRA */
 	push_ascii(p, myname, sizeof(outbuf)-PTR_DIFF(p,outbuf)-1, STR_TERMINATE);
@@ -137,7 +140,7 @@ static void announce_local_master_browser_to_domain_master_browser( struct work_
 	/* Target name for send_mailslot must be in UNIX charset. */
 	pull_ascii_nstring(dmb_name, sizeof(dmb_name), work->dmb_name.name);
 	send_mailslot(True, BROWSE_MAILSLOT, outbuf,PTR_DIFF(p,outbuf),
-		global_myname(), 0x0, dmb_name, 0x0,
+		lp_netbios_name(), 0x0, dmb_name, 0x0,
 		work->dmb_addr, FIRST_SUBNET->myip, DGRAM_PORT);
 }
 
@@ -191,7 +194,7 @@ static void domain_master_node_status_success(struct subnet_record *subrec,
   /* Go through the list of names found at answers->rdata and look for
      the first SERVER<0x20> name. */
 
-	if(answers->rdata != NULL) {
+	if (answers->rdlength > 0) {
 		char *p = answers->rdata;
 		int numnames = CVAL(p, 0);
 
@@ -330,7 +333,7 @@ static void find_domain_master_name_query_success(struct subnet_record *subrec,
 	userdata->copy_fn = NULL;
 	userdata->free_fn = NULL;
 	userdata->userdata_len = strlen(work->work_group)+1;
-	overmalloc_safe_strcpy(userdata->data, work->work_group, size - sizeof(*userdata) - 1);
+	strlcpy(userdata->data, work->work_group, size - sizeof(*userdata));
 
 	node_status( subrec, &nmbname, answer_ip, 
 		domain_master_node_status_success,
@@ -399,7 +402,6 @@ static void get_domain_master_name_node_status_success(struct subnet_record *sub
                                               struct res_rec *answers,
                                               struct in_addr from_ip)
 {
-	struct work_record *work;
 	unstring server_name;
 
 	server_name[0] = 0;
@@ -414,7 +416,7 @@ static void get_domain_master_name_node_status_success(struct subnet_record *sub
 	 * the first WORKGROUP<0x1b> name.
 	 */
 
-	if(answers->rdata != NULL) {
+	if (answers->rdlength > 0) {
 		char *p = answers->rdata;
 		int numnames = CVAL(p, 0);
 
@@ -435,11 +437,13 @@ static void get_domain_master_name_node_status_success(struct subnet_record *sub
 			if(!(nb_flags & NB_GROUP) && (name_type == 0x00) && 
 					server_name[0] == 0) {
 				/* this is almost certainly the server netbios name */
-				unstrcpy(server_name, qname);
+				strlcpy(server_name, qname, sizeof(server_name));
 				continue;
 			}
 
 			if(!(nb_flags & NB_GROUP) && (name_type == 0x1b)) {
+				struct work_record *work;
+
 				if( DEBUGLVL( 5 ) ) {
 					dbgtext( "get_domain_master_name_node_status_success:\n" );
 					dbgtext( "%s(%s) ", server_name, inet_ntoa(from_ip) );
@@ -452,16 +456,21 @@ static void get_domain_master_name_node_status_success(struct subnet_record *sub
 				 * to the workgroup list on the unicast_subnet.
 				 */
 
-				if((work = find_workgroup_on_subnet( subrec, qname)) == NULL) {
+				work = find_workgroup_on_subnet( subrec, qname);
+				if (work == NULL) {
 					struct nmb_name nmbname;
 					/* 
 					 * Add it - with an hour in the cache.
 					 */
-					if(!(work= create_workgroup_on_subnet(subrec, qname, 60*60)))
+					work = create_workgroup_on_subnet(subrec, qname, 60*60);
+					if (work == NULL) {
 						return;
+					}
 
 					/* remember who the master is */
-					unstrcpy(work->local_master_browser_name, server_name);
+					strlcpy(work->local_master_browser_name,
+						server_name,
+						sizeof(work->local_master_browser_name));
 					make_nmb_name(&nmbname, server_name, 0x20);
 					work->dmb_name = nmbname;
 					work->dmb_addr = from_ip;
@@ -469,7 +478,7 @@ static void get_domain_master_name_node_status_success(struct subnet_record *sub
 				break;
 			}
 		}
-	} else if( DEBUGLVL( 0 ) ) {
+	} else if( DEBUGLVL( 1 ) ) {
 		dbgtext( "get_domain_master_name_node_status_success:\n" );
 		dbgtext( "Failed to find a WORKGROUP<0x1b> name in reply from IP " );
 		dbgtext( "%s.\n", inet_ntoa(from_ip) );
@@ -483,7 +492,7 @@ static void get_domain_master_name_node_status_success(struct subnet_record *sub
 static void get_domain_master_name_node_status_fail(struct subnet_record *subrec,
                        struct response_record *rrec)
 {
-	if( DEBUGLVL( 0 ) ) {
+	if( DEBUGLVL( 2 ) ) {
 		dbgtext( "get_domain_master_name_node_status_fail:\n" );
 		dbgtext( "Doing a node status request to the domain master browser " );
 		dbgtext( "at IP %s failed.\n", inet_ntoa(rrec->packet->ip) );

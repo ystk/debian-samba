@@ -67,14 +67,9 @@ static uint32_t hash_fn(DATA_BLOB key)
  * an option to put in a special ACL entry for a non-existing group.
  */
 
-static bool file_is_valid(vfs_handle_struct *handle, const char *path,
-			  bool check_valid)
+static bool file_is_valid(vfs_handle_struct *handle, const char *path)
 {
 	char buf;
-
-	if (!check_valid) {
-		return true;
-	}
 
 	DEBUG(10, ("file_is_valid (%s) called\n", path));
 
@@ -92,15 +87,10 @@ static bool file_is_valid(vfs_handle_struct *handle, const char *path,
 	return true;
 }
 
-static bool mark_file_valid(vfs_handle_struct *handle, const char *path,
-			    bool check_valid)
+static bool mark_file_valid(vfs_handle_struct *handle, const char *path)
 {
 	char buf = '1';
 	int ret;
-
-	if (!check_valid) {
-		return true;
-	}
 
 	DEBUG(10, ("marking file %s as valid\n", path));
 
@@ -134,12 +124,11 @@ static char *stream_dir(vfs_handle_struct *handle,
 	uint8 id_buf[16];
 	bool check_valid;
 	const char *rootdir;
-	NTSTATUS status;
 
 	check_valid = lp_parm_bool(SNUM(handle->conn),
 		      "streams_depot", "check_valid", true);
 
-	tmp = talloc_asprintf(talloc_tos(), "%s/.streams", handle->conn->connectpath);
+	tmp = talloc_asprintf(talloc_tos(), "%s/.streams", handle->conn->cwd);
 
 	if (tmp == NULL) {
 		errno = ENOMEM;
@@ -152,14 +141,12 @@ static char *stream_dir(vfs_handle_struct *handle,
 
 	/* Stat the base file if it hasn't already been done. */
 	if (base_sbuf == NULL) {
-		struct smb_filename *smb_fname_base = NULL;
+		struct smb_filename *smb_fname_base;
 
-		status = create_synthetic_smb_fname(talloc_tos(),
-						    smb_fname->base_name,
-						    NULL, NULL,
-						    &smb_fname_base);
-		if (!NT_STATUS_IS_OK(status)) {
-			errno = map_errno_from_nt_status(status);
+		smb_fname_base = synthetic_smb_fname(
+			talloc_tos(), smb_fname->base_name, NULL, NULL);
+		if (smb_fname_base == NULL) {
+			errno = ENOMEM;
 			goto fail;
 		}
 		if (SMB_VFS_NEXT_STAT(handle, smb_fname_base) == -1) {
@@ -198,58 +185,75 @@ static char *stream_dir(vfs_handle_struct *handle,
 		return NULL;
 	}
 
-	status = create_synthetic_smb_fname(talloc_tos(), result, NULL, NULL,
-					    &smb_fname_hash);
-	if (!NT_STATUS_IS_OK(status)) {
-		errno = map_errno_from_nt_status(status);
+	smb_fname_hash = synthetic_smb_fname(talloc_tos(), result, NULL, NULL);
+	if (smb_fname_hash == NULL) {
+		errno = ENOMEM;
 		goto fail;
 	}
 
 	if (SMB_VFS_NEXT_STAT(handle, smb_fname_hash) == 0) {
 		struct smb_filename *smb_fname_new = NULL;
 		char *newname;
+		bool delete_lost;
 
 		if (!S_ISDIR(smb_fname_hash->st.st_ex_mode)) {
 			errno = EINVAL;
 			goto fail;
 		}
 
-		if (file_is_valid(handle, smb_fname->base_name, check_valid)) {
+		if (!check_valid ||
+		    file_is_valid(handle, smb_fname->base_name)) {
 			return result;
 		}
 
 		/*
 		 * Someone has recreated a file under an existing inode
-		 * without deleting the streams directory. For now, just move
-		 * it away.
+		 * without deleting the streams directory.
+		 * Move it away or remove if streams_depot:delete_lost is set.
 		 */
 
 	again:
-		newname = talloc_asprintf(talloc_tos(), "lost-%lu", random());
-		if (newname == NULL) {
-			errno = ENOMEM;
-			goto fail;
-		}
+		delete_lost = lp_parm_bool(SNUM(handle->conn), "streams_depot",
+					   "delete_lost", false);
 
-		status = create_synthetic_smb_fname(talloc_tos(), newname,
-						    NULL, NULL,
-						    &smb_fname_new);
-		TALLOC_FREE(newname);
-		if (!NT_STATUS_IS_OK(status)) {
-			errno = map_errno_from_nt_status(status);
-			goto fail;
-		}
-
-		if (SMB_VFS_NEXT_RENAME(handle, smb_fname_hash,
-					smb_fname_new) == -1) {
-			TALLOC_FREE(smb_fname_new);
-			if ((errno == EEXIST) || (errno == ENOTEMPTY)) {
-				goto again;
+		if (delete_lost) {
+			DEBUG(3, ("Someone has recreated a file under an "
+			      "existing inode. Removing: %s\n",
+			      smb_fname_hash->base_name));
+			recursive_rmdir(talloc_tos(), handle->conn,
+					smb_fname_hash);
+			SMB_VFS_NEXT_RMDIR(handle, smb_fname_hash->base_name);
+		} else {
+			newname = talloc_asprintf(talloc_tos(), "lost-%lu",
+						  random());
+			DEBUG(3, ("Someone has recreated a file under an "
+			      "existing inode. Renaming: %s to: %s\n",
+			      smb_fname_hash->base_name,
+			      newname));
+			if (newname == NULL) {
+				errno = ENOMEM;
+				goto fail;
 			}
-			goto fail;
-		}
 
-		TALLOC_FREE(smb_fname_new);
+			smb_fname_new = synthetic_smb_fname(
+				talloc_tos(), newname, NULL, NULL);
+			TALLOC_FREE(newname);
+			if (smb_fname_new == NULL) {
+				errno = ENOMEM;
+				goto fail;
+			}
+
+			if (SMB_VFS_NEXT_RENAME(handle, smb_fname_hash,
+						smb_fname_new) == -1) {
+				TALLOC_FREE(smb_fname_new);
+				if ((errno == EEXIST) || (errno == ENOTEMPTY)) {
+					goto again;
+				}
+				goto fail;
+			}
+
+			TALLOC_FREE(smb_fname_new);
+		}
 	}
 
 	if (!create_it) {
@@ -294,7 +298,7 @@ static char *stream_dir(vfs_handle_struct *handle,
 		goto fail;
 	}
 
-	if (!mark_file_valid(handle, smb_fname->base_name, check_valid)) {
+	if (check_valid && !mark_file_valid(handle, smb_fname->base_name)) {
 		goto fail;
 	}
 
@@ -324,7 +328,7 @@ static NTSTATUS stream_smb_fname(vfs_handle_struct *handle,
 	stype = strchr_m(smb_fname->stream_name + 1, ':');
 
 	if (stype) {
-		if (StrCaseCmp(stype, ":$DATA") != 0) {
+		if (strcasecmp_m(stype, ":$DATA") != 0) {
 			return NT_STATUS_INVALID_PARAMETER;
 		}
 	}
@@ -354,16 +358,19 @@ static NTSTATUS stream_smb_fname(vfs_handle_struct *handle,
 		}
 	} else {
 		/* Normalize the stream type to upercase. */
-		strupper_m(strrchr_m(stream_fname, ':') + 1);
+		if (!strupper_m(strrchr_m(stream_fname, ':') + 1)) {
+			status = NT_STATUS_INVALID_PARAMETER;
+			goto fail;
+		}
 	}
 
 	DEBUG(10, ("stream filename = %s\n", stream_fname));
 
 	/* Create an smb_filename with stream_name == NULL. */
-	status = create_synthetic_smb_fname(talloc_tos(), stream_fname, NULL,
-					    NULL, smb_fname_out);
-	if (!NT_STATUS_IS_OK(status)) {
-		return status;
+	*smb_fname_out = synthetic_smb_fname(
+		talloc_tos(), stream_fname, NULL, NULL);
+	if (*smb_fname_out == NULL) {
+		return NT_STATUS_NO_MEMORY;
 	}
 
 	return NT_STATUS_OK;
@@ -383,7 +390,7 @@ static NTSTATUS walk_streams(vfs_handle_struct *handle,
 			     void *private_data)
 {
 	char *dirname;
-	SMB_STRUCT_DIR *dirhandle = NULL;
+	DIR *dirhandle = NULL;
 	const char *dirent = NULL;
 	char *talloced = NULL;
 
@@ -560,13 +567,11 @@ static int streams_depot_open(vfs_handle_struct *handle,
 	}
 
 	/* Ensure the base file still exists. */
-	status = create_synthetic_smb_fname(talloc_tos(),
-					    smb_fname->base_name,
-					    NULL, NULL,
-					    &smb_fname_base);
-	if (!NT_STATUS_IS_OK(status)) {
+	smb_fname_base = synthetic_smb_fname(
+		talloc_tos(), smb_fname->base_name, NULL, NULL);
+	if (smb_fname_base == NULL) {
 		ret = -1;
-		errno = map_errno_from_nt_status(status);
+		errno = ENOMEM;
 		goto done;
 	}
 
@@ -595,7 +600,6 @@ static int streams_depot_unlink(vfs_handle_struct *handle,
 				const struct smb_filename *smb_fname)
 {
 	struct smb_filename *smb_fname_base = NULL;
-	NTSTATUS status;
 	int ret = -1;
 
 	DEBUG(10, ("streams_depot_unlink called for %s\n",
@@ -605,6 +609,7 @@ static int streams_depot_unlink(vfs_handle_struct *handle,
 	if (is_ntfs_stream_smb_fname(smb_fname) &&
 	    !is_ntfs_default_stream_smb_fname(smb_fname)) {
 		struct smb_filename *smb_fname_stream = NULL;
+		NTSTATUS status;
 
 		status = stream_smb_fname(handle, smb_fname, &smb_fname_stream,
 					  false);
@@ -623,10 +628,10 @@ static int streams_depot_unlink(vfs_handle_struct *handle,
 	 * We potentially need to delete the per-inode streams directory
 	 */
 
-	status = create_synthetic_smb_fname(talloc_tos(), smb_fname->base_name,
-					    NULL, NULL, &smb_fname_base);
-	if (!NT_STATUS_IS_OK(status)) {
-		errno = map_errno_from_nt_status(status);
+	smb_fname_base = synthetic_smb_fname(
+		talloc_tos(), smb_fname->base_name, NULL, NULL);
+	if (smb_fname_base == NULL) {
+		errno = ENOMEM;
 		return -1;
 	}
 
@@ -641,7 +646,8 @@ static int streams_depot_unlink(vfs_handle_struct *handle,
 		return -1;
 	}
 
-	if (smb_fname_base->st.st_ex_nlink == 1) {
+	ret = SMB_VFS_NEXT_UNLINK(handle, smb_fname);
+	if (ret == 0) {
 		char *dirname = stream_dir(handle, smb_fname_base,
 					   &smb_fname_base->st, false);
 
@@ -650,8 +656,6 @@ static int streams_depot_unlink(vfs_handle_struct *handle,
 		}
 		TALLOC_FREE(dirname);
 	}
-
-	ret = SMB_VFS_NEXT_UNLINK(handle, smb_fname);
 
 	TALLOC_FREE(smb_fname_base);
 	return ret;
@@ -660,7 +664,6 @@ static int streams_depot_unlink(vfs_handle_struct *handle,
 static int streams_depot_rmdir(vfs_handle_struct *handle, const char *path)
 {
 	struct smb_filename *smb_fname_base = NULL;
-	NTSTATUS status;
 	int ret = -1;
 
 	DEBUG(10, ("streams_depot_rmdir called for %s\n", path));
@@ -669,10 +672,9 @@ static int streams_depot_rmdir(vfs_handle_struct *handle, const char *path)
 	 * We potentially need to delete the per-inode streams directory
 	 */
 
-	status = create_synthetic_smb_fname(talloc_tos(), path,
-					    NULL, NULL, &smb_fname_base);
-	if (!NT_STATUS_IS_OK(status)) {
-		errno = map_errno_from_nt_status(status);
+	smb_fname_base = synthetic_smb_fname(talloc_tos(), path, NULL, NULL);
+	if (smb_fname_base == NULL) {
+		errno = ENOMEM;
 		return -1;
 	}
 
@@ -687,7 +689,8 @@ static int streams_depot_rmdir(vfs_handle_struct *handle, const char *path)
 		return -1;
 	}
 
-	if (smb_fname_base->st.st_ex_nlink == 2) {
+	ret = SMB_VFS_NEXT_RMDIR(handle, path);
+	if (ret == 0) {
 		char *dirname = stream_dir(handle, smb_fname_base,
 					   &smb_fname_base->st, false);
 
@@ -696,8 +699,6 @@ static int streams_depot_rmdir(vfs_handle_struct *handle, const char *path)
 		}
 		TALLOC_FREE(dirname);
 	}
-
-	ret = SMB_VFS_NEXT_RMDIR(handle, path);
 
 	TALLOC_FREE(smb_fname_base);
 	return ret;
@@ -757,12 +758,12 @@ done:
 
 static bool add_one_stream(TALLOC_CTX *mem_ctx, unsigned int *num_streams,
 			   struct stream_struct **streams,
-			   const char *name, SMB_OFF_T size,
-			   SMB_OFF_T alloc_size)
+			   const char *name, off_t size,
+			   off_t alloc_size)
 {
 	struct stream_struct *tmp;
 
-	tmp = TALLOC_REALLOC_ARRAY(mem_ctx, *streams, struct stream_struct,
+	tmp = talloc_realloc(mem_ctx, *streams, struct stream_struct,
 				   (*num_streams)+1);
 	if (tmp == NULL) {
 		return false;
@@ -797,7 +798,6 @@ static bool collect_one_stream(const char *dirname,
 		(struct streaminfo_state *)private_data;
 	struct smb_filename *smb_fname = NULL;
 	char *sname = NULL;
-	NTSTATUS status;
 	bool ret;
 
 	sname = talloc_asprintf(talloc_tos(), "%s/%s", dirname, dirent);
@@ -807,10 +807,9 @@ static bool collect_one_stream(const char *dirname,
 		goto out;
 	}
 
-	status = create_synthetic_smb_fname(talloc_tos(), sname, NULL,
-					    NULL, &smb_fname);
-	if (!NT_STATUS_IS_OK(status)) {
-		state->status = status;
+	smb_fname = synthetic_smb_fname(talloc_tos(), sname, NULL, NULL);
+	if (smb_fname == NULL) {
+		state->status = NT_STATUS_NO_MEMORY;
 		ret = false;
 		goto out;
 	}
@@ -846,15 +845,14 @@ static NTSTATUS streams_depot_streaminfo(vfs_handle_struct *handle,
 					 unsigned int *pnum_streams,
 					 struct stream_struct **pstreams)
 {
-	struct smb_filename *smb_fname_base = NULL;
+	struct smb_filename *smb_fname_base;
 	int ret;
 	NTSTATUS status;
 	struct streaminfo_state state;
 
-	status = create_synthetic_smb_fname(talloc_tos(), fname, NULL, NULL,
-					    &smb_fname_base);
-	if (!NT_STATUS_IS_OK(status)) {
-		return status;
+	smb_fname_base = synthetic_smb_fname(talloc_tos(), fname, NULL, NULL);
+	if (smb_fname_base == NULL) {
+		return NT_STATUS_NO_MEMORY;
 	}
 
 	if ((fsp != NULL) && (fsp->fh->fd != -1)) {
@@ -879,8 +877,19 @@ static NTSTATUS streams_depot_streaminfo(vfs_handle_struct *handle,
 	state.handle = handle;
 	state.status = NT_STATUS_OK;
 
-	status = walk_streams(handle, smb_fname_base, NULL, collect_one_stream,
+	if (S_ISLNK(smb_fname_base->st.st_ex_mode)) {
+		/*
+		 * Currently we do't have SMB_VFS_LLISTXATTR
+		 * inside the VFS which means there's no way
+		 * to cope with a symlink when lp_posix_pathnames().
+		 * returns true. For now ignore links.
+		 * FIXME - by adding SMB_VFS_LLISTXATTR. JRA.
+		 */
+		status = NT_STATUS_OK;
+	} else {
+		status = walk_streams(handle, smb_fname_base, NULL, collect_one_stream,
 			      &state);
+	}
 
 	if (!NT_STATUS_IS_OK(status)) {
 		TALLOC_FREE(state.streams);
@@ -909,14 +918,14 @@ static uint32_t streams_depot_fs_capabilities(struct vfs_handle_struct *handle,
 }
 
 static struct vfs_fn_pointers vfs_streams_depot_fns = {
-	.fs_capabilities = streams_depot_fs_capabilities,
+	.fs_capabilities_fn = streams_depot_fs_capabilities,
 	.open_fn = streams_depot_open,
-	.stat = streams_depot_stat,
-	.lstat = streams_depot_lstat,
-	.unlink = streams_depot_unlink,
-	.rmdir = streams_depot_rmdir,
-	.rename = streams_depot_rename,
-	.streaminfo = streams_depot_streaminfo,
+	.stat_fn = streams_depot_stat,
+	.lstat_fn = streams_depot_lstat,
+	.unlink_fn = streams_depot_unlink,
+	.rmdir_fn = streams_depot_rmdir,
+	.rename_fn = streams_depot_rename,
+	.streaminfo_fn = streams_depot_streaminfo,
 };
 
 NTSTATUS vfs_streams_depot_init(void);

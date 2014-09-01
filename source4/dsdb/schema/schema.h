@@ -24,6 +24,14 @@
 
 #include "prefixmap.h"
 
+enum dsdb_dn_format {
+	DSDB_NORMAL_DN,
+	DSDB_BINARY_DN,
+	DSDB_STRING_DN,
+	DSDB_INVALID_DN
+};
+
+
 struct dsdb_attribute;
 struct dsdb_class;
 struct dsdb_schema;
@@ -65,6 +73,8 @@ struct dsdb_syntax {
 	WERROR (*validate_ldb)(const struct dsdb_syntax_ctx *ctx,
 			       const struct dsdb_attribute *attr,
 			       const struct ldb_message_element *in);
+	bool auto_normalise;
+	bool userParameters; /* Indicates the syntax userParameters should be forced to */
 };
 
 struct dsdb_attribute {
@@ -107,6 +117,9 @@ struct dsdb_attribute {
 	bool isDefunct;
 	bool systemOnly;
 
+	bool one_way_link;
+	enum dsdb_dn_format dn_format;
+
 	/* internal stuff */
 	const struct dsdb_syntax *syntax;
 	const struct ldb_schema_attribute *ldb_schema_attribute;
@@ -143,6 +156,7 @@ struct dsdb_class {
 	const char *defaultSecurityDescriptor;
 
 	uint32_t schemaFlagsEx;
+	uint32_t systemFlags;
 	struct ldb_val msDs_Schema_Extensions;
 
 	bool showInAdvancedViewOnly;
@@ -153,10 +167,6 @@ struct dsdb_class {
 	bool isDefunct;
 	bool systemOnly;
 
-	const char **supclasses;
-	const char **subclasses;
-	const char **subclasses_direct;
-	const char **posssuperiors;
 	uint32_t subClassOf_id;
 	uint32_t *systemAuxiliaryClass_ids;
 	uint32_t *auxiliaryClass_ids;
@@ -173,6 +183,13 @@ struct dsdb_class {
 	 * subClasses of top are 2, subclasses of those classes are
 	 * 3 */ 
 	uint32_t subClass_order;
+
+	struct {
+		const char **supclasses;
+		const char **subclasses;
+		const char **subclasses_direct;
+		const char **posssuperiors;
+	} tmp;
 };
 
 /**
@@ -185,8 +202,6 @@ struct dsdb_schema_info {
 
 
 struct dsdb_schema {
-	struct ldb_dn *base_dn;
-
 	struct dsdb_schema_prefixmap *prefixmap;
 
 	/* 
@@ -204,6 +219,11 @@ struct dsdb_schema {
 
 	struct dsdb_attribute *attributes;
 	struct dsdb_class *classes;
+
+	struct dsdb_attribute **attributes_to_remove;
+	uint32_t attributes_to_remove_size;
+	struct dsdb_class **classes_to_remove;
+	uint32_t classes_to_remove_size;
 
 	/* lists of classes sorted by various attributes, for faster
 	   access */
@@ -224,15 +244,20 @@ struct dsdb_schema {
 
 	struct {
 		bool we_are_master;
+		bool update_allowed;
 		struct ldb_dn *master_dn;
 	} fsmo;
 
 	/* Was this schema loaded from ldb (if so, then we will reload it when we detect a change in ldb) */
-	struct ldb_module *loaded_from_module;
-	struct dsdb_schema *(*refresh_fn)(struct ldb_module *module, struct dsdb_schema *schema, bool is_global_schema);
 	bool refresh_in_progress;
-	/* an 'opaque' sequence number that the reload function may also wish to use */
-	uint64_t reload_seq_number;
+	time_t ts_last_change;
+	time_t last_refresh;
+	time_t refresh_interval;
+	/* This 'opaque' is stored in the metadata and is used to check if the currently
+	 * loaded schema needs a reload because another process has signaled that it has been
+	 * requested to reload the schema (either due through DRS or via the schemaUpdateNow).
+	 */
+	uint64_t metadata_usn;
 
 	/* Should the syntax handlers in this case handle all incoming OIDs automatically, assigning them as an OID if no text name is known? */
 	bool relax_OID_conversions;
@@ -254,6 +279,11 @@ enum dsdb_schema_convert_target {
 	TARGET_AD_SCHEMA_SUBENTRY
 };
 
+struct ldb_module;
+
+typedef struct dsdb_schema *(*dsdb_schema_refresh_fn)(struct ldb_module *module,
+						      struct tevent_context *ev,
+						      struct dsdb_schema *schema, bool is_global_schema);
 #include "dsdb/schema/proto.h"
 
 #endif /* _DSDB_SCHEMA_H */

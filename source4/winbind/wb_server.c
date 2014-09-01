@@ -28,18 +28,65 @@
 #include "libcli/util/tstream.h"
 #include "param/param.h"
 #include "param/secrets.h"
+#include "lib/util/dlinklist.h"
 
 void wbsrv_terminate_connection(struct wbsrv_connection *wbconn, const char *reason)
 {
-	stream_terminate_connection(wbconn->conn, reason);
+	struct wbsrv_service *service = wbconn->listen_socket->service;
+
+	if (wbconn->pending_calls == 0) {
+		char *full_reason = talloc_asprintf(wbconn, "wbsrv: %s", reason);
+
+		DLIST_REMOVE(service->broken_connections, wbconn);
+		stream_terminate_connection(wbconn->conn, full_reason ? full_reason : reason);
+		return;
+	}
+
+	if (wbconn->terminate != NULL) {
+		return;
+	}
+
+	DEBUG(3,("wbsrv: terminating connection due to '%s' defered due to %d pending calls\n",
+		 reason, wbconn->pending_calls));
+	wbconn->terminate = talloc_strdup(wbconn, reason);
+	if (wbconn->terminate == NULL) {
+		wbconn->terminate = "wbsrv: defered terminating connection - no memory";
+	}
+	DLIST_ADD_END(service->broken_connections, wbconn, NULL);
+}
+
+static void wbsrv_cleanup_broken_connections(struct wbsrv_service *s)
+{
+	struct wbsrv_connection *cur, *next;
+
+	next = s->broken_connections;
+	while (next != NULL) {
+		cur = next;
+		next = cur->next;
+
+		wbsrv_terminate_connection(cur, cur->terminate);
+	}
 }
 
 static void wbsrv_call_loop(struct tevent_req *subreq)
 {
 	struct wbsrv_connection *wbsrv_conn = tevent_req_callback_data(subreq,
 				      struct wbsrv_connection);
+	struct wbsrv_service *service = wbsrv_conn->listen_socket->service;
 	struct wbsrv_samba3_call *call;
 	NTSTATUS status;
+
+	if (wbsrv_conn->terminate) {
+		/*
+		 * if the current connection is broken
+		 * we need to clean it up before any other connection
+		 */
+		wbsrv_terminate_connection(wbsrv_conn, wbsrv_conn->terminate);
+		wbsrv_cleanup_broken_connections(service);
+		return;
+	}
+
+	wbsrv_cleanup_broken_connections(service);
 
 	call = talloc_zero(wbsrv_conn, struct wbsrv_samba3_call);
 	if (call == NULL) {
@@ -56,7 +103,7 @@ static void wbsrv_call_loop(struct tevent_req *subreq)
 	if (!NT_STATUS_IS_OK(status)) {
 		const char *reason;
 
-		reason = talloc_asprintf(call, "wbsrv_call_loop: "
+		reason = talloc_asprintf(wbsrv_conn, "wbsrv_call_loop: "
 					 "tstream_read_pdu_blob_recv() - %s",
 					 nt_errstr(status));
 		if (!reason) {
@@ -75,7 +122,7 @@ static void wbsrv_call_loop(struct tevent_req *subreq)
 	if (!NT_STATUS_IS_OK(status)) {
 		const char *reason;
 
-		reason = talloc_asprintf(call, "wbsrv_call_loop: "
+		reason = talloc_asprintf(wbsrv_conn, "wbsrv_call_loop: "
 					 "tstream_read_pdu_blob_recv() - %s",
 					 nt_errstr(status));
 		if (!reason) {
@@ -111,6 +158,8 @@ static void wbsrv_accept(struct stream_connection *conn)
 	struct wbsrv_connection *wbsrv_conn;
 	struct tevent_req *subreq;
 	int rc;
+
+	wbsrv_cleanup_broken_connections(wbsrv_socket->service);
 
 	wbsrv_conn = talloc_zero(conn, struct wbsrv_connection);
 	if (wbsrv_conn == NULL) {
@@ -199,6 +248,7 @@ static void winbind_task_init(struct task_server *task)
 	struct wbsrv_listen_socket *listen_socket;
 	char *errstring;
 	struct dom_sid *primary_sid;
+	bool ok;
 
 	task_server_set_title(task, "task[winbind]");
 
@@ -213,14 +263,18 @@ static void winbind_task_init(struct task_server *task)
 	}
 
 	/* Make sure the directory for the Samba3 socket exists, and is of the correct permissions */
-	if (!directory_create_or_exist(lpcfg_winbindd_socket_directory(task->lp_ctx), geteuid(), 0755)) {
+	ok = directory_create_or_exist_strict(lpcfg_winbindd_socket_directory(task->lp_ctx),
+					      geteuid(), 0755);
+	if (!ok) {
 		task_server_terminate(task,
 				      "Cannot create winbindd pipe directory", true);
 		return;
 	}
 
 	/* Make sure the directory for the Samba3 socket exists, and is of the correct permissions */
-	if (!directory_create_or_exist(lpcfg_winbindd_privileged_socket_directory(task->lp_ctx), geteuid(), 0750)) {
+	ok = directory_create_or_exist_strict(lpcfg_winbindd_privileged_socket_directory(task->lp_ctx),
+			geteuid(), 0750);
+	if (!ok) {
 		task_server_terminate(task,
 				      "Cannot create winbindd privileged pipe directory", true);
 		return;
@@ -264,7 +318,7 @@ static void winbind_task_init(struct task_server *task)
 			return;
 		}
 		break;
-	case ROLE_DOMAIN_CONTROLLER:
+	case ROLE_ACTIVE_DIRECTORY_DC:
 		primary_sid = secrets_get_domain_sid(service,
 						     service->task->lp_ctx,
 						     lpcfg_workgroup(service->task->lp_ctx),
@@ -278,6 +332,10 @@ static void winbind_task_init(struct task_server *task)
 			return;
 		}
 		break;
+	case ROLE_DOMAIN_PDC:
+	case ROLE_DOMAIN_BDC:
+		task_server_terminate(task, "Cannot start 'samba' winbindd as a 'classic samba' DC: use winbindd instead", true);
+		return;
 	}
 	service->primary_sid = primary_sid;
 

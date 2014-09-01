@@ -189,7 +189,7 @@ bool tldap_context_setattr(struct tldap_context *ld,
 	struct tldap_ctx_attribute *tmp, *attr;
 	char *tmpname;
 	int num_attrs;
-	void **pptr = (void **)_pptr;
+	void **pptr = (void **)discard_const_p(void,_pptr);
 
 	attr = tldap_context_findattr(ld, name);
 	if (attr != NULL) {
@@ -541,7 +541,7 @@ static void tldap_msg_sent(struct tevent_req *subreq)
 	}
 
 	if (!tldap_msg_set_pending(req)) {
-		tevent_req_nomem(NULL, req);
+		tevent_req_oom(req);
 		return;
 	}
 }
@@ -817,7 +817,7 @@ struct tevent_req *tldap_sasl_bind_send(TALLOC_CTX *mem_ctx,
 
 	asn1_push_tag(state->out, TLDAP_REQ_BIND);
 	asn1_write_Integer(state->out, ld->ld_version);
-	asn1_write_OctetString(state->out, dn, (dn != NULL) ? strlen(dn) : 0);
+	asn1_write_OctetString(state->out, dn, strlen(dn));
 
 	if (mechanism == NULL) {
 		asn1_push_tag(state->out, ASN1_CONTEXT_SIMPLE(0));
@@ -901,7 +901,7 @@ int tldap_sasl_bind(struct tldap_context *ld,
 	struct tevent_req *req;
 	int result;
 
-	ev = event_context_init(frame);
+	ev = samba_tevent_context_init(frame);
 	if (ev == NULL) {
 		result = TLDAP_NO_MEMORY;
 		goto fail;
@@ -935,10 +935,10 @@ struct tevent_req *tldap_simple_bind_send(TALLOC_CTX *mem_ctx,
 	DATA_BLOB cred;
 
 	if (passwd != NULL) {
-		cred.data = (uint8_t *)passwd;
+		cred.data = discard_const_p(uint8_t, passwd);
 		cred.length = strlen(passwd);
 	} else {
-		cred.data = (uint8_t *)"";
+		cred.data = discard_const_p(uint8_t, "");
 		cred.length = 0;
 	}
 	return tldap_sasl_bind_send(mem_ctx, ev, ld, dn, NULL, &cred, NULL, 0,
@@ -956,10 +956,10 @@ int tldap_simple_bind(struct tldap_context *ld, const char *dn,
 	DATA_BLOB cred;
 
 	if (passwd != NULL) {
-		cred.data = (uint8_t *)passwd;
+		cred.data = discard_const_p(uint8_t, passwd);
 		cred.length = strlen(passwd);
 	} else {
-		cred.data = (uint8_t *)"";
+		cred.data = discard_const_p(uint8_t, "");
 		cred.length = 0;
 	}
 	return tldap_sasl_bind(ld, dn, NULL, &cred, NULL, 0, NULL, 0);
@@ -1370,12 +1370,15 @@ static bool tldap_push_filter_basic(struct tldap_context *ld,
 			dn++;
 
 			rule = strchr(dn, ':');
+			if (rule == NULL) {
+				return false;
+			}
 			if ((rule == dn + 1) || rule + 1 == e) {
 				/* malformed filter, contains "::" */
 				return false;
 			}
 
-			if (StrnCaseCmp(dn, "dn:", 3) != 0) {
+			if (strncasecmp_m(dn, "dn:", 3) != 0) {
 				if (rule == e) {
 					rule = dn;
 					dn = NULL;
@@ -1702,11 +1705,11 @@ static void tldap_search_done(struct tevent_req *subreq)
 	switch (state->result->type) {
 	case TLDAP_RES_SEARCH_ENTRY:
 	case TLDAP_RES_SEARCH_REFERENCE:
-		tevent_req_notify_callback(req);
 		if (!tldap_msg_set_pending(subreq)) {
-			tevent_req_nomem(NULL, req);
+			tevent_req_oom(req);
 			return;
 		}
+		tevent_req_notify_callback(req);
 		break;
 	case TLDAP_RES_SEARCH_RESULT:
 		TALLOC_FREE(subreq);
@@ -1824,7 +1827,7 @@ int tldap_search(struct tldap_context *ld,
 	state.mem_ctx = mem_ctx;
 	state.rc = TLDAP_SUCCESS;
 
-	ev = event_context_init(frame);
+	ev = samba_tevent_context_init(frame);
 	if (ev == NULL) {
 		state.rc = TLDAP_NO_MEMORY;
 		goto fail;
@@ -2141,7 +2144,7 @@ int tldap_add(struct tldap_context *ld, const char *dn,
 	struct tevent_req *req;
 	int result;
 
-	ev = event_context_init(frame);
+	ev = samba_tevent_context_init(frame);
 	if (ev == NULL) {
 		result = TLDAP_NO_MEMORY;
 		goto fail;
@@ -2241,7 +2244,7 @@ int tldap_modify(struct tldap_context *ld, const char *dn,
 	struct tevent_req *req;
 	int result;
 
-	ev = event_context_init(frame);
+	ev = samba_tevent_context_init(frame);
 	if (ev == NULL) {
 		result = TLDAP_NO_MEMORY;
 		goto fail;
@@ -2317,7 +2320,7 @@ int tldap_delete(struct tldap_context *ld, const char *dn,
 	struct tevent_req *req;
 	int result;
 
-	ev = event_context_init(frame);
+	ev = samba_tevent_context_init(frame);
 	if (ev == NULL) {
 		result = TLDAP_NO_MEMORY;
 		goto fail;

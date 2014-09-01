@@ -61,8 +61,6 @@
 	info->field = samdb_result_logon_hours(mem_ctx, msg, attr);
 #define QUERY_AFLAGS(msg, field, attr) \
 	info->field = samdb_result_acct_flags(sam_ctx, mem_ctx, msg, a_state->domain_state->domain_dn);
-#define QUERY_PARAMETERS(msg, field, attr) \
-	info->field = samdb_result_parameters(mem_ctx, msg, attr);
 
 
 /* these are used to make the Set[User|Group]Info code easier to follow */
@@ -500,7 +498,7 @@ static NTSTATUS dcesrv_samr_info_DomGeneralInformation(struct samr_domain_state 
 	info->sequence_num = ldb_msg_find_attr_as_uint64(dom_msgs[0], "modifiedCount",
 						 0);
 	switch (state->role) {
-	case ROLE_DOMAIN_CONTROLLER:
+	case ROLE_ACTIVE_DIRECTORY_DC:
 		/* This pulls the NetBIOS name from the
 		   cn=NTDS Settings,cn=<NETBIOS name of PDC>,....
 		   string */
@@ -510,6 +508,9 @@ static NTSTATUS dcesrv_samr_info_DomGeneralInformation(struct samr_domain_state 
 			info->role = SAMR_ROLE_DOMAIN_BDC;
 		}
 		break;
+	case ROLE_DOMAIN_PDC:
+	case ROLE_DOMAIN_BDC:
+		return NT_STATUS_INTERNAL_ERROR;
 	case ROLE_DOMAIN_MEMBER:
 		info->role = SAMR_ROLE_DOMAIN_MEMBER;
 		break;
@@ -603,7 +604,7 @@ static NTSTATUS dcesrv_samr_info_DomInfo7(struct samr_domain_state *state,
 {
 
 	switch (state->role) {
-	case ROLE_DOMAIN_CONTROLLER:
+	case ROLE_ACTIVE_DIRECTORY_DC:
 		/* This pulls the NetBIOS name from the
 		   cn=NTDS Settings,cn=<NETBIOS name of PDC>,....
 		   string */
@@ -612,6 +613,9 @@ static NTSTATUS dcesrv_samr_info_DomInfo7(struct samr_domain_state *state,
 		} else {
 			info->role = SAMR_ROLE_DOMAIN_BDC;
 		}
+		break;
+	case ROLE_DOMAIN_PDC:
+		info->role = SAMR_ROLE_DOMAIN_PDC;
 		break;
 	case ROLE_DOMAIN_MEMBER:
 		info->role = SAMR_ROLE_DOMAIN_MEMBER;
@@ -985,9 +989,7 @@ static NTSTATUS dcesrv_samr_SetDomainInfo(struct dcesrv_call_state *dce_call, TA
 		DEBUG(1,("Failed to modify record %s: %s\n",
 			 ldb_dn_get_linearized(d_state->domain_dn),
 			 ldb_errstring(sam_ctx)));
-
-		/* we really need samdb.c to return NTSTATUS */
-		return NT_STATUS_UNSUCCESSFUL;
+		return dsdb_ldb_err_to_ntstatus(ret);
 	}
 
 	return NT_STATUS_OK;
@@ -1201,13 +1203,13 @@ static NTSTATUS dcesrv_samr_CreateUser2(struct dcesrv_call_state *dce_call, TALL
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
-	status = dsdb_add_user(d_state->sam_ctx, mem_ctx, account_name, r->in.acct_flags, &sid, &dn);
+	status = dsdb_add_user(d_state->sam_ctx, mem_ctx, account_name, r->in.acct_flags, NULL,
+			       &sid, &dn);
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
 	}
 	a_state = talloc(mem_ctx, struct samr_account_state);
 	if (!a_state) {
-		ldb_transaction_cancel(d_state->sam_ctx);
 		return NT_STATUS_NO_MEMORY;
 	}
 	a_state->sam_ctx = d_state->sam_ctx;
@@ -1921,8 +1923,7 @@ static NTSTATUS dcesrv_samr_SetGroupInfo(struct dcesrv_call_state *dce_call, TAL
 	/* modify the samdb record */
 	ret = ldb_modify(g_state->sam_ctx, msg);
 	if (ret != LDB_SUCCESS) {
-		/* we really need samdb.c to return NTSTATUS */
-		return NT_STATUS_UNSUCCESSFUL;
+		return dsdb_ldb_err_to_ntstatus(ret);
 	}
 
 	return NT_STATUS_OK;
@@ -1988,7 +1989,7 @@ static NTSTATUS dcesrv_samr_AddGroupMember(struct dcesrv_call_state *dce_call, T
 	ret = samdb_msg_add_addval(d_state->sam_ctx, mem_ctx, mod, "member",
 								memberdn);
 	if (ret != LDB_SUCCESS) {
-		return NT_STATUS_UNSUCCESSFUL;
+		return dsdb_ldb_err_to_ntstatus(ret);
 	}
 
 	ret = ldb_modify(a_state->sam_ctx, mod);
@@ -2000,7 +2001,7 @@ static NTSTATUS dcesrv_samr_AddGroupMember(struct dcesrv_call_state *dce_call, T
 	case LDB_ERR_INSUFFICIENT_ACCESS_RIGHTS:
 		return NT_STATUS_ACCESS_DENIED;
 	default:
-		return NT_STATUS_UNSUCCESSFUL;
+		return dsdb_ldb_err_to_ntstatus(ret);
 	}
 }
 
@@ -2023,7 +2024,7 @@ static NTSTATUS dcesrv_samr_DeleteDomainGroup(struct dcesrv_call_state *dce_call
 
 	ret = ldb_delete(a_state->sam_ctx, a_state->account_dn);
 	if (ret != LDB_SUCCESS) {
-		return NT_STATUS_UNSUCCESSFUL;
+		return dsdb_ldb_err_to_ntstatus(ret);
 	}
 
 	talloc_free(h);
@@ -2104,7 +2105,7 @@ static NTSTATUS dcesrv_samr_DeleteGroupMember(struct dcesrv_call_state *dce_call
 	case LDB_ERR_INSUFFICIENT_ACCESS_RIGHTS:
 		return NT_STATUS_ACCESS_DENIED;
 	default:
-		return NT_STATUS_UNSUCCESSFUL;
+		return dsdb_ldb_err_to_ntstatus(ret);
 	}
 }
 
@@ -2371,8 +2372,7 @@ static NTSTATUS dcesrv_samr_SetAliasInfo(struct dcesrv_call_state *dce_call, TAL
 	/* modify the samdb record */
 	ret = ldb_modify(a_state->sam_ctx, msg);
 	if (ret != LDB_SUCCESS) {
-		/* we really need samdb.c to return NTSTATUS */
-		return NT_STATUS_UNSUCCESSFUL;
+		return dsdb_ldb_err_to_ntstatus(ret);
 	}
 
 	return NT_STATUS_OK;
@@ -2397,7 +2397,7 @@ static NTSTATUS dcesrv_samr_DeleteDomAlias(struct dcesrv_call_state *dce_call, T
 
 	ret = ldb_delete(a_state->sam_ctx, a_state->account_dn);
 	if (ret != LDB_SUCCESS) {
-		return NT_STATUS_UNSUCCESSFUL;
+		return dsdb_ldb_err_to_ntstatus(ret);
 	}
 
 	talloc_free(h);
@@ -2461,7 +2461,7 @@ static NTSTATUS dcesrv_samr_AddAliasMember(struct dcesrv_call_state *dce_call, T
 	ret = samdb_msg_add_addval(d_state->sam_ctx, mem_ctx, mod, "member",
 				 ldb_dn_alloc_linearized(mem_ctx, memberdn));
 	if (ret != LDB_SUCCESS) {
-		return NT_STATUS_UNSUCCESSFUL;
+		return dsdb_ldb_err_to_ntstatus(ret);
 	}
 
 	ret = ldb_modify(a_state->sam_ctx, mod);
@@ -2473,7 +2473,7 @@ static NTSTATUS dcesrv_samr_AddAliasMember(struct dcesrv_call_state *dce_call, T
 	case LDB_ERR_INSUFFICIENT_ACCESS_RIGHTS:
 		return NT_STATUS_ACCESS_DENIED;
 	default:
-		return NT_STATUS_UNSUCCESSFUL;
+		return dsdb_ldb_err_to_ntstatus(ret);
 	}
 }
 
@@ -2513,7 +2513,7 @@ static NTSTATUS dcesrv_samr_DeleteAliasMember(struct dcesrv_call_state *dce_call
 	ret = samdb_msg_add_delval(d_state->sam_ctx, mem_ctx, mod, "member",
 								 memberdn);
 	if (ret != LDB_SUCCESS) {
-		return NT_STATUS_UNSUCCESSFUL;
+		return dsdb_ldb_err_to_ntstatus(ret);
 	}
 
 	ret = ldb_modify(a_state->sam_ctx, mod);
@@ -2525,7 +2525,7 @@ static NTSTATUS dcesrv_samr_DeleteAliasMember(struct dcesrv_call_state *dce_call
 	case LDB_ERR_INSUFFICIENT_ACCESS_RIGHTS:
 		return NT_STATUS_ACCESS_DENIED;
 	default:
-		return NT_STATUS_UNSUCCESSFUL;
+		return dsdb_ldb_err_to_ntstatus(ret);
 	}
 }
 
@@ -2676,7 +2676,7 @@ static NTSTATUS dcesrv_samr_DeleteUser(struct dcesrv_call_state *dce_call, TALLO
 		DEBUG(1, ("Failed to delete user: %s: %s\n",
 			  ldb_dn_get_linearized(a_state->account_dn),
 			  ldb_errstring(a_state->sam_ctx)));
-		return NT_STATUS_UNSUCCESSFUL;
+		return dsdb_ldb_err_to_ntstatus(ret);
 	}
 
 	talloc_free(h);
@@ -2700,6 +2700,8 @@ static NTSTATUS dcesrv_samr_QueryUserInfo(struct dcesrv_call_state *dce_call, TA
 
 	const char * const *attrs = NULL;
 	union samr_UserInfo *info;
+
+	NTSTATUS status;
 
 	*r->out.info = NULL;
 
@@ -3041,7 +3043,11 @@ static NTSTATUS dcesrv_samr_QueryUserInfo(struct dcesrv_call_state *dce_call, TA
 		break;
 
 	case 20:
-		QUERY_PARAMETERS(msg, info20.parameters,    "userParameters");
+		status = samdb_result_parameters(mem_ctx, msg, "userParameters", &info->info20.parameters);
+		if (!NT_STATUS_IS_OK(status)) {
+			talloc_free(info);
+			return status;
+		}
 		break;
 
 	case 21:
@@ -3060,7 +3066,12 @@ static NTSTATUS dcesrv_samr_QueryUserInfo(struct dcesrv_call_state *dce_call, TA
 		QUERY_STRING(msg, info21.description,          "description");
 		QUERY_STRING(msg, info21.workstations,         "userWorkstations");
 		QUERY_STRING(msg, info21.comment,              "comment");
-		QUERY_PARAMETERS(msg, info21.parameters,       "userParameters");
+		status = samdb_result_parameters(mem_ctx, msg, "userParameters", &info->info21.parameters);
+		if (!NT_STATUS_IS_OK(status)) {
+			talloc_free(info);
+			return status;
+		}
+
 		QUERY_RID   (msg, info21.rid,                  "objectSid");
 		QUERY_UINT  (msg, info21.primary_gid,          "primaryGroupID");
 		QUERY_AFLAGS(msg, info21.acct_flags,           "userAccountControl");
@@ -3508,8 +3519,14 @@ static NTSTATUS dcesrv_samr_SetUserInfo(struct dcesrv_call_state *dce_call, TALL
 		}
 
 		if (r->in.info->info26.password_expired > 0) {
+			NTTIME t = 0;
 			struct ldb_message_element *set_el;
-			if (samdb_msg_add_uint64(sam_ctx, mem_ctx, msg, "pwdLastSet", 0) != LDB_SUCCESS) {
+			if (r->in.info->info26.password_expired
+					== PASS_DONT_CHANGE_AT_NEXT_LOGON) {
+				unix_to_nt_time(&t, time(NULL));
+			}
+			if (samdb_msg_add_uint64(sam_ctx, mem_ctx, msg,
+						 "pwdLastSet", t) != LDB_SUCCESS) {
 				return NT_STATUS_NO_MEMORY;
 			}
 			set_el = ldb_msg_find_element(msg, "pwdLastSet");
@@ -3534,8 +3551,7 @@ static NTSTATUS dcesrv_samr_SetUserInfo(struct dcesrv_call_state *dce_call, TALL
 				 ldb_dn_get_linearized(a_state->account_dn),
 				 ldb_errstring(a_state->sam_ctx)));
 
-			/* we really need samdb.c to return NTSTATUS */
-			return NT_STATUS_UNSUCCESSFUL;
+			return dsdb_ldb_err_to_ntstatus(ret);
 		}
 	}
 
@@ -3665,7 +3681,7 @@ static NTSTATUS dcesrv_samr_QueryDisplayInfo(struct dcesrv_call_state *dce_call,
 
 	/* search for all requested objects in all domains. This could
 	   possibly be cached and resumed based on resume_key */
-	ret = dsdb_search(d_state->sam_ctx, mem_ctx, &res, NULL,
+	ret = dsdb_search(d_state->sam_ctx, mem_ctx, &res, ldb_get_default_basedn(d_state->sam_ctx),
 			  LDB_SCOPE_SUBTREE, attrs, 0, "%s", filter);
 	if (ret != LDB_SUCCESS) {
 		return NT_STATUS_INTERNAL_DB_CORRUPTION;
@@ -3934,6 +3950,7 @@ static NTSTATUS dcesrv_samr_RemoveMemberFromForeignDomain(struct dcesrv_call_sta
 
 	for (i=0; i<count; i++) {
 		struct ldb_message *mod;
+		int ret;
 
 		mod = ldb_msg_new(mem_ctx);
 		if (mod == NULL) {
@@ -3946,10 +3963,11 @@ static NTSTATUS dcesrv_samr_RemoveMemberFromForeignDomain(struct dcesrv_call_sta
 					 "member", memberdn) != LDB_SUCCESS)
 			return NT_STATUS_NO_MEMORY;
 
-		if (ldb_modify(d_state->sam_ctx, mod) != LDB_SUCCESS)
-			return NT_STATUS_UNSUCCESSFUL;
-
+		ret = ldb_modify(d_state->sam_ctx, mod);
 		talloc_free(mod);
+		if (ret != LDB_SUCCESS) {
+			return dsdb_ldb_err_to_ntstatus(ret);
+		}
 	}
 
 	return NT_STATUS_OK;
@@ -4287,6 +4305,11 @@ static NTSTATUS dcesrv_samr_ValidatePassword(struct dcesrv_call_state *dce_call,
 	DATA_BLOB password;
 	enum samr_ValidationStatus res;
 	NTSTATUS status;
+	enum dcerpc_transport_t transport = dce_call->conn->endpoint->ep_description->transport;
+
+	if (transport != NCACN_IP_TCP && transport != NCALRPC) {
+		DCESRV_FAULT(DCERPC_FAULT_ACCESS_DENIED);
+	}
 
 	(*r->out.rep) = talloc_zero(mem_ctx, union samr_ValidatePasswordRep);
 

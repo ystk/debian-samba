@@ -180,7 +180,7 @@ use only by developers and generate HUGE amounts of log
 data, most of which is extremely cryptic.</para>
 
 <para>Note that specifying this parameter here will 
-override the <smbconfoption><name>log level</name></smbconfoption> parameter
+override the <smbconfoption name="log level" /> parameter
 in the &smb.conf; file.</para>
 </listitem>
 </varlistentry>'>
@@ -207,14 +207,14 @@ use only by developers and generate HUGE amounts of log
 data, most of which is extremely cryptic.</para>
 
 <para>Note that specifying this parameter here will 
-override the <smbconfoption><name>log level</name></smbconfoption> parameter
+override the <smbconfoption name="log level" /> parameter
 in the &smb.conf; file.</para>
 </listitem>
 </varlistentry>'>
 
 <!ENTITY stdarg.configfile '
 <varlistentry>
-<term>-s|--configfile &lt;configuration file&gt;</term>
+<term>-s|--configfile=&lt;configuration file&gt;</term>
 <listitem><para>The file specified contains the 
 configuration details required by the server.  The 
 information in this file includes server-specific
@@ -241,11 +241,35 @@ log.smbd, etc...). The log file is never removed by the client.
 </para></listitem>
 </varlistentry>'>
 
+<!ENTITY stdarg.option '
+<varlistentry>
+<term>--option=&lt;name&gt;=&lt;value&gt;</term>
+<listitem><para>Set the
+<citerefentry><refentrytitle>smb.conf</refentrytitle>
+<manvolnum>5</manvolnum></citerefentry>
+option "&lt;name&gt;" to value "&lt;value&gt;" from the command line.
+This overrides compiled-in defaults and options read from the configuration
+file.
+</para></listitem>
+</varlistentry>'>
+
 <!ENTITY popt.common.samba '
 &stdarg.version;
 &stdarg.configfile;
 &stdarg.log-basename;
+&stdarg.option;
 '>
+
+<!ENTITY popt.common.samba.client '
+&stdarg.client.debug;
+&popt.common.samba;
+'>
+
+<!ENTITY popt.common.samba.server '
+&stdarg.server.debug;
+&popt.common.samba;
+'>
+
 
 <!ENTITY stdarg.resolve.order '
 <varlistentry>
@@ -297,11 +321,13 @@ being on a locally connected subnet.
 
 <para>If this parameter is not set then the name resolve order 
 defined in the &smb.conf; file parameter  
-(<smbconfoption><name>name resolve order</name></smbconfoption>) will be used.
+(<smbconfoption name="name resolve order" />) will be used.
 </para>
 
 <para>The default order is lmhosts, host, wins, bcast. Without 
-this parameter or any entry in the <smbconfoption><name>name resolve order</name></smbconfoption> parameter of the &smb.conf; file, the name 
+this parameter or any entry in the
+<smbconfoption name="name resolve order" /> parameter of
+the &smb.conf; file, the name
 resolution methods will be attempted in this order. </para></listitem>
 </varlistentry>'>
 
@@ -310,7 +336,8 @@ resolution methods will be attempted in this order. </para></listitem>
 <term>-n|--netbiosname &lt;primary NetBIOS name&gt;</term>
 <listitem><para>This option allows you to override
 the NetBIOS name that Samba uses for itself. This is identical
-to setting the <smbconfoption><name>netbios name</name></smbconfoption> parameter in the &smb.conf; file. 
+to setting the <smbconfoption name="netbios name" /> parameter in
+the &smb.conf; file.
 However, a command
 line setting will take precedence over settings in
 &smb.conf;.</para></listitem>
@@ -437,13 +464,44 @@ Try to use the credentials cached by winbind.
 </varlistentry>
 '>
 
-
-<!ENTITY stdarg.help '
+<!ENTITY stdarg.signing '
 <varlistentry>
-<term>-?|--help</term>
-<listitem><para>Print a summary of command line options.
+<term>-S|--signing on|off|required</term>
+<listitem><para>Set the client signing state.
 </para></listitem>
-</varlistentry>'>
+</varlistentry>
+'>
+
+<!ENTITY stdarg.machinepass '
+<varlistentry>
+<term>-P|--machine-pass</term>
+<listitem><para>Use stored machine account password.
+</para></listitem>
+</varlistentry>
+'>
+
+<!ENTITY stdarg.encrypt '
+<varlistentry>
+<term>-e|--encrypt</term>
+<listitem><para>
+This command line parameter requires the remote
+server support the UNIX extensions or that the SMB3 protocol has been selected.
+Requests that the connection be encrypted. Negotiates SMB encryption using either
+SMB3 or POSIX extensions via GSSAPI. Uses the given credentials for
+the encryption negotiation (either kerberos or NTLMv1/v2 if given
+domain/username/password triple. Fails the connection if encryption
+cannot be negotiated.
+</para></listitem>
+</varlistentry>
+'>
+
+<!ENTITY stdarg.pwnthash '
+<varlistentry>
+<term>--pw-nt-hash</term>
+<listitem><para>The supplied password is the NT hash.
+</para></listitem>
+</varlistentry>
+'>
 
 <!ENTITY popt.common.credentials '
 &stdarg.nopass;
@@ -451,6 +509,31 @@ Try to use the credentials cached by winbind.
 &stdarg.useccache;
 &stdarg.authfile;
 &stdarg.username;
+&stdarg.signing;
+&stdarg.machinepass;
+&stdarg.encrypt;
+&stdarg.pwnthash;
+'>
+
+<!ENTITY stdarg.help '
+<varlistentry>
+<term>-?|--help</term>
+<listitem><para>Print a summary of command line options.
+</para></listitem>
+</varlistentry>
+'>
+
+<!ENTITY stdarg.usage '
+<varlistentry>
+<term>--usage</term>
+<listitem><para>Display brief usage message.
+</para></listitem>
+</varlistentry>
+'>
+
+<!ENTITY popt.autohelp '
+&stdarg.help;
+&stdarg.usage;
 '>
 
 <!-- Entities for the various programs -->

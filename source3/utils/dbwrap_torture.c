@@ -22,8 +22,10 @@
 #include "includes.h"
 #include "system/filesys.h"
 #include "popt_common.h"
-#include "dbwrap.h"
+#include "dbwrap/dbwrap.h"
+#include "dbwrap/dbwrap_open.h"
 #include "messages.h"
+#include "lib/util/util_tdb.h"
 
 #if 0
 #include "lib/events/events.h"
@@ -41,7 +43,7 @@ static int timelimit = 10;
 static int torture_delay = 0;
 static int verbose = 0;
 static int no_trans = 0;
-static char *db_name = (char *)discard_const(DEFAULT_DB_NAME);
+static const char *db_name = DEFAULT_DB_NAME;
 
 
 static unsigned int pnn;
@@ -55,7 +57,7 @@ static void print_counters(void)
 	int i;
 	uint32_t *old_counters;
 
-	printf("[%4u] Counters: ", getpid());
+	printf("[%4u] Counters: ", (unsigned int)getpid());
 	old_counters = (uint32_t *)old_data.dptr;
 	for (i=0; i < old_data.dsize/sizeof(uint32_t); i++) {
 		printf("%6u ", old_counters[i]);
@@ -87,7 +89,7 @@ static bool check_counters(struct db_context *db, TDB_DATA data)
 	for (i=0; i < old_data.dsize/sizeof(uint32_t); i++) {
 		if (counters[i] < old_counters[i]) {
 			printf("[%4u] ERROR: counters has decreased for node %u  From %u to %u\n",
-			       getpid(), i, old_counters[i], counters[i]);
+			       (unsigned int)getpid(), i, old_counters[i], counters[i]);
 			success = false;
 			return false;
 		}
@@ -128,19 +130,19 @@ static void test_store_records(struct db_context *db, struct tevent_context *ev)
 	TALLOC_CTX *tmp_ctx = talloc_stackframe();
 	struct timeval start;
 
-	key.dptr = (unsigned char *)discard_const("testkey");
-	key.dsize = strlen((const char *)key.dptr)+1;
+	key = string_term_tdb_data("testkey");
 
 	start = timeval_current();
 	while ((timelimit == 0) || (timeval_elapsed(&start) < timelimit)) {
 		struct db_record *rec;
 		TDB_DATA data;
+		TDB_DATA value;
 		int ret;
 		NTSTATUS status;
 
 		if (!no_trans) {
 			if (verbose) DEBUG(1, ("starting transaction\n"));
-			ret = db->transaction_start(db);
+			ret = dbwrap_transaction_start(db);
 			if (ret != 0) {
 				DEBUG(0, ("Failed to start transaction on node "
 					  "%d\n", pnn));
@@ -151,22 +153,23 @@ static void test_store_records(struct db_context *db, struct tevent_context *ev)
 		}
 
 		if (verbose) DEBUG(1, ("calling fetch_lock\n"));
-		rec = db->fetch_locked(db, tmp_ctx, key);
+		rec = dbwrap_fetch_locked(db, tmp_ctx, key);
 		if (rec == NULL) {
 			DEBUG(0, ("Failed to fetch record\n"));
 			goto fail;
 		}
 		if (verbose) DEBUG(1, ("fetched record ok\n"));
 		do_sleep(torture_delay);
+		value = dbwrap_record_get_value(rec);
 
-		data.dsize = MAX(rec->value.dsize, sizeof(uint32_t) * (pnn+1));
+		data.dsize = MAX(value.dsize, sizeof(uint32_t) * (pnn+1));
 		data.dptr = (unsigned char *)talloc_zero_size(tmp_ctx,
 							      data.dsize);
 		if (data.dptr == NULL) {
 			DEBUG(0, ("Failed to allocate data\n"));
 			goto fail;
 		}
-		memcpy(data.dptr, rec->value.dptr,rec->value.dsize);
+		memcpy(data.dptr, value.dptr, value.dsize);
 
 		counters = (uint32_t *)data.dptr;
 
@@ -174,11 +177,11 @@ static void test_store_records(struct db_context *db, struct tevent_context *ev)
 		counters[pnn]++;
 
 		if (verbose) DEBUG(1, ("storing data\n"));
-		status = rec->store(rec, data, TDB_REPLACE);
+		status = dbwrap_record_store(rec, data, TDB_REPLACE);
 		if (!NT_STATUS_IS_OK(status)) {
 			DEBUG(0, ("Failed to store record\n"));
 			if (!no_trans) {
-				ret = db->transaction_cancel(db);
+				ret = dbwrap_transaction_cancel(db);
 				if (ret != 0) {
 					DEBUG(0, ("Error cancelling transaction.\n"));
 				}
@@ -191,7 +194,7 @@ static void test_store_records(struct db_context *db, struct tevent_context *ev)
 
 		if (!no_trans) {
 			if (verbose) DEBUG(1, ("calling transaction_commit\n"));
-			ret = db->transaction_commit(db);
+			ret = dbwrap_transaction_commit(db);
 			if (ret != 0) {
 				DEBUG(0, ("Failed to commit transaction\n"));
 				goto fail;
@@ -281,15 +284,15 @@ int main(int argc, const char *argv[])
 		while (extra_argv[extra_argc]) extra_argc++;
 	}
 
-	lp_load(get_dyn_CONFIGFILE(), true, false, false, true);
+	lp_load_global(get_dyn_CONFIGFILE());
 
-	ev_ctx = tevent_context_init(mem_ctx);
+	ev_ctx = samba_tevent_context_init(mem_ctx);
 	if (ev_ctx == NULL) {
 		d_fprintf(stderr, "ERROR: could not init event context\n");
 		goto done;
 	}
 
-	msg_ctx = messaging_init(mem_ctx, procid_self(), ev_ctx);
+	msg_ctx = messaging_init(mem_ctx, ev_ctx);
 	if (msg_ctx == NULL) {
 		d_fprintf(stderr, "ERROR: could not init messaging context\n");
 		goto done;
@@ -305,7 +308,8 @@ int main(int argc, const char *argv[])
 		tdb_flags |= TDB_CLEAR_IF_FIRST|TDB_INCOMPATIBLE_HASH;
 	}
 
-	db = db_open(mem_ctx, db_name, 0, tdb_flags,  O_RDWR | O_CREAT, 0644);
+	db = db_open(mem_ctx, db_name, 0, tdb_flags,  O_RDWR | O_CREAT, 0644,
+		     DBWRAP_LOCK_ORDER_1);
 
 	if (db == NULL) {
 		d_fprintf(stderr, "failed to open db '%s': %s\n", db_name,

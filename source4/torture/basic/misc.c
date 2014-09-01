@@ -24,7 +24,7 @@
 #include "system/time.h"
 #include "system/wait.h"
 #include "system/filesys.h"
-#include "libcli/raw/ioctl.h"
+#include "../libcli/smb/smb_constants.h"
 #include "libcli/libcli.h"
 #include "lib/events/events.h"
 #include "libcli/resolve/resolve.h"
@@ -33,6 +33,7 @@
 #include "libcli/smb_composite/smb_composite.h"
 #include "libcli/composite/composite.h"
 #include "param/param.h"
+#include "torture/basic/proto.h"
 
 extern struct cli_credentials *cmdline_credentials;
 	
@@ -197,7 +198,7 @@ bool torture_holdcon(struct torture_context *tctx)
 			return false;
 		}
 		if (torture_setting_bool(tctx, "progress", true)) {
-			torture_comment(tctx, "opened %d connections\r", i);
+			torture_comment(tctx, "opened %d connections\r", i+1);
 			fflush(stdout);
 		}
 	}
@@ -294,7 +295,7 @@ bool torture_holdopen(struct torture_context *tctx,
 /*
 test how many open files this server supports on the one socket
 */
-bool run_maxfidtest(struct torture_context *tctx, struct smbcli_state *cli, int dummy)
+bool torture_maxfid_test(struct torture_context *tctx, struct smbcli_state *cli)
 {
 #define MAXFID_TEMPLATE "\\maxfid\\fid%d\\maxfid.%d.%d"
 	char *fname;
@@ -346,12 +347,11 @@ bool run_maxfidtest(struct torture_context *tctx, struct smbcli_state *cli, int 
 		}
 	}
 	torture_comment(tctx, "%6d\n", i);
-	i--;
 
 	maxfid = i;
 
 	torture_comment(tctx, "cleaning up\n");
-	for (i=0;i<maxfid/2;i++) {
+	for (i=0;i<maxfid;i++) {
 		asprintf(&fname, MAXFID_TEMPLATE, i/1000, i,(int)getpid());
 		if (NT_STATUS_IS_ERR(smbcli_close(cli->tree, fnums[i]))) {
 			torture_comment(tctx, "Close of fnum %d failed - %s\n", fnums[i], smbcli_errstr(cli->tree));
@@ -363,19 +363,8 @@ bool run_maxfidtest(struct torture_context *tctx, struct smbcli_state *cli, int 
 		}
 		free(fname);
 
-		asprintf(&fname, MAXFID_TEMPLATE, (maxfid-i)/1000, maxfid-i,(int)getpid());
-		if (NT_STATUS_IS_ERR(smbcli_close(cli->tree, fnums[maxfid-i]))) {
-			torture_comment(tctx, "Close of fnum %d failed - %s\n", fnums[maxfid-i], smbcli_errstr(cli->tree));
-		}
-		if (NT_STATUS_IS_ERR(smbcli_unlink(cli->tree, fname))) {
-			torture_comment(tctx, "unlink of %s failed (%s)\n", 
-			       fname, smbcli_errstr(cli->tree));
-			correct = false;
-		}
-		free(fname);
-
 		if (torture_setting_bool(tctx, "progress", true)) {
-			torture_comment(tctx, "%6d %6d\r", i, maxfid-i);
+			torture_comment(tctx, "%6d\r", i);
 			fflush(stdout);
 		}
 	}
@@ -388,9 +377,7 @@ bool run_maxfidtest(struct torture_context *tctx, struct smbcli_state *cli, int 
 	}
 
 	torture_comment(tctx, "maxfid test finished\n");
-	if (!torture_close_connection(cli)) {
-		correct = false;
-	}
+
 	return correct;
 #undef MAXFID_TEMPLATE
 }
@@ -996,7 +983,7 @@ bool run_benchrw(struct torture_context *tctx)
 				finished++;
 				break;
 			default:
-				event_loop_once(ev);
+				tevent_loop_once(ev);
 			}
 		}
 	}

@@ -28,6 +28,7 @@
 #include "libsmb/libsmb.h"
 #include "libsmb/clirap.h"
 #include "trans2.h"
+#include "../libcli/smb/smbXcli_base.h"
 
 #define PIPE_LANMAN   "\\PIPE\\LANMAN"
 
@@ -66,14 +67,14 @@ bool cli_api(struct cli_state *cli,
 	 * talloc
 	 */
 
-	*rparam = (char *)memdup(my_rparam, num_my_rparam);
+	*rparam = (char *)smb_memdup(my_rparam, num_my_rparam);
 	if (*rparam == NULL) {
 		goto fail;
 	}
 	*rprcnt = num_my_rparam;
 	TALLOC_FREE(my_rparam);
 
-	*rdata = (char *)memdup(my_rdata, num_my_rdata);
+	*rdata = (char *)smb_memdup(my_rdata, num_my_rdata);
 	if (*rdata == NULL) {
 		goto fail;
 	}
@@ -116,13 +117,17 @@ bool cli_NetWkstaUserLogon(struct cli_state *cli,char *user, char *workstation)
 	SSVAL(p,0,1);
 	p += 2;
 	strlcpy(p,user,sizeof(param)-PTR_DIFF(p,param));
-	strupper_m(p);
+	if (!strupper_m(p)) {
+		return false;
+	}
 	p += 21;
 	p++;
 	p += 15;
 	p++;
 	strlcpy(p, workstation,sizeof(param)-PTR_DIFF(p,param));
-	strupper_m(p);
+	if (!strupper_m(p)) {
+		return false;
+	}
 	p += 16;
 	SSVAL(p, 0, CLI_BUFFER_SIZE);
 	p += 2;
@@ -140,7 +145,10 @@ bool cli_NetWkstaUserLogon(struct cli_state *cli,char *user, char *workstation)
 
 		if (cli->rap_error == 0) {
 			DEBUG(4,("NetWkstaUserLogon success\n"));
-			cli->privileges = SVAL(p, 24);
+			/*
+			 * The cli->privileges = SVAL(p, 24); field was set here
+			 * but it was not use anywhere else.
+			 */
 			/* The cli->eff_name field used to be set here
 	                   but it wasn't used anywhere else. */
 		} else {
@@ -319,7 +327,7 @@ bool cli_NetServerEnum(struct cli_state *cli, char *workgroup, uint32 stype,
 				sizeof(param) - PTR_DIFF(p,param) - 1,
 				STR_TERMINATE|STR_UPPER);
 
-		if (len == (size_t)-1) {
+		if (len == 0) {
 			SAFE_FREE(last_entry);
 			return false;
 		}
@@ -331,7 +339,7 @@ bool cli_NetServerEnum(struct cli_state *cli, char *workgroup, uint32 stype,
 					sizeof(param) - PTR_DIFF(p,param) - 1,
 					STR_TERMINATE);
 
-			if (len == (size_t)-1) {
+			if (len == 0) {
 				SAFE_FREE(last_entry);
 				return false;
 			}
@@ -574,7 +582,7 @@ struct cli_qpathinfo1_state {
 static void cli_qpathinfo1_done(struct tevent_req *subreq);
 
 struct tevent_req *cli_qpathinfo1_send(TALLOC_CTX *mem_ctx,
-				       struct event_context *ev,
+				       struct tevent_context *ev,
 				       struct cli_state *cli,
 				       const char *fname)
 {
@@ -587,7 +595,7 @@ struct tevent_req *cli_qpathinfo1_send(TALLOC_CTX *mem_ctx,
 	}
 	state->cli = cli;
 	subreq = cli_qpathinfo_send(state, ev, cli, fname, SMB_INFO_STANDARD,
-				    22, cli->max_xmit);
+				    22, CLI_BUFFER_SIZE);
 	if (tevent_req_nomem(subreq, req)) {
 		return tevent_req_post(req, ev);
 	}
@@ -617,7 +625,7 @@ NTSTATUS cli_qpathinfo1_recv(struct tevent_req *req,
 			     time_t *change_time,
 			     time_t *access_time,
 			     time_t *write_time,
-			     SMB_OFF_T *size,
+			     off_t *size,
 			     uint16 *mode)
 {
 	struct cli_qpathinfo1_state *state = tevent_req_data(
@@ -637,13 +645,13 @@ NTSTATUS cli_qpathinfo1_recv(struct tevent_req *req,
 	}
 
 	if (change_time) {
-		*change_time = date_fn(state->data+0, state->cli->serverzone);
+		*change_time = date_fn(state->data+0, smb1cli_conn_server_time_zone(state->cli->conn));
 	}
 	if (access_time) {
-		*access_time = date_fn(state->data+4, state->cli->serverzone);
+		*access_time = date_fn(state->data+4, smb1cli_conn_server_time_zone(state->cli->conn));
 	}
 	if (write_time) {
-		*write_time = date_fn(state->data+8, state->cli->serverzone);
+		*write_time = date_fn(state->data+8, smb1cli_conn_server_time_zone(state->cli->conn));
 	}
 	if (size) {
 		*size = IVAL(state->data, 12);
@@ -659,22 +667,22 @@ NTSTATUS cli_qpathinfo1(struct cli_state *cli,
 			time_t *change_time,
 			time_t *access_time,
 			time_t *write_time,
-			SMB_OFF_T *size,
+			off_t *size,
 			uint16 *mode)
 {
 	TALLOC_CTX *frame = talloc_stackframe();
-	struct event_context *ev;
+	struct tevent_context *ev;
 	struct tevent_req *req;
 	NTSTATUS status = NT_STATUS_NO_MEMORY;
 
-	if (cli_has_async_calls(cli)) {
+	if (smbXcli_conn_has_async_calls(cli->conn)) {
 		/*
 		 * Can't use sync call while an async call is in flight
 		 */
 		status = NT_STATUS_INVALID_PARAMETER;
 		goto fail;
 	}
-	ev = event_context_init(frame);
+	ev = samba_tevent_context_init(frame);
 	if (ev == NULL) {
 		goto fail;
 	}
@@ -750,7 +758,7 @@ struct cli_qpathinfo2_state {
 static void cli_qpathinfo2_done(struct tevent_req *subreq);
 
 struct tevent_req *cli_qpathinfo2_send(TALLOC_CTX *mem_ctx,
-				       struct event_context *ev,
+				       struct tevent_context *ev,
 				       struct cli_state *cli,
 				       const char *fname)
 {
@@ -763,7 +771,7 @@ struct tevent_req *cli_qpathinfo2_send(TALLOC_CTX *mem_ctx,
 	}
 	subreq = cli_qpathinfo_send(state, ev, cli, fname,
 				    SMB_QUERY_FILE_ALL_INFO,
-				    68, cli->max_xmit);
+				    68, CLI_BUFFER_SIZE);
 	if (tevent_req_nomem(subreq, req)) {
 		return tevent_req_post(req, ev);
 	}
@@ -794,7 +802,7 @@ NTSTATUS cli_qpathinfo2_recv(struct tevent_req *req,
 			     struct timespec *access_time,
 			     struct timespec *write_time,
 			     struct timespec *change_time,
-			     SMB_OFF_T *size, uint16 *mode,
+			     off_t *size, uint16 *mode,
 			     SMB_INO_T *ino)
 {
 	struct cli_qpathinfo2_state *state = tevent_req_data(
@@ -834,22 +842,36 @@ NTSTATUS cli_qpathinfo2(struct cli_state *cli, const char *fname,
 			struct timespec *access_time,
 			struct timespec *write_time,
 			struct timespec *change_time,
-			SMB_OFF_T *size, uint16 *mode,
+			off_t *size, uint16 *mode,
 			SMB_INO_T *ino)
 {
-	TALLOC_CTX *frame = talloc_stackframe();
-	struct event_context *ev;
+	TALLOC_CTX *frame = NULL;
+	struct tevent_context *ev;
 	struct tevent_req *req;
 	NTSTATUS status = NT_STATUS_NO_MEMORY;
 
-	if (cli_has_async_calls(cli)) {
+	if (smbXcli_conn_protocol(cli->conn) >= PROTOCOL_SMB2_02) {
+		return cli_smb2_qpathinfo2(cli,
+					fname,
+					create_time,
+					access_time,
+					write_time,
+					change_time,
+					size,
+					mode,
+					ino);
+	}
+
+	frame = talloc_stackframe();
+
+	if (smbXcli_conn_has_async_calls(cli->conn)) {
 		/*
 		 * Can't use sync call while an async call is in flight
 		 */
 		status = NT_STATUS_INVALID_PARAMETER;
 		goto fail;
 	}
-	ev = event_context_init(frame);
+	ev = samba_tevent_context_init(frame);
 	if (ev == NULL) {
 		goto fail;
 	}
@@ -870,11 +892,6 @@ NTSTATUS cli_qpathinfo2(struct cli_state *cli, const char *fname,
 /****************************************************************************
  Get the stream info
 ****************************************************************************/
-
-static bool parse_streams_blob(TALLOC_CTX *mem_ctx, const uint8_t *data,
-			       size_t data_len,
-			       unsigned int *pnum_streams,
-			       struct stream_struct **pstreams);
 
 struct cli_qpathinfo_streams_state {
 	uint32_t num_data;
@@ -898,7 +915,7 @@ struct tevent_req *cli_qpathinfo_streams_send(TALLOC_CTX *mem_ctx,
 	}
 	subreq = cli_qpathinfo_send(state, ev, cli, fname,
 				    SMB_FILE_STREAM_INFORMATION,
-				    0, cli->max_xmit);
+				    0, CLI_BUFFER_SIZE);
 	if (tevent_req_nomem(subreq, req)) {
 		return tevent_req_post(req, ev);
 	}
@@ -948,19 +965,29 @@ NTSTATUS cli_qpathinfo_streams(struct cli_state *cli, const char *fname,
 			       unsigned int *pnum_streams,
 			       struct stream_struct **pstreams)
 {
-	TALLOC_CTX *frame = talloc_stackframe();
-	struct event_context *ev;
+	TALLOC_CTX *frame = NULL;
+	struct tevent_context *ev;
 	struct tevent_req *req;
 	NTSTATUS status = NT_STATUS_NO_MEMORY;
 
-	if (cli_has_async_calls(cli)) {
+	if (smbXcli_conn_protocol(cli->conn) >= PROTOCOL_SMB2_02) {
+		return cli_smb2_qpathinfo_streams(cli,
+					fname,
+					mem_ctx,
+					pnum_streams,
+					pstreams);
+	}
+
+	frame = talloc_stackframe();
+
+	if (smbXcli_conn_has_async_calls(cli->conn)) {
 		/*
 		 * Can't use sync call while an async call is in flight
 		 */
 		status = NT_STATUS_INVALID_PARAMETER;
 		goto fail;
 	}
-	ev = event_context_init(frame);
+	ev = samba_tevent_context_init(frame);
 	if (ev == NULL) {
 		goto fail;
 	}
@@ -978,7 +1005,7 @@ NTSTATUS cli_qpathinfo_streams(struct cli_state *cli, const char *fname,
 	return status;
 }
 
-static bool parse_streams_blob(TALLOC_CTX *mem_ctx, const uint8_t *rdata,
+bool parse_streams_blob(TALLOC_CTX *mem_ctx, const uint8_t *rdata,
 			       size_t data_len,
 			       unsigned int *pnum_streams,
 			       struct stream_struct **pstreams)
@@ -998,7 +1025,7 @@ static bool parse_streams_blob(TALLOC_CTX *mem_ctx, const uint8_t *rdata,
 		struct stream_struct *tmp;
 		uint8_t *tmp_buf;
 
-		tmp = TALLOC_REALLOC_ARRAY(mem_ctx, streams,
+		tmp = talloc_realloc(mem_ctx, streams,
 					   struct stream_struct,
 					   num_streams+1);
 
@@ -1023,7 +1050,7 @@ static bool parse_streams_blob(TALLOC_CTX *mem_ctx, const uint8_t *rdata,
 		 * convert_string_talloc??
 		 */
 
-		tmp_buf = TALLOC_ARRAY(streams, uint8_t, nlen+2);
+		tmp_buf = talloc_array(streams, uint8_t, nlen+2);
 		if (tmp_buf == NULL) {
 			goto fail;
 		}
@@ -1033,7 +1060,7 @@ static bool parse_streams_blob(TALLOC_CTX *mem_ctx, const uint8_t *rdata,
 		tmp_buf[nlen+1] = 0;
 
 		if (!convert_string_talloc(streams, CH_UTF16, CH_UNIX, tmp_buf,
-					   nlen+2, &vstr, &size, false))
+					   nlen+2, &vstr, &size))
 		{
 			TALLOC_FREE(tmp_buf);
 			goto fail;
@@ -1064,23 +1091,44 @@ static bool parse_streams_blob(TALLOC_CTX *mem_ctx, const uint8_t *rdata,
  Send a qfileinfo QUERY_FILE_NAME_INFO call.
 ****************************************************************************/
 
-NTSTATUS cli_qfilename(struct cli_state *cli, uint16_t fnum, char *name,
-		       size_t namelen)
+NTSTATUS cli_qfilename(struct cli_state *cli, uint16_t fnum,
+		       TALLOC_CTX *mem_ctx, char **_name)
 {
+	uint16_t recv_flags2;
 	uint8_t *rdata;
 	uint32_t num_rdata;
 	NTSTATUS status;
+	char *name = NULL;
+	uint32_t namelen;
 
 	status = cli_qfileinfo(talloc_tos(), cli, fnum,
 			       SMB_QUERY_FILE_NAME_INFO,
-			       4, cli->max_xmit,
+			       4, CLI_BUFFER_SIZE, &recv_flags2,
 			       &rdata, &num_rdata);
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
 	}
 
-	clistr_pull(cli->inbuf, name, rdata+4, namelen, IVAL(rdata, 0),
-		    STR_UNICODE);
+	namelen = IVAL(rdata, 0);
+	if (namelen > (num_rdata - 4)) {
+		TALLOC_FREE(rdata);
+		return NT_STATUS_INVALID_NETWORK_RESPONSE;
+	}
+
+	clistr_pull_talloc(mem_ctx,
+			   (const char *)rdata,
+			   recv_flags2,
+			   &name,
+			   rdata + 4,
+			   namelen,
+			   STR_UNICODE);
+	if (name == NULL) {
+		status = map_nt_error_from_unix(errno);
+		TALLOC_FREE(rdata);
+		return status;
+	}
+
+	*_name = name;
 	TALLOC_FREE(rdata);
 	return NT_STATUS_OK;
 }
@@ -1090,7 +1138,7 @@ NTSTATUS cli_qfilename(struct cli_state *cli, uint16_t fnum, char *name,
 ****************************************************************************/
 
 NTSTATUS cli_qfileinfo_basic(struct cli_state *cli, uint16_t fnum,
-			     uint16 *mode, SMB_OFF_T *size,
+			     uint16 *mode, off_t *size,
 			     struct timespec *create_time,
 			     struct timespec *access_time,
 			     struct timespec *write_time,
@@ -1101,6 +1149,18 @@ NTSTATUS cli_qfileinfo_basic(struct cli_state *cli, uint16_t fnum,
 	uint32_t num_rdata;
 	NTSTATUS status;
 
+	if (smbXcli_conn_protocol(cli->conn) >= PROTOCOL_SMB2_02) {
+		return cli_smb2_qfileinfo_basic(cli,
+						fnum,
+						mode,
+						size,
+						create_time,
+						access_time,
+						write_time,
+						change_time,
+						ino);
+	}
+
 	/* if its a win95 server then fail this - win95 totally screws it
 	   up */
 	if (cli->win95) {
@@ -1109,7 +1169,8 @@ NTSTATUS cli_qfileinfo_basic(struct cli_state *cli, uint16_t fnum,
 
 	status = cli_qfileinfo(talloc_tos(), cli, fnum,
 			       SMB_QUERY_FILE_ALL_INFO,
-			       68, MIN(cli->max_xmit, 0xffff),
+			       68, CLI_BUFFER_SIZE,
+			       NULL,
 			       &rdata, &num_rdata);
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
@@ -1153,7 +1214,7 @@ struct cli_qpathinfo_basic_state {
 static void cli_qpathinfo_basic_done(struct tevent_req *subreq);
 
 struct tevent_req *cli_qpathinfo_basic_send(TALLOC_CTX *mem_ctx,
-					    struct event_context *ev,
+					    struct tevent_context *ev,
 					    struct cli_state *cli,
 					    const char *fname)
 {
@@ -1167,7 +1228,7 @@ struct tevent_req *cli_qpathinfo_basic_send(TALLOC_CTX *mem_ctx,
 	}
 	subreq = cli_qpathinfo_send(state, ev, cli, fname,
 				    SMB_QUERY_FILE_BASIC_INFO,
-				    36, cli->max_xmit);
+				    36, CLI_BUFFER_SIZE);
 	if (tevent_req_nomem(subreq, req)) {
 		return tevent_req_post(req, ev);
 	}
@@ -1204,6 +1265,7 @@ NTSTATUS cli_qpathinfo_basic_recv(struct tevent_req *req,
 		return status;
 	}
 
+	sbuf->st_ex_btime = interpret_long_date((char *)state->data);
 	sbuf->st_ex_atime = interpret_long_date((char *)state->data+8);
 	sbuf->st_ex_mtime = interpret_long_date((char *)state->data+16);
 	sbuf->st_ex_ctime = interpret_long_date((char *)state->data+24);
@@ -1214,19 +1276,28 @@ NTSTATUS cli_qpathinfo_basic_recv(struct tevent_req *req,
 NTSTATUS cli_qpathinfo_basic(struct cli_state *cli, const char *name,
 			     SMB_STRUCT_STAT *sbuf, uint32 *attributes)
 {
-	TALLOC_CTX *frame = talloc_stackframe();
-	struct event_context *ev;
+	TALLOC_CTX *frame = NULL;
+	struct tevent_context *ev;
 	struct tevent_req *req;
 	NTSTATUS status = NT_STATUS_NO_MEMORY;
 
-	if (cli_has_async_calls(cli)) {
+	if (smbXcli_conn_protocol(cli->conn) >= PROTOCOL_SMB2_02) {
+		return cli_smb2_qpathinfo_basic(cli,
+						name,
+						sbuf,
+						attributes);
+	}
+
+	frame = talloc_stackframe();
+
+	if (smbXcli_conn_has_async_calls(cli->conn)) {
 		/*
 		 * Can't use sync call while an async call is in flight
 		 */
 		status = NT_STATUS_INVALID_PARAMETER;
 		goto fail;
 	}
-	ev = event_context_init(frame);
+	ev = samba_tevent_context_init(frame);
 	if (ev == NULL) {
 		goto fail;
 	}
@@ -1256,9 +1327,15 @@ NTSTATUS cli_qpathinfo_alt_name(struct cli_state *cli, const char *fname, fstrin
 	size_t converted_size = 0;
 	NTSTATUS status;
 
+	if (smbXcli_conn_protocol(cli->conn) >= PROTOCOL_SMB2_02) {
+		return cli_smb2_qpathinfo_alt_name(cli,
+						fname,
+						alt_name);
+	}
+
 	status = cli_qpathinfo(talloc_tos(), cli, fname,
 			       SMB_QUERY_FILE_ALT_NAME_INFO,
-			       4, cli->max_xmit, &rdata, &num_rdata);
+			       4, CLI_BUFFER_SIZE, &rdata, &num_rdata);
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
 	}
@@ -1271,19 +1348,127 @@ NTSTATUS cli_qpathinfo_alt_name(struct cli_state *cli, const char *fname, fstrin
 
 	/* The returned data is a pushed string, not raw data. */
 	if (!convert_string_talloc(talloc_tos(),
-				   cli_ucs2(cli) ? CH_UTF16LE : CH_DOS,
+				   smbXcli_conn_use_unicode(cli->conn) ? CH_UTF16LE : CH_DOS,
 				   CH_UNIX,
 				   rdata + 4,
 				   len,
 				   &converted,
-				   &converted_size,
-				   true)) {
+				   &converted_size)) {
 		return NT_STATUS_NO_MEMORY;
 	}
 	fstrcpy(alt_name, converted);
 
 	TALLOC_FREE(converted);
 	TALLOC_FREE(rdata);
+
+	return NT_STATUS_OK;
+}
+
+/****************************************************************************
+ Send a qpathinfo SMB_QUERY_FILE_STADNDARD_INFO call.
+****************************************************************************/
+
+NTSTATUS cli_qpathinfo_standard(struct cli_state *cli, const char *fname,
+				uint64_t *allocated, uint64_t *size,
+				uint32_t *nlinks,
+				bool *is_del_pending, bool *is_dir)
+{
+	uint8_t *rdata;
+	uint32_t num_rdata;
+	NTSTATUS status;
+
+	if (smbXcli_conn_protocol(cli->conn) >= PROTOCOL_SMB2_02) {
+		return NT_STATUS_NOT_IMPLEMENTED;
+	}
+
+	status = cli_qpathinfo(talloc_tos(), cli, fname,
+			       SMB_QUERY_FILE_STANDARD_INFO,
+			       24, CLI_BUFFER_SIZE, &rdata, &num_rdata);
+	if (!NT_STATUS_IS_OK(status)) {
+		return status;
+	}
+
+	if (allocated) {
+		*allocated = BVAL(rdata, 0);
+	}
+
+	if (size) {
+		*size = BVAL(rdata, 8);
+	}
+
+	if (nlinks) {
+		*nlinks = IVAL(rdata, 16);
+	}
+
+	if (is_del_pending) {
+		*is_del_pending = CVAL(rdata, 20);
+	}
+
+	if (is_dir) {
+		*is_dir = CVAL(rdata, 20);
+	}
+
+	TALLOC_FREE(rdata);
+
+	return NT_STATUS_OK;
+}
+
+
+/* like cli_qpathinfo2 but do not use SMB_QUERY_FILE_ALL_INFO with smb1 */
+NTSTATUS cli_qpathinfo3(struct cli_state *cli, const char *fname,
+			struct timespec *create_time,
+			struct timespec *access_time,
+			struct timespec *write_time,
+			struct timespec *change_time,
+			off_t *size, uint16 *mode,
+			SMB_INO_T *ino)
+{
+	NTSTATUS status = NT_STATUS_OK;
+	SMB_STRUCT_STAT st;
+	uint32_t attr;
+	uint64_t pos;
+
+	if (smbXcli_conn_protocol(cli->conn) >= PROTOCOL_SMB2_02) {
+		return cli_qpathinfo2(cli, fname,
+				      create_time, access_time, write_time, change_time,
+				      size, mode, ino);
+	}
+
+	if (create_time || access_time || write_time || change_time || mode) {
+		status = cli_qpathinfo_basic(cli, fname, &st, &attr);
+		if (!NT_STATUS_IS_OK(status)) {
+			return status;
+		}
+	}
+
+	if (size) {
+		status = cli_qpathinfo_standard(cli, fname,
+						NULL, &pos, NULL, NULL, NULL);
+		if (!NT_STATUS_IS_OK(status)) {
+			return status;
+		}
+
+		*size = pos;
+	}
+
+	if (create_time) {
+		*create_time = st.st_ex_btime;
+	}
+	if (access_time) {
+		*access_time = st.st_ex_atime;
+	}
+	if (write_time) {
+		*write_time = st.st_ex_mtime;
+	}
+	if (change_time) {
+		*change_time = st.st_ex_ctime;
+	}
+	if (mode) {
+		*mode = attr;
+	}
+	if (ino) {
+		*ino = 0;
+	}
 
 	return NT_STATUS_OK;
 }

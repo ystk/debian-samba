@@ -35,32 +35,8 @@ static int vfs_recycle_debug_level = DBGC_VFS;
 #undef DBGC_CLASS
 #define DBGC_CLASS vfs_recycle_debug_level
  
-static int recycle_connect(vfs_handle_struct *handle, const char *service, const char *user);
-static void recycle_disconnect(vfs_handle_struct *handle);
 static int recycle_unlink(vfs_handle_struct *handle,
 			  const struct smb_filename *smb_fname);
-
-static int recycle_connect(vfs_handle_struct *handle, const char *service, const char *user)
-{
-	int ret = SMB_VFS_NEXT_CONNECT(handle, service, user);
-
-	if (ret < 0) {
-		return ret;
-	}
-
-	DEBUG(10,("recycle_connect() connect to service[%s] as user[%s].\n",
-		service,user));
-
-	return 0;
-}
-
-static void recycle_disconnect(vfs_handle_struct *handle)
-{
-	DEBUG(10,("recycle_disconnect() connect to service[%s].\n",
-		lp_servicename(SNUM(handle->conn))));
-
-	SMB_VFS_NEXT_DISCONNECT(handle);
-}
 
 static const char *recycle_repository(vfs_handle_struct *handle)
 {
@@ -150,9 +126,9 @@ static const char **recycle_noversions(vfs_handle_struct *handle)
 	return tmp_lp;
 }
 
-static SMB_OFF_T recycle_maxsize(vfs_handle_struct *handle)
+static off_t recycle_maxsize(vfs_handle_struct *handle)
 {
-	SMB_OFF_T maxsize;
+	off_t maxsize;
 
 	maxsize = conv_str_size(lp_parm_const_string(SNUM(handle->conn),
 					    "recycle", "maxsize", NULL));
@@ -162,9 +138,9 @@ static SMB_OFF_T recycle_maxsize(vfs_handle_struct *handle)
 	return maxsize;
 }
 
-static SMB_OFF_T recycle_minsize(vfs_handle_struct *handle)
+static off_t recycle_minsize(vfs_handle_struct *handle)
 {
-	SMB_OFF_T minsize;
+	off_t minsize;
 
 	minsize = conv_str_size(lp_parm_const_string(SNUM(handle->conn),
 					    "recycle", "minsize", NULL));
@@ -225,11 +201,10 @@ static bool recycle_file_exist(vfs_handle_struct *handle,
 			       const struct smb_filename *smb_fname)
 {
 	struct smb_filename *smb_fname_tmp = NULL;
-	NTSTATUS status;
 	bool ret = false;
 
-	status = copy_smb_filename(talloc_tos(), smb_fname, &smb_fname_tmp);
-	if (!NT_STATUS_IS_OK(status)) {
+	smb_fname_tmp = cp_smb_filename(talloc_tos(), smb_fname);
+	if (smb_fname_tmp == NULL) {
 		return false;
 	}
 
@@ -249,23 +224,22 @@ static bool recycle_file_exist(vfs_handle_struct *handle,
  * @param fname file name
  * @return size in bytes
  **/
-static SMB_OFF_T recycle_get_file_size(vfs_handle_struct *handle,
+static off_t recycle_get_file_size(vfs_handle_struct *handle,
 				       const struct smb_filename *smb_fname)
 {
 	struct smb_filename *smb_fname_tmp = NULL;
-	NTSTATUS status;
-	SMB_OFF_T size;
+	off_t size;
 
-	status = copy_smb_filename(talloc_tos(), smb_fname, &smb_fname_tmp);
-	if (!NT_STATUS_IS_OK(status)) {
-		size = (SMB_OFF_T)0;
+	smb_fname_tmp = cp_smb_filename(talloc_tos(), smb_fname);
+	if (smb_fname_tmp == NULL) {
+		size = (off_t)0;
 		goto out;
 	}
 
 	if (SMB_VFS_STAT(handle->conn, smb_fname_tmp) != 0) {
 		DEBUG(0,("recycle: stat for %s returned %s\n",
 			 smb_fname_str_dbg(smb_fname_tmp), strerror(errno)));
-		size = (SMB_OFF_T)0;
+		size = (off_t)0;
 		goto out;
 	}
 
@@ -304,13 +278,17 @@ static bool recycle_create_dir(vfs_handle_struct *handle, const char *dname)
 	*new_dir = '\0';
 	if (dname[0] == '/') {
 		/* Absolute path. */
-		safe_strcat(new_dir,"/",len);
+		if (strlcat(new_dir,"/",len+1) >= len+1) {
+			goto done;
+		}
 	}
 
 	/* Create directory tree if neccessary */
 	for(token = strtok_r(tok_str, "/", &saveptr); token;
 	    token = strtok_r(NULL, "/", &saveptr)) {
-		safe_strcat(new_dir, token, len);
+		if (strlcat(new_dir, token, len+1) >= len+1) {
+			goto done;
+		}
 		if (recycle_directory_exist(handle, new_dir))
 			DEBUG(10, ("recycle: dir %s already exists\n", new_dir));
 		else {
@@ -321,7 +299,9 @@ static bool recycle_create_dir(vfs_handle_struct *handle, const char *dname)
 				goto done;
 			}
 		}
-		safe_strcat(new_dir, "/", len);
+		if (strlcat(new_dir, "/", len+1) >= len+1) {
+			goto done;
+		}
 		mode = recycle_subdir_mode(handle);
 	}
 
@@ -414,13 +394,12 @@ static void recycle_do_touch(vfs_handle_struct *handle,
 {
 	struct smb_filename *smb_fname_tmp = NULL;
 	struct smb_file_time ft;
-	NTSTATUS status;
 	int ret, err;
 
 	ZERO_STRUCT(ft);
 
-	status = copy_smb_filename(talloc_tos(), smb_fname, &smb_fname_tmp);
-	if (!NT_STATUS_IS_OK(status)) {
+	smb_fname_tmp = cp_smb_filename(talloc_tos(), smb_fname);
+	if (smb_fname_tmp == NULL) {
 		return;
 	}
 
@@ -460,18 +439,17 @@ static int recycle_unlink(vfs_handle_struct *handle,
 	const char *base;
 	char *repository = NULL;
 	int i = 1;
-	SMB_OFF_T maxsize, minsize;
-	SMB_OFF_T file_size; /* space_avail;	*/
+	off_t maxsize, minsize;
+	off_t file_size; /* space_avail;	*/
 	bool exist;
-	NTSTATUS status;
 	int rc = -1;
 
-	repository = talloc_sub_advanced(NULL, lp_servicename(SNUM(conn)),
-					conn->session_info->unix_name,
+	repository = talloc_sub_advanced(NULL, lp_servicename(talloc_tos(), SNUM(conn)),
+					conn->session_info->unix_info->unix_name,
 					conn->connectpath,
-					conn->session_info->utok.gid,
-					conn->session_info->sanitized_username,
-					conn->session_info->info3->base.domain.string,
+					conn->session_info->unix_token->gid,
+					conn->session_info->unix_info->sanitized_username,
+					conn->session_info->info->domain_name,
 					recycle_repository(handle));
 	ALLOC_CHECK(repository, done);
 	/* shouldn't we allow absolute path names here? --metze */
@@ -596,10 +574,9 @@ static int recycle_unlink(vfs_handle_struct *handle,
 	}
 
 	/* Create smb_fname with final base name and orig stream name. */
-	status = create_synthetic_smb_fname(talloc_tos(), final_name,
-					    smb_fname->stream_name, NULL,
-					    &smb_fname_final);
-	if (!NT_STATUS_IS_OK(status)) {
+	smb_fname_final = synthetic_smb_fname(talloc_tos(), final_name,
+					      smb_fname->stream_name, NULL);
+	if (smb_fname_final == NULL) {
 		rc = SMB_VFS_NEXT_UNLINK(handle, smb_fname);
 		goto done;
 	}
@@ -663,9 +640,7 @@ done:
 }
 
 static struct vfs_fn_pointers vfs_recycle_fns = {
-	.connect_fn = recycle_connect,
-	.disconnect = recycle_disconnect,
-	.unlink = recycle_unlink
+	.unlink_fn = recycle_unlink
 };
 
 NTSTATUS vfs_recycle_init(void);

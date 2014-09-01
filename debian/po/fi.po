@@ -1,19 +1,130 @@
 # Translation of samba_po.po to finnish.
 #
-# Tapio Lehtonen <tale@debian.org>, 2006, 2011.
+# Tapio Lehtonen <tale@debian.org>, 2006.
 #
 msgid ""
 msgstr ""
 "Project-Id-Version: Samba fi\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2012-05-11 19:55+0200\n"
-"PO-Revision-Date: 2011-05-13 12:50+0300\n"
+"POT-Creation-Date: 2013-10-22 20:32+0200\n"
+"PO-Revision-Date: 2007-03-13 18:35+0200\n"
 "Last-Translator: Tapio Lehtonen <tale@debian.org>\n"
 "Language-Team: Finnish <debian-l10n-finnish@lists.debian.org>\n"
 "Language: fi\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
+
+#. Type: boolean
+#. Description
+#: ../samba-ad-dc.templates:1001
+msgid "Upgrade from Samba 3?"
+msgstr ""
+
+#. Type: boolean
+#. Description
+#: ../samba-ad-dc.templates:1001
+msgid ""
+"It is possible to migrate the existing configuration files from Samba 3 to "
+"Samba 4. This is likely to fail for complex setups, but should provide a "
+"good starting point for most existing installations."
+msgstr ""
+
+#. Type: select
+#. Description
+#: ../samba-ad-dc.templates:2001
+msgid "Server role"
+msgstr ""
+
+#. Type: select
+#. Description
+#: ../samba-ad-dc.templates:2001
+msgid ""
+"Domain controllers manage NT4-style or Active Directory domains and provide "
+"services such as identity management and domain logons. Each domain needs to "
+"have a at least one domain controller."
+msgstr ""
+
+#. Type: select
+#. Description
+#: ../samba-ad-dc.templates:2001
+msgid ""
+"Member servers can be part of a NT4-style or Active Directory domain but do "
+"not provide any domain services. Workstations and file or print servers are "
+"usually regular domain members."
+msgstr ""
+
+#. Type: select
+#. Description
+#: ../samba-ad-dc.templates:2001
+msgid ""
+"A standalone server can not be used in a domain and only supports file "
+"sharing and Windows for Workgroups-style logins."
+msgstr ""
+
+#. Type: select
+#. Description
+#: ../samba-ad-dc.templates:2001
+msgid ""
+"If no server role is specified, the Samba server will not be provisioned, so "
+"this can be done manually by the user."
+msgstr ""
+
+#. Type: string
+#. Description
+#: ../samba-ad-dc.templates:3001
+msgid "Realm name:"
+msgstr ""
+
+#. Type: string
+#. Description
+#: ../samba-ad-dc.templates:3001
+msgid ""
+"Please specify the Kerberos realm for the domain that this domain controller "
+"controls."
+msgstr ""
+
+#. Type: string
+#. Description
+#: ../samba-ad-dc.templates:3001
+msgid "Usually this is the a capitalized version of your DNS hostname."
+msgstr ""
+
+#. Type: password
+#. Description
+#: ../samba-ad-dc.templates:4001
+msgid "New password for the Samba \"administrator\" user:"
+msgstr ""
+
+#. Type: password
+#. Description
+#: ../samba-ad-dc.templates:4001
+msgid "If this field is left blank, a random password will be generated."
+msgstr ""
+
+#. Type: password
+#. Description
+#: ../samba-ad-dc.templates:4001
+msgid "A password can be set later by running, as root:"
+msgstr ""
+
+#. Type: password
+#. Description
+#: ../samba-ad-dc.templates:5001
+msgid "Repeat password for the Samba \"administrator\" user:"
+msgstr ""
+
+#. Type: error
+#. Description
+#: ../samba-ad-dc.templates:6001
+msgid "Password input error"
+msgstr ""
+
+#. Type: error
+#. Description
+#: ../samba-ad-dc.templates:6001
+msgid "The two passwords you entered were not the same. Please try again."
+msgstr ""
 
 #. Type: title
 #. Description
@@ -47,9 +158,9 @@ msgstr ""
 #. Description
 #: ../samba-common.templates:2001
 msgid ""
-"The dhcp3-client package must be installed to take advantage of this feature."
+"The dhcp-client package must be installed to take advantage of this feature."
 msgstr ""
-"Tätä ominaisuutta voi käyttää vain jos paketti dhcp3-client on asennettu."
+"Tätä ominaisuutta voi käyttää vain jos paketti dhcp-client on asennettu."
 
 #. Type: boolean
 #. Description
@@ -105,73 +216,62 @@ msgstr ""
 "selattaessa edustaohjelmilla ja asetuksen \"security=domain\" kanssa "
 "käytettävä verkkoalueen nimi."
 
-#. Type: boolean
-#. Description
-#: ../samba-common.templates:5001
-msgid "Use password encryption?"
-msgstr "Salataanko salasanat?"
+#~ msgid "Use password encryption?"
+#~ msgstr "Salataanko salasanat?"
 
-#. Type: boolean
-#. Description
-#: ../samba-common.templates:5001
-msgid ""
-"All recent Windows clients communicate with SMB/CIFS servers using encrypted "
-"passwords. If you want to use clear text passwords you will need to change a "
-"parameter in your Windows registry."
-msgstr ""
-"Kaikki viime aikoina julkistetut Windows-asiakkaat salaavat salasanat "
-"liikennöitäessä SMB/CIFS-palvelimien kanssa. Jos halutaan käyttää "
-"selväkielisiä salasanoja, on Windows registryssä olevaa parametria "
-"muutettava."
+#~ msgid ""
+#~ "All recent Windows clients communicate with SMB/CIFS servers using "
+#~ "encrypted passwords. If you want to use clear text passwords you will "
+#~ "need to change a parameter in your Windows registry."
+#~ msgstr ""
+#~ "Kaikki viime aikoina julkistetut Windows-asiakkaat salaavat salasanat "
+#~ "liikennöitäessä SMB/CIFS-palvelimien kanssa. Jos halutaan käyttää "
+#~ "selväkielisiä salasanoja, on Windows registryssä olevaa parametria "
+#~ "muutettava."
 
-#. Type: boolean
-#. Description
-#: ../samba-common.templates:5001
-msgid ""
-"Enabling this option is highly recommended as support for plain text "
-"passwords is no longer maintained in Microsoft Windows products. If you do, "
-"make sure you have a valid /etc/samba/smbpasswd file and that you set "
-"passwords in there for each user using the smbpasswd command."
-msgstr ""
-"Tämän valitsimen pitämistä päällä suositellaan suuresti, koska tukea "
-"selväkielisille salasanoille ei enää ylläpidetä Microsoft Windows-"
-"tuotteissa. Jos se on päällä, on varmistuttava tiedoston /etc/samba/"
-"smbpasswd kelvollisuudesta ja että siellä on jokaiselle käyttäjälle tehty "
-"salasana komennolla smbpasswd."
+#~ msgid ""
+#~ "Enabling this option is highly recommended as support for plain text "
+#~ "passwords is no longer maintained in Microsoft Windows products. If you "
+#~ "do, make sure you have a valid /etc/samba/smbpasswd file and that you set "
+#~ "passwords in there for each user using the smbpasswd command."
+#~ msgstr ""
+#~ "Tämän valitsimen pitämistä päällä suositellaan suuresti, koska tukea "
+#~ "selväkielisille salasanoille ei enää ylläpidetä Microsoft Windows-"
+#~ "tuotteissa. Jos se on päällä, on varmistuttava tiedoston /etc/samba/"
+#~ "smbpasswd kelvollisuudesta ja että siellä on jokaiselle käyttäjälle tehty "
+#~ "salasana komennolla smbpasswd."
 
-#. Type: title
-#. Description
-#: ../samba.templates:1001
-msgid "Samba server"
-msgstr "Samba-palvelin"
+#~ msgid "Samba server"
+#~ msgstr "Samba-palvelin"
 
-#. Type: select
-#. Choices
-#: ../samba.templates:2001
-msgid "daemons"
-msgstr "palvelinprosessit"
+#~ msgid "daemons"
+#~ msgstr "palvelinprosessit"
 
-#. Type: select
-#. Choices
-#: ../samba.templates:2001
-msgid "inetd"
-msgstr "inetd"
+#~ msgid "inetd"
+#~ msgstr "inetd"
 
-#. Type: select
-#. Description
-#: ../samba.templates:2002
-msgid "How do you want to run Samba?"
-msgstr "Kuinka Samba käynnistetään?"
+#~ msgid "How do you want to run Samba?"
+#~ msgstr "Kuinka Samba käynnistetään?"
 
-#. Type: select
-#. Description
-#: ../samba.templates:2002
-msgid ""
-"The Samba daemon smbd can run as a normal daemon or from inetd. Running as a "
-"daemon is the recommended approach."
-msgstr ""
-"Samban palvelinprosessi smbd voi toimia tavallisena prosessina tai inetd voi "
-"käynnistää sen. Tavallisen prosessin käyttämistä suositellaan."
+#~ msgid ""
+#~ "The Samba daemon smbd can run as a normal daemon or from inetd. Running "
+#~ "as a daemon is the recommended approach."
+#~ msgstr ""
+#~ "Samban palvelinprosessi smbd voi toimia tavallisena prosessina tai inetd "
+#~ "voi käynnistää sen. Tavallisen prosessin käyttämistä suositellaan."
+
+#, fuzzy
+#~| msgid ""
+#~| "Please specify the workgroup you want this server to appear to be in "
+#~| "when queried by clients. Note that this parameter also controls the "
+#~| "domain name used with the security=domain setting."
+#~ msgid ""
+#~ "Please specify the domain you want this server to appear to be in when "
+#~ "queried by clients."
+#~ msgstr ""
+#~ "Anna sen verkkoalueen nimi, johon tämä palvelin ilmoittaa kuuluvansa "
+#~ "asiakaskoneiden kysyessä. Huomaa, että tämä parametri on myös asetuksen "
+#~ "security=domain kanssa käytettävä verkkoalueen nimi."
 
 #~ msgid "Create samba password database, /var/lib/samba/passdb.tdb?"
 #~ msgstr "Luodaanko samban salasanatietokanta, /var/lib/samba/passdb.tdb?"
@@ -197,8 +297,8 @@ msgstr ""
 #~ "salasanoja (kuten asiakaskoneetkin)."
 
 #~ msgid ""
-#~ "See /usr/share/doc/samba-doc/htmldocs/Samba3-Developers-Guide/pwencrypt."
-#~ "html from the samba-doc package for more details."
+#~ "See /usr/share/doc/samba-doc/htmldocs/ENCRYPTION.html from the samba-doc "
+#~ "package for more details."
 #~ msgstr ""
 #~ "Katso lisätietoja paketin samba-doc tiedostosta /usr/share/doc/samba-doc/"
 #~ "htmldocs/ENCRYPTION.html."
@@ -237,3 +337,10 @@ msgstr ""
 #~ "Vahvista, että olemassa oleva tiedosto smbpasswd siirretään "
 #~ "automaattisesti tiedostoksi /var/lib/samba/passdb.tdb. Älä valitse tätä "
 #~ "jos aiot käyttää jotain muuta pdb-taustaosaa (esim. LDAP)."
+
+#~ msgid ""
+#~ "See /usr/share/doc/samba-doc/htmldocs/Samba3-Developers-Guide/pwencrypt."
+#~ "html from the samba-doc package for more details."
+#~ msgstr ""
+#~ "Katso lisätietoja paketin samba-doc tiedostosta /usr/share/doc/samba-doc/"
+#~ "htmldocs/ENCRYPTION.html."

@@ -1,13 +1,22 @@
 '\" t
 .\"     Title: vfstest
 .\"    Author: [see the "AUTHOR" section]
-.\" Generator: DocBook XSL Stylesheets v1.75.2 <http://docbook.sf.net/>
-.\"      Date: 06/22/2012
+.\" Generator: DocBook XSL Stylesheets v1.78.1 <http://docbook.sf.net/>
+.\"      Date: 07/31/2014
 .\"    Manual: User Commands
-.\"    Source: Samba 3.6
+.\"    Source: Samba 4.0
 .\"  Language: English
 .\"
-.TH "VFSTEST" "1" "06/22/2012" "Samba 3\&.6" "User Commands"
+.TH "VFSTEST" "1" "07/31/2014" "Samba 4\&.0" "User Commands"
+.\" -----------------------------------------------------------------
+.\" * Define some portability stuff
+.\" -----------------------------------------------------------------
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.\" http://bugs.debian.org/507673
+.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.ie \n(.g .ds Aq \(aq
+.el       .ds Aq '
 .\" -----------------------------------------------------------------
 .\" * set default formatting
 .\" -----------------------------------------------------------------
@@ -35,10 +44,10 @@ is a small command line utility that has the ability to test dso samba VFS modul
 .PP
 \-c|\-\-command=command
 .RS 4
-Execute the specified (colon\-separated) commands\&. See below for the commands that are available\&.
+Execute the specified (\fBsemicolon\fR\-separated) commands\&. See below for the commands that are available\&.
 .RE
 .PP
-\-h|\-\-help
+\-?|\-\-help
 .RS 4
 Print a summary of command line options\&.
 .RE
@@ -46,7 +55,7 @@ Print a summary of command line options\&.
 \-l|\-\-logfile=logbasename
 .RS 4
 File name for log/debug files\&. The extension
-\fB\'\&.client\'\fR
+\fB\*(Aq\&.client\*(Aq\fR
 will be appended\&. The log file is never removed by the client\&.
 .RE
 .PP
@@ -60,7 +69,7 @@ The higher this value, the more detail will be logged to the log files about the
 Levels above 1 will generate considerable amounts of log data, and should only be used when investigating a problem\&. Levels above 3 are designed for use only by developers and generate HUGE amounts of log data, most of which is extremely cryptic\&.
 .sp
 Note that specifying this parameter here will override the
-\m[blue]\fB\%smb.conf.5.html#\fR\m[]
+\m[blue]\fBlog level\fR\m[]
 parameter in the
 smb\&.conf
 file\&.
@@ -71,7 +80,7 @@ file\&.
 Prints the program version number\&.
 .RE
 .PP
-\-s|\-\-configfile <configuration file>
+\-s|\-\-configfile=<configuration file>
 .RS 4
 The file specified contains the configuration details required by the server\&. The information in this file includes server\-specific information such as what printcap file to use, as well as descriptions of all the services that the server is to provide\&. See
 smb\&.conf
@@ -83,6 +92,13 @@ for more information\&. The default configuration file name is determined at com
 Base directory name for log/debug files\&. The extension
 \fB"\&.progname"\fR
 will be appended (e\&.g\&. log\&.smbclient, log\&.smbd, etc\&.\&.\&.)\&. The log file is never removed by the client\&.
+.RE
+.PP
+\-\-option=<name>=<value>
+.RS 4
+Set the
+\fBsmb.conf\fR(5)
+option "<name>" to value "<value>" from the command line\&. This overrides compiled\-in defaults and options read from the configuration file\&.
 .RE
 .SH "COMMANDS"
 .PP
@@ -520,6 +536,210 @@ realpath
 \- VFS realpath()
 .RE
 .sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+getxattr
+\- VFS getxattr()
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+listxattr
+\- VFS listxattr()
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+setxattr
+\- VFS setxattr()
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+removexattr
+\- VFS removexattr()
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+fget_nt_acl
+\- VFS fget_nt_acl()
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+get_nt_acl
+\- VFS get_nt_acl()
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+fset_nt_acl
+\- VFS fset_nt_acl()
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+set_nt_acl
+\- VFS open() and fset_nt_acl()
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+fchmod_acl
+\- VFS fchmod_acl()
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+chmod_acl
+\- VFS chmod_acl()
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+sys_acl_get_file
+\- VFS sys_acl_get_file()
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+sys_acl_get_fd
+\- VFS sys_acl_get_fd()
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+sys_acl_blob_get_file
+\- VFS sys_acl_blob_get_file()
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+sys_acl_blob_get_fd
+\- VFS sys_acl_blob_get_fd()
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+sys_acl_delete_def_file
+\- VFS sys_acl_delete_def_file()
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+test_chain
+\- test chain code
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+translate_name
+\- VFS translate_name()
+.RE
+.sp
 .RE
 .PP
 \fIGENERAL COMMANDS\fR
@@ -585,9 +805,9 @@ exit
 .RE
 .SH "VERSION"
 .PP
-This man page is correct for version 3 of the Samba suite\&.
+This man page is correct for version 3 and 4 of the Samba suite\&.
 .SH "AUTHOR"
 .PP
 The original Samba software and related utilities were created by Andrew Tridgell\&. Samba is now developed by the Samba Team as an Open Source project similar to the way the Linux kernel is developed\&.
 .PP
-The vfstest man page was written by Jelmer Vernooij\&.
+The vfstest man page was written by Jelmer Vernooij\&. Updated version by Guenter Kukkukk\&.

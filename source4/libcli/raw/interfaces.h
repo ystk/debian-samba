@@ -22,7 +22,7 @@
 #ifndef __LIBCLI_RAW_INTERFACES_H__
 #define __LIBCLI_RAW_INTERFACES_H__
 
-#include "libcli/raw/smb.h"
+#include "source4/libcli/raw/smb.h"
 #include "../libcli/smb/smb_common.h"
 #include "librpc/gen_ndr/misc.h" /* for struct GUID */
 
@@ -52,20 +52,6 @@ struct smb_wire_string {
  */
 struct smb2_handle {
 	uint64_t data[2];
-};
-
-/*
-  SMB2 lease structure (per MS-SMB2 2.2.13)
-*/
-struct smb2_lease_key {
-	uint64_t data[2];
-};
-
-struct smb2_lease {
-	struct smb2_lease_key lease_key;
-	uint32_t lease_state;
-	uint32_t lease_flags; /* should be 0 */
-	uint64_t lease_duration; /* should be 0 */
 };
 
 struct smb2_lease_break {
@@ -283,6 +269,8 @@ union smb_tcon {
 		} in;
 		struct {
 			uint16_t options;
+			uint32_t max_access;
+			uint32_t guest_max_access;
 			char *dev_type;
 			char *fs_type;
 			uint16_t tid;
@@ -924,8 +912,8 @@ enum smb_setfileinfo_level {
 	RAW_SFILEINFO_END_OF_FILE_INFO        = SMB_SFILEINFO_END_OF_FILE_INFO,
 	RAW_SFILEINFO_UNIX_BASIC              = SMB_SFILEINFO_UNIX_BASIC,
 	RAW_SFILEINFO_UNIX_INFO2              = SMB_SFILEINFO_UNIX_INFO2,
-	RAW_SFILEINFO_UNIX_LINK               = SMB_SFILEINFO_UNIX_LINK,
-	RAW_SFILEINFO_UNIX_HLINK	      = SMB_SFILEINFO_UNIX_HLINK,
+	RAW_SFILEINFO_UNIX_LINK               = SMB_SET_FILE_UNIX_LINK,
+	RAW_SFILEINFO_UNIX_HLINK	      = SMB_SET_FILE_UNIX_HLINK,
 	RAW_SFILEINFO_BASIC_INFORMATION       = SMB_SFILEINFO_BASIC_INFORMATION,
 	RAW_SFILEINFO_RENAME_INFORMATION      = SMB_SFILEINFO_RENAME_INFORMATION,
 	RAW_SFILEINFO_LINK_INFORMATION        = SMB_SFILEINFO_LINK_INFORMATION,
@@ -1140,7 +1128,7 @@ union smb_setfileinfo {
 		} in;
 	} unix_link, unix_hlink;
 
-	/* RAW_FILEINFO_SET_SEC_DESC */
+	/* RAW_SFILEINFO_SEC_DESC */
 	struct {
 		enum smb_setfileinfo_level level;
 		struct {
@@ -1344,6 +1332,26 @@ union smb_fsinfo {
 };
 
 
+enum smb_setfsinfo_level {
+		RAW_SETFS_UNIX_INFO                      = SMB_SET_CIFS_UNIX_INFO};
+
+union smb_setfsinfo {
+	/* generic interface */
+	struct {
+		enum smb_fsinfo_level level;
+	} generic;
+
+	/* TRANS2 RAW_QFS_UNIX_INFO interface */
+	struct {
+		enum smb_fsinfo_level level;
+
+		struct {
+			uint16_t major_version;
+			uint16_t minor_version;
+			uint64_t capability;
+		} in;
+	} unix_info;
+};
 
 enum smb_open_level {
 	RAW_OPEN_OPEN,
@@ -1709,11 +1717,22 @@ union smb_open {
 			struct security_descriptor *sec_desc;
 			bool   durable_open;
 			struct smb2_handle *durable_handle;
+
+			/* data for durable handle v2 */
+			bool durable_open_v2;
+			struct GUID create_guid;
+			bool persistent_open;
+			uint32_t timeout;
+			struct smb2_handle *durable_handle_v2;
+
 			bool   query_maximal_access;
 			NTTIME timewarp;
 			bool   query_on_disk_id;
 			struct smb2_lease *lease_request;
-			
+			struct smb2_lease *lease_request_v2;
+
+			struct GUID *app_instance_id;
+
 			/* and any additional blobs the caller wants */
 			struct smb2_create_blobs blobs;
 		} in;
@@ -1741,6 +1760,13 @@ union smb_open {
 			uint32_t maximal_access;
 			uint8_t on_disk_id[32];
 			struct smb2_lease lease_response;
+			struct smb2_lease lease_response_v2;
+			bool durable_open;
+
+			/* durable handle v2 */
+			bool durable_open_v2;
+			bool persistent_open;
+			uint32_t timeout;
 
 			/* tagged blobs in the reply */
 			struct smb2_create_blobs blobs;

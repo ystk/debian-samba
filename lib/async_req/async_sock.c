@@ -30,7 +30,7 @@
 
 /* Note: lib/util/ is currently GPL */
 #include "lib/util/tevent_unix.h"
-#include "lib/util/util.h"
+#include "lib/util/samba_util.h"
 
 #ifndef TALLOC_FREE
 #define TALLOC_FREE(ctx) do { talloc_free(ctx); ctx=NULL; } while(0)
@@ -104,7 +104,8 @@ static void sendto_handler(struct tevent_context *ev,
 		tevent_req_data(req, struct sendto_state);
 
 	state->sent = sendto(state->fd, state->buf, state->len, state->flags,
-			     (struct sockaddr *)state->addr, state->addr_len);
+			     (const struct sockaddr *)state->addr,
+			     state->addr_len);
 	if ((state->sent == -1) && (errno == EINTR)) {
 		/* retry */
 		return;
@@ -216,6 +217,10 @@ struct async_connect_state {
 	long old_sockflags;
 	socklen_t address_len;
 	struct sockaddr_storage address;
+
+	void (*before_connect)(void *private_data);
+	void (*after_connect)(void *private_data);
+	void *private_data;
 };
 
 static void async_connect_connected(struct tevent_context *ev,
@@ -235,10 +240,12 @@ static void async_connect_connected(struct tevent_context *ev,
  * connect in an async state. This will be reset when the request is finished.
  */
 
-struct tevent_req *async_connect_send(TALLOC_CTX *mem_ctx,
-				      struct tevent_context *ev,
-				      int fd, const struct sockaddr *address,
-				      socklen_t address_len)
+struct tevent_req *async_connect_send(
+	TALLOC_CTX *mem_ctx, struct tevent_context *ev, int fd,
+	const struct sockaddr *address, socklen_t address_len,
+	void (*before_connect)(void *private_data),
+	void (*after_connect)(void *private_data),
+	void *private_data)
 {
 	struct tevent_req *result;
 	struct async_connect_state *state;
@@ -257,6 +264,9 @@ struct tevent_req *async_connect_send(TALLOC_CTX *mem_ctx,
 
 	state->fd = fd;
 	state->sys_errno = 0;
+	state->before_connect = before_connect;
+	state->after_connect = after_connect;
+	state->private_data = private_data;
 
 	state->old_sockflags = fcntl(fd, F_GETFL, 0);
 	if (state->old_sockflags == -1) {
@@ -272,7 +282,16 @@ struct tevent_req *async_connect_send(TALLOC_CTX *mem_ctx,
 
 	set_blocking(fd, false);
 
+	if (state->before_connect != NULL) {
+		state->before_connect(state->private_data);
+	}
+
 	state->result = connect(fd, address, address_len);
+
+	if (state->after_connect != NULL) {
+		state->after_connect(state->private_data);
+	}
+
 	if (state->result == 0) {
 		tevent_req_done(result);
 		goto done;
@@ -327,8 +346,17 @@ static void async_connect_connected(struct tevent_context *ev,
 		tevent_req_data(req, struct async_connect_state);
 	int ret;
 
+	if (state->before_connect != NULL) {
+		state->before_connect(state->private_data);
+	}
+
 	ret = connect(state->fd, (struct sockaddr *)(void *)&state->address,
 		      state->address_len);
+
+	if (state->after_connect != NULL) {
+		state->after_connect(state->private_data);
+	}
+
 	if (ret == 0) {
 		state->sys_errno = 0;
 		TALLOC_FREE(fde);
@@ -595,6 +623,10 @@ static void read_packet_handler(struct tevent_context *ev,
 
 	nread = recv(state->fd, state->buf+state->nread, total-state->nread,
 		     0);
+	if ((nread == -1) && (errno == ENOTSOCK)) {
+		nread = read(state->fd, state->buf+state->nread,
+			     total-state->nread);
+	}
 	if ((nread == -1) && (errno == EINTR)) {
 		/* retry */
 		return;
@@ -635,6 +667,11 @@ static void read_packet_handler(struct tevent_context *ev,
 		return;
 	}
 
+	if (total + more < total) {
+		tevent_req_error(req, EMSGSIZE);
+		return;
+	}
+
 	tmp = talloc_realloc(state, state->buf, uint8_t, total+more);
 	if (tevent_req_nomem(tmp, req)) {
 		return;
@@ -653,4 +690,59 @@ ssize_t read_packet_recv(struct tevent_req *req, TALLOC_CTX *mem_ctx,
 	}
 	*pbuf = talloc_move(mem_ctx, &state->buf);
 	return talloc_get_size(*pbuf);
+}
+
+struct wait_for_read_state {
+	struct tevent_req *req;
+	struct tevent_fd *fde;
+};
+
+static void wait_for_read_done(struct tevent_context *ev,
+			       struct tevent_fd *fde,
+			       uint16_t flags,
+			       void *private_data);
+
+struct tevent_req *wait_for_read_send(TALLOC_CTX *mem_ctx,
+				      struct tevent_context *ev,
+				      int fd)
+{
+	struct tevent_req *req;
+	struct wait_for_read_state *state;
+
+	req = tevent_req_create(mem_ctx, &state, struct wait_for_read_state);
+	if (req == NULL) {
+		return NULL;
+	}
+	state->req = req;
+	state->fde = tevent_add_fd(ev, state, fd, TEVENT_FD_READ,
+				   wait_for_read_done, state);
+	if (tevent_req_nomem(state->fde, req)) {
+		return tevent_req_post(req, ev);
+	}
+	return req;
+}
+
+static void wait_for_read_done(struct tevent_context *ev,
+			       struct tevent_fd *fde,
+			       uint16_t flags,
+			       void *private_data)
+{
+	struct wait_for_read_state *state = talloc_get_type_abort(
+		private_data, struct wait_for_read_state);
+
+	if (flags & TEVENT_FD_READ) {
+		TALLOC_FREE(state->fde);
+		tevent_req_done(state->req);
+	}
+}
+
+bool wait_for_read_recv(struct tevent_req *req, int *perr)
+{
+	int err;
+
+	if (tevent_req_is_unix_error(req, &err)) {
+		*perr = err;
+		return false;
+	}
+	return true;
 }

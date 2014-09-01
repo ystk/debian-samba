@@ -1,23 +1,147 @@
-# Translation of debconf messages for samba to Swedish
-# Copyright (C) 2009, 2011 Martin Bagge <brother@bsnet.se>
-# This file is distributed under the same license as the XX package.
+# Translation of samba4 debconf template to Swedish
+# Copyright (C) 2010-2011 Martin Bagge <brother@bsnet.se>
+# This file is distributed under the same license as the samba4 package.
 #
-# Daniel Nylander <po@danielnylander.se>, 2007 2008
-# Martin Bagge <brother@bsnet.se>, 2009, 2011.
+# Daniel Nylander <po@danielnylander.se>, 2007
+# Martin Bagge <brother@bsnet.se>, 2010, 2011
 msgid ""
 msgstr ""
-"Project-Id-Version: samba 3.0.20b-3\n"
+"Project-Id-Version: samba4\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2012-05-11 19:55+0200\n"
-"PO-Revision-Date: 2011-05-24 23:07+0100\n"
+"POT-Creation-Date: 2013-10-22 20:32+0200\n"
+"PO-Revision-Date: 2013-10-23 09:06+0100\n"
 "Last-Translator: Martin Bagge / brother <brother@bsnet.se>\n"
 "Language-Team: Swedish <debian-l10n-swedish@lists.debian.org>\n"
-"Language: sv\n"
+"Language: Swedish\n"
 "MIME-Version: 1.0\n"
-"Content-Type: text/plain; charset=utf-8\n"
+"Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"X-Poedit-Language: Swedish\n"
-"X-Poedit-Country: Sweden\n"
+"X-Generator: Poedit 1.5.4\n"
+
+#. Type: boolean
+#. Description
+#: ../samba-ad-dc.templates:1001
+msgid "Upgrade from Samba 3?"
+msgstr "Uppgradera från Samba 3?"
+
+#. Type: boolean
+#. Description
+#: ../samba-ad-dc.templates:1001
+msgid ""
+"It is possible to migrate the existing configuration files from Samba 3 to "
+"Samba 4. This is likely to fail for complex setups, but should provide a "
+"good starting point for most existing installations."
+msgstr ""
+"Det är möjligt att migrera existerande inställningsfiler från Samba 3 till "
+"Samba 4. Det är troligt att det inte kommer att fungera i komplexa "
+"installationer men bör ge bra startlägen för de allra flesta installationer."
+
+#. Type: select
+#. Description
+#: ../samba-ad-dc.templates:2001
+msgid "Server role"
+msgstr "Serverroll"
+
+#. Type: select
+#. Description
+#: ../samba-ad-dc.templates:2001
+msgid ""
+"Domain controllers manage NT4-style or Active Directory domains and provide "
+"services such as identity management and domain logons. Each domain needs to "
+"have a at least one domain controller."
+msgstr ""
+"Domänkontrollanter hanterar NT4- eller Active Directory-domäner och "
+"tillhandahåller tjänster som identitetshantering och domäninlogging. Varje "
+"domän behöver åtminstone en domänkontrollant."
+
+#. Type: select
+#. Description
+#: ../samba-ad-dc.templates:2001
+msgid ""
+"Member servers can be part of a NT4-style or Active Directory domain but do "
+"not provide any domain services. Workstations and file or print servers are "
+"usually regular domain members."
+msgstr ""
+"Medlemsservrar kan vara del av en NT4- eller Active Directory-domän utan att "
+"tillhandahålla några domäntjänster. Arbetsstationer och fil- eller "
+"skrivarservrar är vanligen domänmedlemmar."
+
+#. Type: select
+#. Description
+#: ../samba-ad-dc.templates:2001
+msgid ""
+"A standalone server can not be used in a domain and only supports file "
+"sharing and Windows for Workgroups-style logins."
+msgstr ""
+"En fristående server kan inte användas i en domän och stöder endast "
+"fildelning och Windows för Workgroups-inloggning."
+
+#. Type: select
+#. Description
+#: ../samba-ad-dc.templates:2001
+msgid ""
+"If no server role is specified, the Samba server will not be provisioned, so "
+"this can be done manually by the user."
+msgstr ""
+"Om ingen serverroll anges kommer sambaservern inte att förberedas, detta kan "
+"göras manuellt av användaren."
+
+#. Type: string
+#. Description
+#: ../samba-ad-dc.templates:3001
+msgid "Realm name:"
+msgstr "Namn för realm:"
+
+#. Type: string
+#. Description
+#: ../samba-ad-dc.templates:3001
+msgid ""
+"Please specify the Kerberos realm for the domain that this domain controller "
+"controls."
+msgstr ""
+"Ange Kerberosrealm för domänen som denna domänkontrollant kontrollerar."
+
+#. Type: string
+#. Description
+#: ../samba-ad-dc.templates:3001
+msgid "Usually this is the a capitalized version of your DNS hostname."
+msgstr "Vanligen är detta DNS-värdnamnet i stora bokstäver."
+
+#. Type: password
+#. Description
+#: ../samba-ad-dc.templates:4001
+msgid "New password for the Samba \"administrator\" user:"
+msgstr "Nytt lösenord för Samba-användaren \"administrator\":"
+
+#. Type: password
+#. Description
+#: ../samba-ad-dc.templates:4001
+msgid "If this field is left blank, a random password will be generated."
+msgstr "Om fältet lämnas tomt slumpas ett lösenord fram."
+
+#. Type: password
+#. Description
+#: ../samba-ad-dc.templates:4001
+msgid "A password can be set later by running, as root:"
+msgstr "Lösenordet kan anges senare via rot-exekvering:"
+
+#. Type: password
+#. Description
+#: ../samba-ad-dc.templates:5001
+msgid "Repeat password for the Samba \"administrator\" user:"
+msgstr "Upprepa lösenordet för Samba-användaren \"administrator\":"
+
+#. Type: error
+#. Description
+#: ../samba-ad-dc.templates:6001
+msgid "Password input error"
+msgstr "Fel vid avgivande av lösenord"
+
+#. Type: error
+#. Description
+#: ../samba-ad-dc.templates:6001
+msgid "The two passwords you entered were not the same. Please try again."
+msgstr "De båda lösenorden som angavs stämde inte överrens. Försök igen."
 
 #. Type: title
 #. Description
@@ -51,9 +175,9 @@ msgstr ""
 #. Description
 #: ../samba-common.templates:2001
 msgid ""
-"The dhcp3-client package must be installed to take advantage of this feature."
+"The dhcp-client package must be installed to take advantage of this feature."
 msgstr ""
-"Paketet dhcp3-client måste installeras för att kunna använda denna funktion."
+"Paketet dhcp-client måste installeras för att kunna använda denna funktion."
 
 #. Type: boolean
 #. Description
@@ -112,70 +236,52 @@ msgstr ""
 "klientprogram som finns och detta kommer att vara domännamnet som används "
 "tillsammans med inställningen \"security=domain\"."
 
-#. Type: boolean
-#. Description
-#: ../samba-common.templates:5001
-msgid "Use password encryption?"
-msgstr "Använd lösenordskryptering?"
+#~ msgid " $ samba-tool user setpassword administrator"
+#~ msgstr " $ samba-tool user setpassword administrator"
 
-#. Type: boolean
-#. Description
-#: ../samba-common.templates:5001
-msgid ""
-"All recent Windows clients communicate with SMB/CIFS servers using encrypted "
-"passwords. If you want to use clear text passwords you will need to change a "
-"parameter in your Windows registry."
-msgstr ""
-"De flesta Windows-klienter av senare versioner kommunicerar med krypterade "
-"lösenord mot SMB/CIFS-servrar. Om du vill använda lösenord i klartext "
-"behöver du ändra en parameter i ditt Windows-register."
+#~ msgid "Use password encryption?"
+#~ msgstr "Använd lösenordskryptering?"
 
-#. Type: boolean
-#. Description
-#: ../samba-common.templates:5001
-msgid ""
-"Enabling this option is highly recommended as support for plain text "
-"passwords is no longer maintained in Microsoft Windows products. If you do, "
-"make sure you have a valid /etc/samba/smbpasswd file and that you set "
-"passwords in there for each user using the smbpasswd command."
-msgstr ""
-"Det rekommenderas varmt att du aktiverar detta alternativ. Om du gör det, "
-"kontrollera att du har en giltig /etc/samba/smbpasswd och att du har ställt "
-"in lösenorden där för varje användare med kommandot smbpasswd."
+#~ msgid ""
+#~ "All recent Windows clients communicate with SMB/CIFS servers using "
+#~ "encrypted passwords. If you want to use clear text passwords you will "
+#~ "need to change a parameter in your Windows registry."
+#~ msgstr ""
+#~ "De flesta Windows-klienter av senare versioner kommunicerar med "
+#~ "krypterade lösenord mot SMB/CIFS-servrar. Om du vill använda lösenord i "
+#~ "klartext behöver du ändra en parameter i ditt Windows-register."
 
-#. Type: title
-#. Description
-#: ../samba.templates:1001
-msgid "Samba server"
-msgstr "Sambaserver"
+#~ msgid ""
+#~ "Enabling this option is highly recommended as support for plain text "
+#~ "passwords is no longer maintained in Microsoft Windows products. If you "
+#~ "do, make sure you have a valid /etc/samba/smbpasswd file and that you set "
+#~ "passwords in there for each user using the smbpasswd command."
+#~ msgstr ""
+#~ "Det rekommenderas varmt att du aktiverar detta alternativ. Om du gör det, "
+#~ "kontrollera att du har en giltig /etc/samba/smbpasswd och att du har "
+#~ "ställt in lösenorden där för varje användare med kommandot smbpasswd."
 
-#. Type: select
-#. Choices
-#: ../samba.templates:2001
-msgid "daemons"
-msgstr "demoner"
+#~ msgid "Samba server"
+#~ msgstr "Sambaserver"
 
-#. Type: select
-#. Choices
-#: ../samba.templates:2001
-msgid "inetd"
-msgstr "inetd"
+#~ msgid "daemons"
+#~ msgstr "demoner"
 
-#. Type: select
-#. Description
-#: ../samba.templates:2002
-msgid "How do you want to run Samba?"
-msgstr "Hur vill du köra Samba?"
+#~ msgid "inetd"
+#~ msgstr "inetd"
 
-#. Type: select
-#. Description
-#: ../samba.templates:2002
-msgid ""
-"The Samba daemon smbd can run as a normal daemon or from inetd. Running as a "
-"daemon is the recommended approach."
-msgstr ""
-"Samba-demonen smbd kan köras som en normal demon eller från inetd. Att köra "
-"som en demon är den rekommenderade metoden."
+#~ msgid "How do you want to run Samba?"
+#~ msgstr "Hur vill du köra Samba?"
+
+#~ msgid ""
+#~ "The Samba daemon smbd can run as a normal daemon or from inetd. Running "
+#~ "as a daemon is the recommended approach."
+#~ msgstr ""
+#~ "Samba-demonen smbd kan köras som en normal demon eller från inetd. Att "
+#~ "köra som en demon är den rekommenderade metoden."
+
+#~ msgid "Set up Samba 4 as a PDC?"
+#~ msgstr "Installera Samba 4 som en PDC?"
 
 #~ msgid "Create samba password database, /var/lib/samba/passdb.tdb?"
 #~ msgstr "Skapa Sambas lösenordsdatabas, /var/lib/samba/passdb.tdb?"

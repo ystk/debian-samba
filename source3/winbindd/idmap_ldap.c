@@ -37,25 +37,7 @@
 #include <ldap.h>
 
 #include "smbldap.h"
-
-static char *idmap_fetch_secret(const char *backend,
-				const char *domain, const char *identity)
-{
-	char *tmp, *ret;
-	int r;
-
-	r = asprintf(&tmp, "IDMAP_%s_%s", backend, domain);
-
-	if (r < 0)
-		return NULL;
-
-	strupper_m(tmp); /* make sure the key is case insensitive */
-	ret = secrets_fetch_generic(tmp, identity);
-
-	SAFE_FREE(tmp);
-
-	return ret;
-}
+#include "passdb/pdb_ldap_schema.h"
 
 struct idmap_ldap_context {
 	struct smbldap_state *smbldap_state;
@@ -299,7 +281,7 @@ static NTSTATUS idmap_ldap_allocate_id_internal(struct idmap_domain *dom,
 		goto done;
 	}
 
-	talloc_autofree_ldapmsg(mem_ctx, result);
+	smbldap_talloc_autofree_ldapmsg(mem_ctx, result);
 
 	count = ldap_count_entries(ctx->smbldap_state->ldap_struct, result);
 	if (count != 1) {
@@ -443,7 +425,7 @@ static NTSTATUS idmap_ldap_db_init(struct idmap_domain *dom)
 		return NT_STATUS_FILE_IS_OFFLINE;
 	}
 
-	ctx = TALLOC_ZERO_P(dom, struct idmap_ldap_context);
+	ctx = talloc_zero(dom, struct idmap_ldap_context);
 	if ( ! ctx) {
 		DEBUG(0, ("Out of memory!\n"));
 		return NT_STATUS_NO_MEMORY;
@@ -470,7 +452,7 @@ static NTSTATUS idmap_ldap_db_init(struct idmap_domain *dom)
 
 	tmp = lp_parm_const_string(-1, config_option, "ldap_base_dn", NULL);
 	if ( ! tmp || ! *tmp) {
-		tmp = lp_ldap_idmap_suffix();
+		tmp = lp_ldap_idmap_suffix(talloc_tos());
 		if ( ! tmp) {
 			DEBUG(1, ("ERROR: missing idmap ldap suffix\n"));
 			ret = NT_STATUS_UNSUCCESSFUL;
@@ -487,8 +469,10 @@ static NTSTATUS idmap_ldap_db_init(struct idmap_domain *dom)
 	ctx->rw_ops->get_new_id = idmap_ldap_allocate_id_internal;
 	ctx->rw_ops->set_mapping = idmap_ldap_set_mapping;
 
+	/* get_credentials deals with setting up creds */
+
 	ret = smbldap_init(ctx, winbind_event_context(), ctx->url,
-			   &ctx->smbldap_state);
+			   false, NULL, NULL, &ctx->smbldap_state);
 	if (!NT_STATUS_IS_OK(ret)) {
 		DEBUG(1, ("ERROR: smbldap_init (%s) failed!\n", ctx->url));
 		goto done;
@@ -655,33 +639,9 @@ static NTSTATUS idmap_ldap_new_mapping(struct idmap_domain *dom, struct id_map *
 	return ret;
 }
 
-
-/* max number of ids requested per batch query */
-#define IDMAP_LDAP_MAX_IDS 30
-
 /**********************************
  lookup a set of unix ids.
 **********************************/
-
-/* this function searches up to IDMAP_LDAP_MAX_IDS entries
- * in maps for a match */
-static struct id_map *find_map_by_id(struct id_map **maps,
-				     enum id_type type,
-				     uint32_t id)
-{
-	int i;
-
-	for (i = 0; i < IDMAP_LDAP_MAX_IDS; i++) {
-		if (maps[i] == NULL) { /* end of the run */
-			return NULL;
-		}
-		if ((maps[i]->xid.type == type) && (maps[i]->xid.id == id)) {
-			return maps[i];
-		}
-	}
-
-	return NULL;
-}
 
 static NTSTATUS idmap_ldap_unixids_to_sids(struct idmap_domain *dom,
 					   struct id_map **ids)
@@ -838,7 +798,7 @@ again:
 		}
 		TALLOC_FREE(tmp);
 
-		map = find_map_by_id(&ids[bidx], type, id);
+		map = idmap_find_map_by_id(&ids[bidx], type, id);
 		if (!map) {
 			DEBUG(2, ("WARNING: couldn't match sid (%s) "
 				  "with requested ids\n", sidstr));
@@ -894,24 +854,6 @@ done:
 /**********************************
  lookup a set of sids.
 **********************************/
-
-/* this function searches up to IDMAP_LDAP_MAX_IDS entries
- * in maps for a match */
-static struct id_map *find_map_by_sid(struct id_map **maps, struct dom_sid *sid)
-{
-	int i;
-
-	for (i = 0; i < IDMAP_LDAP_MAX_IDS; i++) {
-		if (maps[i] == NULL) { /* end of the run */
-			return NULL;
-		}
-		if (dom_sid_equal(maps[i]->sid, sid)) {
-			return maps[i];
-		}
-	}
-
-	return NULL;
-}
 
 static NTSTATUS idmap_ldap_sids_to_unixids(struct idmap_domain *dom,
 					   struct id_map **ids)
@@ -1045,7 +987,7 @@ again:
 			continue;
 		}
 
-		map = find_map_by_sid(&ids[bidx], &sid);
+		map = idmap_find_map_by_sid(&ids[bidx], &sid);
 		if (!map) {
 			DEBUG(2, ("WARNING: couldn't find entry sid (%s) "
 				  "in ids", sidstr));

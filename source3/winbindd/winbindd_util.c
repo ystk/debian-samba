@@ -67,7 +67,7 @@ static void free_domain_list(void)
 		struct winbindd_domain *next = domain->next;
 
 		DLIST_REMOVE(_domain_list, domain);
-		SAFE_FREE(domain);
+		TALLOC_FREE(domain);
 		domain = next;
 	}
 }
@@ -77,7 +77,7 @@ static bool is_internal_domain(const struct dom_sid *sid)
 	if (sid == NULL)
 		return False;
 
-	return (sid_check_is_domain(sid) || sid_check_is_builtin(sid));
+	return (sid_check_is_our_sam(sid) || sid_check_is_builtin(sid));
 }
 
 static bool is_in_internal_domain(const struct dom_sid *sid)
@@ -85,11 +85,14 @@ static bool is_in_internal_domain(const struct dom_sid *sid)
 	if (sid == NULL)
 		return False;
 
-	return (sid_check_is_in_our_domain(sid) || sid_check_is_in_builtin(sid));
+	return (sid_check_is_in_our_sam(sid) || sid_check_is_in_builtin(sid));
 }
 
 
-/* Add a trusted domain to our list of domains */
+/* Add a trusted domain to our list of domains.
+   If the domain already exists in the list,
+   return it and don't re-initialize.  */
+
 static struct winbindd_domain *add_trusted_domain(const char *domain_name, const char *alt_name,
 						  struct winbindd_methods *methods,
 						  const struct dom_sid *sid)
@@ -99,6 +102,7 @@ static struct winbindd_domain *add_trusted_domain(const char *domain_name, const
 	char *idmap_config_option;
 	const char *param;
 	const char **ignored_domains, **dom;
+	int role = lp_server_role();
 
 	ignored_domains = lp_parm_string_list(-1, "winbind", "ignore domains", NULL);
 	for (dom=ignored_domains; dom && *dom; dom++) {
@@ -108,9 +112,9 @@ static struct winbindd_domain *add_trusted_domain(const char *domain_name, const
 		}
 	}
 
-	/* ignore alt_name if we are not in an AD domain */
+	/* use alt_name if available to allow DNS lookups */
 
-	if ( (lp_security() == SEC_ADS) && alt_name && *alt_name) {
+	if (alt_name && *alt_name) {
 		alternative_name = alt_name;
 	}
 
@@ -146,7 +150,10 @@ static struct winbindd_domain *add_trusted_domain(const char *domain_name, const
 
 	if (domain != NULL) {
 		/*
-		 * We found a match. Possibly update the SID
+		 * We found a match on domain->name or
+		 * domain->alt_name. Possibly update the SID
+		 * if the stored SID was the NULL SID
+		 * and return the matching entry.
 		 */
 		if ((sid != NULL)
 		    && dom_sid_equal(&domain->sid, &global_sid_NULL)) {
@@ -156,27 +163,31 @@ static struct winbindd_domain *add_trusted_domain(const char *domain_name, const
 	}
 
 	/* Create new domain entry */
-
-	if ((domain = SMB_MALLOC_P(struct winbindd_domain)) == NULL)
-		return NULL;
-
-	/* Fill in fields */
-
-	ZERO_STRUCTP(domain);
-
-	domain->children = SMB_MALLOC_ARRAY(
-		struct winbindd_child, lp_winbind_max_domain_connections());
-	if (domain->children == NULL) {
-		SAFE_FREE(domain);
+	domain = talloc_zero(NULL, struct winbindd_domain);
+	if (domain == NULL) {
 		return NULL;
 	}
-	memset(domain->children, 0,
-	       sizeof(struct winbindd_child)
-	       * lp_winbind_max_domain_connections());
 
-	fstrcpy(domain->name, domain_name);
+	domain->children = talloc_zero_array(domain,
+					     struct winbindd_child,
+					     lp_winbind_max_domain_connections());
+	if (domain->children == NULL) {
+		TALLOC_FREE(domain);
+		return NULL;
+	}
+
+	domain->name = talloc_strdup(domain, domain_name);
+	if (domain->name == NULL) {
+		TALLOC_FREE(domain);
+		return NULL;
+	}
+
 	if (alternative_name) {
-		fstrcpy(domain->alt_name, alternative_name);
+		domain->alt_name = talloc_strdup(domain, alternative_name);
+		if (domain->alt_name == NULL) {
+			TALLOC_FREE(domain);
+			return NULL;
+		}
 	}
 
 	domain->methods = methods;
@@ -190,6 +201,15 @@ static struct winbindd_domain *add_trusted_domain(const char *domain_name, const
 	domain->dc_probe_pid = (pid_t)-1;
 	if (sid) {
 		sid_copy(&domain->sid, sid);
+	}
+
+	/* Is this our primary domain ? */
+	if (strequal(domain_name, get_global_sam_name()) &&
+			(role != ROLE_DOMAIN_MEMBER)) {
+		domain->primary = true;
+	} else if (strequal(domain_name, lp_workgroup()) &&
+			(role == ROLE_DOMAIN_MEMBER)) {
+		domain->primary = true;
 	}
 
 	/* Link to domain list */
@@ -228,6 +248,8 @@ static struct winbindd_domain *add_trusted_domain(const char *domain_name, const
 
 done:
 
+	setup_domain_child(domain);
+
 	DEBUG(2,("Added domain %s %s %s\n",
 		 domain->name, domain->alt_name,
 		 &domain->sid?sid_string_dbg(&domain->sid):""));
@@ -261,7 +283,7 @@ static void add_trusted_domains( struct winbindd_domain *domain )
 	struct trustdom_state *state;
 	struct tevent_req *req;
 
-	state = TALLOC_ZERO_P(NULL, struct trustdom_state);
+	state = talloc_zero(NULL, struct trustdom_state);
 	if (state == NULL) {
 		DEBUG(0, ("talloc failed\n"));
 		return;
@@ -301,7 +323,6 @@ static void trustdom_list_done(struct tevent_req *req)
 	while ((p != NULL) && (*p != '\0')) {
 		char *q, *sidstr, *alt_name;
 		struct dom_sid sid;
-		struct winbindd_domain *domain;
 		char *alternate_name = NULL;
 
 		alt_name = strchr(p, '\\');
@@ -336,23 +357,16 @@ static void trustdom_list_done(struct tevent_req *req)
 		if ( !strequal( alt_name, "(null)" ) )
 			alternate_name = alt_name;
 
-		/* If we have an existing domain structure, calling
- 		   add_trusted_domain() will update the SID if
- 		   necessary.  This is important because we need the
- 		   SID for sibling domains */
+		/*
+		 * We always call add_trusted_domain() cause on an existing
+		 * domain structure, it will update the SID if necessary.
+		 * This is important because we need the SID for sibling
+		 * domains.
+		 */
+		(void)add_trusted_domain(p, alternate_name,
+					    &cache_methods,
+					    &sid);
 
-		if ( find_domain_from_name_noinit(p) != NULL ) {
-			domain = add_trusted_domain(p, alternate_name,
-						    &cache_methods,
-						    &sid);
-		} else {
-			domain = add_trusted_domain(p, alternate_name,
-						    &cache_methods,
-						    &sid);
-			if (domain) {
-				setup_domain_child(domain);
-			}
-		}
 		p=q;
 		if (p != NULL)
 			p += 1;
@@ -426,9 +440,6 @@ static void rescan_forest_root_trusts( void )
 						dom_list[i].dns_name,
 						&cache_methods,
 						&dom_list[i].sid );
-			if (d != NULL) {
-				setup_domain_child(d);
-			}
 		}
 
 		if (d == NULL) {
@@ -498,9 +509,6 @@ static void rescan_forest_trusts( void )
 							dom_list[i].dns_name,
 							&cache_methods,
 							&dom_list[i].sid );
-				if (d != NULL) {
-					setup_domain_child(d);
-				}
 			}
 
 			if (d == NULL) {
@@ -601,7 +609,6 @@ enum winbindd_result winbindd_dual_init_connection(struct winbindd_domain *domai
 /* Look up global info for the winbind daemon */
 bool init_domain_list(void)
 {
-	struct winbindd_domain *domain;
 	int role = lp_server_role();
 
 	/* Free existing list */
@@ -609,26 +616,18 @@ bool init_domain_list(void)
 
 	/* BUILTIN domain */
 
-	domain = add_trusted_domain("BUILTIN", NULL, &cache_methods,
+	(void)add_trusted_domain("BUILTIN", NULL, &cache_methods,
 				    &global_sid_Builtin);
-	if (domain) {
-		setup_domain_child(domain);
-	}
 
 	/* Local SAM */
 
-	domain = add_trusted_domain(get_global_sam_name(), NULL,
+	(void)add_trusted_domain(get_global_sam_name(), NULL,
 				    &cache_methods, get_global_sam_sid());
-	if (domain) {
-		if ( role != ROLE_DOMAIN_MEMBER ) {
-			domain->primary = True;
-		}
-		setup_domain_child(domain);
-	}
 
 	/* Add ourselves as the first entry. */
 
 	if ( role == ROLE_DOMAIN_MEMBER ) {
+		struct winbindd_domain *domain;
 		struct dom_sid our_sid;
 
 		if (!secrets_fetch_domain_sid(lp_workgroup(), &our_sid)) {
@@ -639,9 +638,6 @@ bool init_domain_list(void)
 		domain = add_trusted_domain( lp_workgroup(), lp_realm(),
 					     &cache_methods, &our_sid);
 		if (domain) {
-			domain->primary = True;
-			setup_domain_child(domain);
-
 			/* Even in the parent winbindd we'll need to
 			   talk to the DC, so try and see if we can
 			   contact it. Theoretically this isn't neccessary
@@ -675,7 +671,7 @@ struct winbindd_domain *find_domain_from_name_noinit(const char *domain_name)
 
 	for (domain = domain_list(); domain != NULL; domain = domain->next) {
 		if (strequal(domain_name, domain->name) ||
-		    (domain->alt_name[0] &&
+		    (domain->alt_name != NULL &&
 		     strequal(domain_name, domain->alt_name))) {
 			return domain;
 		}
@@ -755,7 +751,7 @@ struct winbindd_domain *find_root_domain(void)
 {
 	struct winbindd_domain *ours = find_our_domain();
 
-	if (ours->forest_name[0] == '\0') {
+	if (ours->forest_name == NULL) {
 		return NULL;
 	}
 
@@ -877,9 +873,7 @@ bool parse_domain_user(const char *domuser, fstring domain, fstring user)
 		domain[PTR_DIFF(p, domuser)] = 0;
 	}
 
-	strupper_m(domain);
-
-	return True;
+	return strupper_m(domain);
 }
 
 bool parse_domain_user_talloc(TALLOC_CTX *mem_ctx, const char *domuser,
@@ -933,7 +927,7 @@ void fill_domain_username(fstring name, const char *domain, const char *user, bo
 	fstring tmp_user;
 
 	fstrcpy(tmp_user, user);
-	strlower_m(tmp_user);
+	(void)strlower_m(tmp_user);
 
 	if (can_assume && assume_domain(domain)) {
 		strlcpy(name, tmp_user, sizeof(fstring));
@@ -956,7 +950,10 @@ char *fill_domain_username_talloc(TALLOC_CTX *mem_ctx,
 	char *tmp_user, *name;
 
 	tmp_user = talloc_strdup(mem_ctx, user);
-	strlower_m(tmp_user);
+	if (!strlower_m(tmp_user)) {
+		TALLOC_FREE(tmp_user);
+		return NULL;
+	}
 
 	if (can_assume && assume_domain(domain)) {
 		name = tmp_user;
@@ -1033,12 +1030,18 @@ NTSTATUS lookup_usergroups_cached(struct winbindd_domain *domain,
 		return NT_STATUS_UNSUCCESSFUL;
 	}
 
-	/* Skip Domain local groups outside our domain.
-	   We'll get these from the getsidaliases() RPC call. */
+	/*
+	 * Before bug #7843 the "Domain Local" groups were added with a
+	 * lookupuseraliases call, but this isn't done anymore for our domain
+	 * so we need to resolve resource groups here.
+	 *
+	 * When to use Resource Groups:
+	 * http://technet.microsoft.com/en-us/library/cc753670%28v=WS.10%29.aspx
+	 */
 	status = sid_array_from_info3(mem_ctx, info3,
 				      user_sids,
 				      &num_groups,
-				      false, true);
+				      false);
 
 	if (!NT_STATUS_IS_OK(status)) {
 		TALLOC_FREE(info3);
@@ -1173,7 +1176,8 @@ bool winbindd_can_contact_domain(struct winbindd_domain *domain)
 	/* We can contact the domain if it is our primary domain */
 
 	if (domain->primary) {
-		return true;
+		ret = true;
+		goto done;
 	}
 
 	/* Trust the TDC cache and not the winbindd_domain flags */
@@ -1181,7 +1185,8 @@ bool winbindd_can_contact_domain(struct winbindd_domain *domain)
 	if ((tdc = wcache_tdc_fetch_domain(frame, domain->name)) == NULL) {
 		DEBUG(10,("winbindd_can_contact_domain: %s not found in cache\n",
 			  domain->name));
-		return false;
+		ret = false;
+		goto done;
 	}
 
 	/* Can always contact a domain that is in out forest */
@@ -1351,6 +1356,15 @@ bool is_domain_online(const struct winbindd_domain *domain)
 	return !is_domain_offline(domain);
 }
 
+/**
+ * Parse an char array into a list of sids.
+ *
+ * The input sidstr should consist of 0-terminated strings
+ * representing sids, separated by newline characters '\n'.
+ * The list is terminated by an empty string, i.e.
+ * character '\0' directly following a character '\n'
+ * (or '\0' right at the start of sidstr).
+ */
 bool parse_sidlist(TALLOC_CTX *mem_ctx, const char *sidstr,
 		   struct dom_sid **sids, uint32_t *num_sids)
 {

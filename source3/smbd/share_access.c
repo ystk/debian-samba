@@ -1,18 +1,18 @@
-/* 
+/*
    Unix SMB/CIFS implementation.
    Check access based on valid users, read list and friends
    Copyright (C) Volker Lendecke 2005
-   
+
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
    the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
-   
+
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
-   
+
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
@@ -90,7 +90,7 @@ static bool token_contains_name(TALLOC_CTX *mem_ctx,
 		 * result that might be interpreted in a wrong way. */
 		smb_panic("substitutions failed");
 	}
-	
+
 	/* check to see is we already have a SID */
 
 	if ( string_to_sid( &sid, name ) ) {
@@ -162,26 +162,21 @@ bool token_contains_name_in_list(const char *username,
 				 const struct security_token *token,
 				 const char **list)
 {
-	TALLOC_CTX *mem_ctx;
-
 	if (list == NULL) {
 		return False;
 	}
-
-	if ( (mem_ctx = talloc_new(NULL)) == NULL ) {
-		smb_panic("talloc_new failed");
-	}
-
 	while (*list != NULL) {
-		if (token_contains_name(mem_ctx, username, domain, sharename,
-					token, *list)) {
-			TALLOC_FREE(mem_ctx);
-			return True;
+		TALLOC_CTX *frame = talloc_stackframe();
+		bool ret;
+
+		ret = token_contains_name(frame, username, domain, sharename,
+					  token, *list);
+		TALLOC_FREE(frame);
+		if (ret) {
+			return true;
 		}
 		list += 1;
 	}
-
-	TALLOC_FREE(mem_ctx);
 	return False;
 }
 
@@ -203,7 +198,7 @@ bool user_ok_token(const char *username, const char *domain,
 {
 	if (lp_invalid_users(snum) != NULL) {
 		if (token_contains_name_in_list(username, domain,
-						lp_servicename(snum),
+						lp_servicename(talloc_tos(), snum),
 						token,
 						lp_invalid_users(snum))) {
 			DEBUG(10, ("User %s in 'invalid users'\n", username));
@@ -213,7 +208,8 @@ bool user_ok_token(const char *username, const char *domain,
 
 	if (lp_valid_users(snum) != NULL) {
 		if (!token_contains_name_in_list(username, domain,
-						 lp_servicename(snum), token,
+						 lp_servicename(talloc_tos(), snum),
+						 token,
 						 lp_valid_users(snum))) {
 			DEBUG(10, ("User %s not in 'valid users'\n",
 				   username));
@@ -223,14 +219,14 @@ bool user_ok_token(const char *username, const char *domain,
 
 	if (lp_onlyuser(snum)) {
 		const char *list[2];
-		list[0] = lp_username(snum);
+		list[0] = lp_username(talloc_tos(), snum);
 		list[1] = NULL;
 		if ((list[0] == NULL) || (*list[0] == '\0')) {
 			DEBUG(0, ("'only user = yes' and no 'username ='\n"));
 			return False;
 		}
 		if (!token_contains_name_in_list(NULL, domain,
-						 lp_servicename(snum),
+						 lp_servicename(talloc_tos(), snum),
 						 token, list)) {
 			DEBUG(10, ("%s != 'username'\n", username));
 			return False;
@@ -238,7 +234,7 @@ bool user_ok_token(const char *username, const char *domain,
 	}
 
 	DEBUG(10, ("user_ok_token: share %s is ok for unix user %s\n",
-		   lp_servicename(snum), username));
+		   lp_servicename(talloc_tos(), snum), username));
 
 	return True;
 }
@@ -267,7 +263,8 @@ bool is_share_read_only_for_token(const char *username,
 
 	if (lp_readlist(snum) != NULL) {
 		if (token_contains_name_in_list(username, domain,
-						lp_servicename(snum), token,
+						lp_servicename(talloc_tos(), snum),
+						token,
 						lp_readlist(snum))) {
 			result = True;
 		}
@@ -275,14 +272,15 @@ bool is_share_read_only_for_token(const char *username,
 
 	if (lp_writelist(snum) != NULL) {
 		if (token_contains_name_in_list(username, domain,
-						lp_servicename(snum), token,
+						lp_servicename(talloc_tos(), snum),
+						token,
 						lp_writelist(snum))) {
 			result = False;
 		}
 	}
 
 	DEBUG(10,("is_share_read_only_for_user: share %s is %s for unix user "
-		  "%s\n", lp_servicename(snum),
+		  "%s\n", lp_servicename(talloc_tos(), snum),
 		  result ? "read-only" : "read-write", username));
 
 	return result;

@@ -1,21 +1,21 @@
-/* 
+/*
    Unix SMB/CIFS implementation.
    time handling functions
 
    Copyright (C) Andrew Tridgell 		1992-2004
-   Copyright (C) Stefan (metze) Metzmacher	2002   
+   Copyright (C) Stefan (metze) Metzmacher	2002
    Copyright (C) Jeremy Allison			2007
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
    the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
-   
+
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
-   
+
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
@@ -87,17 +87,17 @@ bool nt_time_is_zero(const NTTIME *nt)
 
 /****************************************************************************
  Convert ASN.1 GeneralizedTime string to unix-time.
- Returns 0 on failure; Currently ignores timezone. 
+ Returns 0 on failure; Currently ignores timezone.
 ****************************************************************************/
 
 time_t generalized_to_unix_time(const char *str)
-{ 
+{
 	struct tm tm;
 
 	ZERO_STRUCT(tm);
 
-	if (sscanf(str, "%4d%2d%2d%2d%2d%2d", 
-		   &tm.tm_year, &tm.tm_mon, &tm.tm_mday, 
+	if (sscanf(str, "%4d%2d%2d%2d%2d%2d",
+		   &tm.tm_year, &tm.tm_mon, &tm.tm_mday,
 		   &tm.tm_hour, &tm.tm_min, &tm.tm_sec) != 6) {
 		return 0;
 	}
@@ -164,7 +164,7 @@ void round_timespec(enum timestamp_set_resolution res, struct timespec *ts)
 }
 
 /****************************************************************************
- Take a Unix time and convert to an NTTIME structure and place in buffer 
+ Take a Unix time and convert to an NTTIME structure and place in buffer
  pointed to by p, rounded to the correct resolution.
 ****************************************************************************/
 
@@ -173,8 +173,7 @@ void put_long_date_timespec(enum timestamp_set_resolution res, char *p, struct t
 	NTTIME nt;
 	round_timespec(res, &ts);
 	unix_timespec_to_nt_time(&nt, ts);
-	SIVAL(p, 0, nt & 0xFFFFFFFF);
-	SIVAL(p, 4, nt >> 32);
+	SBVAL(p, 0, nt);
 }
 
 void put_long_date(char *p, time_t t)
@@ -198,25 +197,7 @@ void dos_filetime_timespec(struct timespec *tsp)
 
 time_t make_unix_date(const void *date_ptr, int zone_offset)
 {
-	uint32_t dos_date=0;
-	struct tm t;
-	time_t ret;
-
-	dos_date = IVAL(date_ptr,0);
-
-	if (dos_date == 0) {
-		return 0;
-	}
-  
-	interpret_dos_date(dos_date,&t.tm_year,&t.tm_mon,
-			&t.tm_mday,&t.tm_hour,&t.tm_min,&t.tm_sec);
-	t.tm_isdst = -1;
-  
-	ret = timegm(&t);
-
-	ret += zone_offset;
-
-	return(ret);
+	return pull_dos_date(date_ptr, zone_offset);
 }
 
 /*******************************************************************
@@ -225,13 +206,7 @@ time_t make_unix_date(const void *date_ptr, int zone_offset)
 
 time_t make_unix_date2(const void *date_ptr, int zone_offset)
 {
-	uint32_t x,x2;
-
-	x = IVAL(date_ptr,0);
-	x2 = ((x&0xFFFF)<<16) | ((x&0xFFFF0000)>>16);
-	SIVAL(&x,0,x2);
-
-	return(make_unix_date((const void *)&x, zone_offset));
+	return pull_dos_date2(date_ptr, zone_offset);
 }
 
 /*******************************************************************
@@ -241,11 +216,7 @@ time_t make_unix_date2(const void *date_ptr, int zone_offset)
 
 time_t make_unix_date3(const void *date_ptr, int zone_offset)
 {
-	time_t t = (time_t)IVAL(date_ptr,0);
-	if (!null_time(t)) {
-		t += zone_offset;
-	}
-	return(t);
+	return pull_dos_date3(date_ptr, zone_offset);
 }
 
 time_t srv_make_unix_date(const void *date_ptr)
@@ -261,95 +232,6 @@ time_t srv_make_unix_date2(const void *date_ptr)
 time_t srv_make_unix_date3(const void *date_ptr)
 {
 	return make_unix_date3(date_ptr, server_zone_offset);
-}
-
-/****************************************************************************
- Convert a normalized timeval to a timespec.
-****************************************************************************/
-
-struct timespec convert_timeval_to_timespec(const struct timeval tv)
-{
-	struct timespec ts;
-	ts.tv_sec = tv.tv_sec;
-	ts.tv_nsec = tv.tv_usec * 1000;
-	return ts;
-}
-
-/****************************************************************************
- Convert a normalized timespec to a timeval.
-****************************************************************************/
-
-struct timeval convert_timespec_to_timeval(const struct timespec ts)
-{
-	struct timeval tv;
-	tv.tv_sec = ts.tv_sec;
-	tv.tv_usec = ts.tv_nsec / 1000;
-	return tv;
-}
-
-/****************************************************************************
- Return a timespec for the current time
-****************************************************************************/
-
-struct timespec timespec_current(void)
-{
-	struct timespec ts;
-	clock_gettime(CLOCK_REALTIME, &ts);
-	return ts;
-}
-
-/****************************************************************************
- Return the lesser of two timespecs.
-****************************************************************************/
-
-struct timespec timespec_min(const struct timespec *ts1,
-			   const struct timespec *ts2)
-{
-	if (ts1->tv_sec < ts2->tv_sec) return *ts1;
-	if (ts1->tv_sec > ts2->tv_sec) return *ts2;
-	if (ts1->tv_nsec < ts2->tv_nsec) return *ts1;
-	return *ts2;
-}
-
-/****************************************************************************
-  compare two timespec structures. 
-  Return -1 if ts1 < ts2
-  Return 0 if ts1 == ts2
-  Return 1 if ts1 > ts2
-****************************************************************************/
-
-int timespec_compare(const struct timespec *ts1, const struct timespec *ts2)
-{
-	if (ts1->tv_sec  > ts2->tv_sec)  return 1;
-	if (ts1->tv_sec  < ts2->tv_sec)  return -1;
-	if (ts1->tv_nsec > ts2->tv_nsec) return 1;
-	if (ts1->tv_nsec < ts2->tv_nsec) return -1;
-	return 0;
-}
-
-/****************************************************************************
- Round up a timespec if nsec > 500000000, round down if lower,
- then zero nsec.
-****************************************************************************/
-
-void round_timespec_to_sec(struct timespec *ts)
-{
-	ts->tv_sec = convert_timespec_to_time_t(*ts);
-	ts->tv_nsec = 0;
-}
-
-/****************************************************************************
- Round a timespec to usec value.
-****************************************************************************/
-
-void round_timespec_to_usec(struct timespec *ts)
-{
-	struct timeval tv = convert_timespec_to_timeval(*ts);
-	*ts = convert_timeval_to_timespec(tv);
-	while (ts->tv_nsec > 1000000000) {
-		ts->tv_sec += 1;
-		ts->tv_nsec -= 1000000000;
-	}
 }
 
 /****************************************************************************
@@ -469,63 +351,6 @@ time_t uint64s_nt_time_to_unix_abs(const uint64_t *src)
 }
 
 /****************************************************************************
- Put a 8 byte filetime from a struct timespec. Uses GMT.
-****************************************************************************/
-
-void unix_timespec_to_nt_time(NTTIME *nt, struct timespec ts)
-{
-	uint64_t d;
-
-	if (ts.tv_sec ==0 && ts.tv_nsec == 0) {
-		*nt = 0;
-		return;
-	}
-	if (ts.tv_sec == TIME_T_MAX) {
-		*nt = 0x7fffffffffffffffLL;
-		return;
-	}		
-	if (ts.tv_sec == (time_t)-1) {
-		*nt = (uint64_t)-1;
-		return;
-	}		
-
-	d = ts.tv_sec;
-	d += TIME_FIXUP_CONSTANT_INT;
-	d *= 1000*1000*10;
-	/* d is now in 100ns units. */
-	d += (ts.tv_nsec / 100);
-
-	*nt = d;
-}
-
-#if 0
-void nt_time_to_unix_timespec(struct timespec *ts, NTTIME t)
-{
-	if (ts == NULL) {
-		return;
-	}
-
-	/* t starts in 100 nsec units since 1601-01-01. */
-
-	t *= 100;
-	/* t is now in nsec units since 1601-01-01. */
-
-	t -= TIME_FIXUP_CONSTANT*1000*1000*100;
-	/* t is now in nsec units since the UNIX epoch 1970-01-01. */
-
-	ts->tv_sec  = t / 1000000000LL;
-
-	if (TIME_T_MIN > ts->tv_sec || ts->tv_sec > TIME_T_MAX) {
-		ts->tv_sec  = 0;
-		ts->tv_nsec = 0;
-		return;
-	}
-
-	ts->tv_nsec = t - ts->tv_sec*1000000000LL;
-}
-#endif
-
-/****************************************************************************
  Convert a time_t to a NTTIME structure
 
  This is an absolute version of the one above.
@@ -546,12 +371,12 @@ void unix_to_nt_time_abs(NTTIME *nt, time_t t)
 		*nt = 0x7fffffffffffffffLL;
 		return;
 	}
-		
+
 	if (t == (time_t)-1) {
 		/* that's what NT uses for infinite */
 		*nt = NTTIME_INFINITY;
 		return;
-	}		
+	}
 
 	d = (double)(t);
 	d *= 1.0e7;
@@ -597,7 +422,7 @@ const char *display_time(NTTIME nttime)
 	if (nttime==NTTIME_INFINITY)
 		return "Never";
 
-	high = 65536;	
+	high = 65536;
 	high = high/10000;
 	high = high*65536;
 	high = high/1000;

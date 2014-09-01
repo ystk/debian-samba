@@ -26,7 +26,7 @@ struct preopen_state;
 
 struct preopen_helper {
 	struct preopen_state *state;
-	struct fd_event *fde;
+	struct tevent_fd *fde;
 	pid_t pid;
 	int fd;
 	bool busy;
@@ -106,8 +106,8 @@ static void preopen_queue_run(struct preopen_state *state)
 	}
 }
 
-static void preopen_helper_readable(struct event_context *ev,
-				    struct fd_event *fde, uint16_t flags,
+static void preopen_helper_readable(struct tevent_context *ev,
+				    struct tevent_fd *fde, uint16_t flags,
 				    void *priv)
 {
 	struct preopen_helper *helper = (struct preopen_helper *)priv;
@@ -115,7 +115,7 @@ static void preopen_helper_readable(struct event_context *ev,
 	ssize_t nread;
 	char c;
 
-	if ((flags & EVENT_FD_READ) == 0) {
+	if ((flags & TEVENT_FD_READ) == 0) {
 		return;
 	}
 
@@ -166,7 +166,7 @@ static bool preopen_helper_open_one(int sock_fd, char **pnamebuf,
 		nread += thistime;
 
 		if (nread == talloc_get_size(namebuf)) {
-			namebuf = TALLOC_REALLOC_ARRAY(
+			namebuf = talloc_realloc(
 				NULL, namebuf, char,
 				talloc_get_size(namebuf) * 2);
 			if (namebuf == NULL) {
@@ -193,7 +193,7 @@ static bool preopen_helper(int fd, size_t to_read)
 	char *namebuf;
 	void *readbuf;
 
-	namebuf = TALLOC_ARRAY(NULL, char, 1024);
+	namebuf = talloc_array(NULL, char, 1024);
 	if (namebuf == NULL) {
 		return false;
 	}
@@ -224,7 +224,7 @@ static NTSTATUS preopen_init_helper(struct preopen_helper *h)
 		return status;
 	}
 
-	h->pid = sys_fork();
+	h->pid = fork();
 
 	if (h->pid == -1) {
 		return map_nt_error_from_unix(errno);
@@ -237,8 +237,8 @@ static NTSTATUS preopen_init_helper(struct preopen_helper *h)
 	}
 	close(fdpair[1]);
 	h->fd = fdpair[0];
-	h->fde = event_add_fd(smbd_event_context(), h->state, h->fd,
-			      EVENT_FD_READ, preopen_helper_readable, h);
+	h->fde = tevent_add_fd(server_event_context(), h->state, h->fd,
+			      TEVENT_FD_READ, preopen_helper_readable, h);
 	if (h->fde == NULL) {
 		close(h->fd);
 		h->fd = -1;
@@ -261,7 +261,7 @@ static NTSTATUS preopen_init_helpers(TALLOC_CTX *mem_ctx, size_t to_read,
 	}
 
 	result->num_helpers = num_helpers;
-	result->helpers = TALLOC_ARRAY(result, struct preopen_helper,
+	result->helpers = talloc_array(result, struct preopen_helper,
 				       num_helpers);
 	if (result->helpers == NULL) {
 		TALLOC_FREE(result);
@@ -322,7 +322,7 @@ static struct preopen_state *preopen_state_get(vfs_handle_struct *handle)
 		return NULL;
 	}
 
-	set_namearray(&state->preopen_names, (char *)namelist);
+	set_namearray(&state->preopen_names, namelist);
 
 	if (state->preopen_names == NULL) {
 		TALLOC_FREE(state);
@@ -405,7 +405,7 @@ static int preopen_open(vfs_handle_struct *handle,
 
 	TALLOC_FREE(state->template_fname);
 	state->template_fname = talloc_asprintf(
-		state, "%s/%s", fsp->conn->connectpath, smb_fname->base_name);
+		state, "%s/%s", fsp->conn->cwd, smb_fname->base_name);
 
 	if (state->template_fname == NULL) {
 		return res;
