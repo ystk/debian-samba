@@ -23,6 +23,7 @@
 import sys
 
 from subunit import TestProtocolClient, get_default_formatter
+from subunit.test_results import AutoTimingTestResultDecorator
 from testtools.run import (
     BUFFEROUTPUT,
     CATCHBREAK,
@@ -33,12 +34,22 @@ from testtools.run import (
 
 
 class SubunitTestRunner(object):
-    def __init__(self, stream=sys.stdout):
-        self.stream = stream
+    def __init__(self, verbosity=None, failfast=None, buffer=None, stream=None):
+        """Create a TestToolsTestRunner.
+
+        :param verbosity: Ignored.
+        :param failfast: Stop running tests at the first failure.
+        :param buffer: Ignored.
+        """
+        self.failfast = failfast
+        self.stream = stream or sys.stdout
 
     def run(self, test):
         "Run the given test case or test suite."
         result = TestProtocolClient(self.stream)
+        result = AutoTimingTestResultDecorator(result)
+        if self.failfast is not None:
+            result.failfast = self.failfast
         test(result)
         return result
 
@@ -49,7 +60,7 @@ class SubunitTestProgram(TestProgram):
 
     def usageExit(self, msg=None):
         if msg:
-            print msg
+            print (msg)
         usage = {'progName': self.progName, 'catchbreak': '', 'failfast': '',
                  'buffer': ''}
         if self.failfast != False:
@@ -68,6 +79,6 @@ class SubunitTestProgram(TestProgram):
 
 if __name__ == '__main__':
     stream = get_default_formatter()
-    runner = SubunitTestRunner(stream)
+    runner = SubunitTestRunner
     SubunitTestProgram(module=None, argv=sys.argv, testRunner=runner,
         stdout=sys.stdout)

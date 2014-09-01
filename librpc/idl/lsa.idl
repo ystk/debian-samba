@@ -1052,7 +1052,7 @@ import "misc.idl", "security.idl";
 	NTSTATUS lsa_CreateTrustedDomainEx(
 		[in]  policy_handle               *policy_handle,
 		[in]  lsa_TrustDomainInfoInfoEx   *info,
-		[in]  lsa_TrustDomainInfoAuthInfoInternal *auth_info,
+		[in]  lsa_TrustDomainInfoAuthInfo *auth_info,
 		[in]  lsa_TrustedAccessMask access_mask,
 		[out] policy_handle               *trustdom_handle
 		);
@@ -1186,7 +1186,7 @@ import "misc.idl", "security.idl";
 	NTSTATUS lsa_CreateTrustedDomainEx2(
 		[in]  policy_handle               *policy_handle,
 		[in]  lsa_TrustDomainInfoInfoEx   *info,
-		[in]  lsa_TrustDomainInfoAuthInfoInternal *auth_info,
+		[in]  lsa_TrustDomainInfoAuthInfoInternal *auth_info_internal,
 		[in]  lsa_TrustedAccessMask access_mask,
 		[out] policy_handle               *trustdom_handle
 		);
@@ -1328,14 +1328,14 @@ import "misc.idl", "security.idl";
 		[default] uint32 flags;
 	} lsa_ForestTrustCollisionFlags;
 
-	typedef struct {
+	typedef [public] struct {
 		uint32 index;
 		lsa_ForestTrustCollisionRecordType type;
 		[switch_is(type)] lsa_ForestTrustCollisionFlags flags;
 		lsa_String name;
 	} lsa_ForestTrustCollisionRecord;
 
-	typedef struct {
+	typedef [public] struct {
 		uint32 count;
 		[size_is(count)] lsa_ForestTrustCollisionRecord **entries;
 	} lsa_ForestTrustCollisionInfo;

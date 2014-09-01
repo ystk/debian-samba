@@ -200,7 +200,7 @@ static WERROR watch_service_state(struct rpc_pipe_client *pipe_hnd,
 
 		d_printf(".");
 		i++;
-		sys_usleep( 100 );
+		usleep( 100 );
 	}
 	d_printf("\n");
 
@@ -289,7 +289,7 @@ static NTSTATUS rpc_service_list_internal(struct net_context *c,
 	int i;
 	struct dcerpc_binding_handle *b = pipe_hnd->binding_handle;
 
-	uint8_t *buffer = NULL;
+	uint8_t *buffer;
 	uint32_t buf_size = 0;
 	uint32_t bytes_needed = 0;
 	uint32_t num_services = 0;
@@ -305,6 +305,12 @@ static NTSTATUS rpc_service_list_internal(struct net_context *c,
 			  &hSCM);
 	if (!W_ERROR_IS_OK(result)) {
 		return werror_to_ntstatus(result);
+	}
+
+	buffer = talloc_array(mem_ctx, uint8_t, buf_size);
+	if (buffer == NULL) {
+		status = NT_STATUS_NO_MEMORY;
+		goto done;
 	}
 
 	do {
@@ -327,8 +333,12 @@ static NTSTATUS rpc_service_list_internal(struct net_context *c,
 		}
 
 		if (W_ERROR_EQUAL(result, WERR_MORE_DATA) && bytes_needed > 0) {
-			buffer = talloc_array(mem_ctx, uint8_t, bytes_needed);
 			buf_size = bytes_needed;
+			buffer = talloc_realloc(mem_ctx, buffer, uint8_t, bytes_needed);
+			if (buffer == NULL) {
+				status = NT_STATUS_NO_MEMORY;
+				break;
+			}
 			continue;
 		}
 
@@ -381,6 +391,7 @@ static NTSTATUS rpc_service_list_internal(struct net_context *c,
 
 	} while (W_ERROR_EQUAL(result, WERR_MORE_DATA));
 
+done:
 	if (is_valid_policy_hnd(&hSCM)) {
 		WERROR _result;
 		dcerpc_svcctl_CloseServiceHandle(b, mem_ctx, &hSCM, &_result);
@@ -918,7 +929,7 @@ static int rpc_service_list(struct net_context *c, int argc, const char **argv )
 		return 0;
 	}
 
-	return run_rpc_command(c, NULL, &ndr_table_svcctl.syntax_id, 0,
+	return run_rpc_command(c, NULL, &ndr_table_svcctl, 0,
 		rpc_service_list_internal, argc, argv );
 }
 
@@ -936,7 +947,7 @@ static int rpc_service_start(struct net_context *c, int argc, const char **argv 
 		return 0;
 	}
 
-	return run_rpc_command(c, NULL, &ndr_table_svcctl.syntax_id, 0,
+	return run_rpc_command(c, NULL, &ndr_table_svcctl, 0,
 		rpc_service_start_internal, argc, argv );
 }
 
@@ -954,7 +965,7 @@ static int rpc_service_stop(struct net_context *c, int argc, const char **argv )
 		return 0;
 	}
 
-	return run_rpc_command(c, NULL, &ndr_table_svcctl.syntax_id, 0,
+	return run_rpc_command(c, NULL, &ndr_table_svcctl, 0,
 		rpc_service_stop_internal, argc, argv );
 }
 
@@ -972,7 +983,7 @@ static int rpc_service_resume(struct net_context *c, int argc, const char **argv
 		return 0;
 	}
 
-	return run_rpc_command(c, NULL, &ndr_table_svcctl.syntax_id, 0,
+	return run_rpc_command(c, NULL, &ndr_table_svcctl, 0,
 		rpc_service_resume_internal, argc, argv );
 }
 
@@ -990,7 +1001,7 @@ static int rpc_service_pause(struct net_context *c, int argc, const char **argv 
 		return 0;
 	}
 
-	return run_rpc_command(c, NULL, &ndr_table_svcctl.syntax_id, 0,
+	return run_rpc_command(c, NULL, &ndr_table_svcctl, 0,
 		rpc_service_pause_internal, argc, argv );
 }
 
@@ -1008,7 +1019,7 @@ static int rpc_service_status(struct net_context *c, int argc, const char **argv
 		return 0;
 	}
 
-	return run_rpc_command(c, NULL, &ndr_table_svcctl.syntax_id, 0,
+	return run_rpc_command(c, NULL, &ndr_table_svcctl, 0,
 		rpc_service_status_internal, argc, argv );
 }
 
@@ -1026,7 +1037,7 @@ static int rpc_service_delete(struct net_context *c, int argc, const char **argv
 		return 0;
 	}
 
-	return run_rpc_command(c, NULL, &ndr_table_svcctl.syntax_id, 0,
+	return run_rpc_command(c, NULL, &ndr_table_svcctl, 0,
 		rpc_service_delete_internal, argc, argv);
 }
 
@@ -1044,7 +1055,7 @@ static int rpc_service_create(struct net_context *c, int argc, const char **argv
 		return 0;
 	}
 
-	return run_rpc_command(c, NULL, &ndr_table_svcctl.syntax_id, 0,
+	return run_rpc_command(c, NULL, &ndr_table_svcctl, 0,
 		rpc_service_create_internal, argc, argv);
 }
 

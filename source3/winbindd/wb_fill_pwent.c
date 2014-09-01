@@ -29,6 +29,7 @@ struct wb_fill_pwent_state {
 
 static bool fillup_pw_field(const char *lp_template,
 			    const char *username,
+			    const char *grpname,
 			    const char *domname,
 			    uid_t uid,
 			    gid_t gid,
@@ -36,7 +37,7 @@ static bool fillup_pw_field(const char *lp_template,
 			    fstring out);
 
 static void wb_fill_pwent_sid2uid_done(struct tevent_req *subreq);
-static void wb_fill_pwent_sid2gid_done(struct tevent_req *subreq);
+static void wb_fill_pwent_getgrsid_done(struct tevent_req *subreq);
 
 struct tevent_req *wb_fill_pwent_send(TALLOC_CTX *mem_ctx,
 				      struct tevent_context *ev,
@@ -54,7 +55,7 @@ struct tevent_req *wb_fill_pwent_send(TALLOC_CTX *mem_ctx,
 	state->info = info;
 	state->pw = pw;
 
-	subreq = wb_sid2uid_send(state, state->ev, &state->info->user_sid);
+	subreq = wb_sids2xids_send(state, state->ev, &state->info->user_sid, 1);
 	if (tevent_req_nomem(subreq, req)) {
 		return tevent_req_post(req, ev);
 	}
@@ -69,40 +70,66 @@ static void wb_fill_pwent_sid2uid_done(struct tevent_req *subreq)
 	struct wb_fill_pwent_state *state = tevent_req_data(
 		req, struct wb_fill_pwent_state);
 	NTSTATUS status;
+	struct unixid xid;
 
-	status = wb_sid2uid_recv(subreq, &state->pw->pw_uid);
+	status = wb_sids2xids_recv(subreq, &xid);
 	TALLOC_FREE(subreq);
 	if (tevent_req_nterror(req, status)) {
 		return;
 	}
 
-	subreq = wb_sid2gid_send(state, state->ev, &state->info->group_sid);
+	/*
+	 * We are filtering further down in sids2xids, but that filtering
+	 * depends on the actual type of the sid handed in (as determined
+	 * by lookupsids). Here we need to filter for the type of object
+	 * actually requested, in this case uid.
+	 */
+	if (!(xid.type == ID_TYPE_UID || xid.type == ID_TYPE_BOTH)) {
+		tevent_req_nterror(req, NT_STATUS_NONE_MAPPED);
+		return;
+	}
+
+	state->pw->pw_uid = (uid_t)xid.id;
+
+	subreq = wb_getgrsid_send(state, state->ev, &state->info->group_sid, 0);
 	if (tevent_req_nomem(subreq, req)) {
 		return;
 	}
-	tevent_req_set_callback(subreq, wb_fill_pwent_sid2gid_done, req);
+	tevent_req_set_callback(subreq, wb_fill_pwent_getgrsid_done, req);
 }
 
-static void wb_fill_pwent_sid2gid_done(struct tevent_req *subreq)
+static void wb_fill_pwent_getgrsid_done(struct tevent_req *subreq)
 {
 	struct tevent_req *req = tevent_req_callback_data(
 		subreq, struct tevent_req);
 	struct wb_fill_pwent_state *state = tevent_req_data(
 		req, struct wb_fill_pwent_state);
 	struct winbindd_domain *domain;
-	char *dom_name;
+	const char *dom_name;
+	const char *grp_name;
 	fstring user_name, output_username;
 	char *mapped_name = NULL;
+	struct talloc_dict *members;
+	TALLOC_CTX *tmp_ctx = talloc_stackframe();
 	NTSTATUS status;
+	bool ok;
 
-	status = wb_sid2gid_recv(subreq, &state->pw->pw_gid);
+	/* xid handling is done in getgrsid() */
+	status = wb_getgrsid_recv(subreq,
+				  tmp_ctx,
+				  &dom_name,
+				  &grp_name,
+				  &state->pw->pw_gid,
+				  &members);
 	TALLOC_FREE(subreq);
 	if (tevent_req_nterror(req, status)) {
+		talloc_free(tmp_ctx);
 		return;
 	}
 
 	domain = find_domain_from_sid_noinit(&state->info->user_sid);
 	if (domain == NULL) {
+		talloc_free(tmp_ctx);
 		tevent_req_nterror(req, NT_STATUS_NO_SUCH_USER);
 		return;
 	}
@@ -111,7 +138,10 @@ static void wb_fill_pwent_sid2gid_done(struct tevent_req *subreq)
 	/* Username */
 
 	fstrcpy(user_name, state->info->acct_name);
-	strlower_m(user_name);
+	if (!strlower_m(user_name)) {
+		tevent_req_nterror(req, NT_STATUS_INVALID_PARAMETER);
+		return;
+	}
 	status = normalize_name_map(state, domain, user_name, &mapped_name);
 
 	/* Basic removal of whitespace */
@@ -129,21 +159,36 @@ static void wb_fill_pwent_sid2gid_done(struct tevent_req *subreq)
 				     true);
 	}
 
-	fstrcpy(state->pw->pw_name, output_username);
+	strlcpy(state->pw->pw_name,
+		output_username,
+		sizeof(state->pw->pw_name));
 	fstrcpy(state->pw->pw_gecos, state->info->full_name);
 
 	/* Home directory and shell */
-
-	if (!fillup_pw_field(lp_template_homedir(), user_name, dom_name,
-			     state->pw->pw_uid, state->pw->pw_gid,
-			     state->info->homedir, state->pw->pw_dir)) {
+	ok = fillup_pw_field(lp_template_homedir(),
+			     user_name,
+			     grp_name,
+			     dom_name,
+			     state->pw->pw_uid,
+			     state->pw->pw_gid,
+			     state->info->homedir,
+			     state->pw->pw_dir);
+	if (!ok) {
+		talloc_free(tmp_ctx);
 		tevent_req_nterror(req, NT_STATUS_NO_SUCH_USER);
 		return;
 	}
 
-	if (!fillup_pw_field(lp_template_shell(), user_name, dom_name,
-			     state->pw->pw_uid, state->pw->pw_gid,
-			     state->info->shell, state->pw->pw_shell)) {
+	ok = fillup_pw_field(lp_template_shell(),
+			     user_name,
+			     grp_name,
+			     dom_name,
+			     state->pw->pw_uid,
+			     state->pw->pw_gid,
+			     state->info->shell,
+			     state->pw->pw_shell);
+	talloc_free(tmp_ctx);
+	if (!ok) {
 		tevent_req_nterror(req, NT_STATUS_NO_SUCH_USER);
 		return;
 	}
@@ -162,6 +207,7 @@ NTSTATUS wb_fill_pwent_recv(struct tevent_req *req)
 
 static bool fillup_pw_field(const char *lp_template,
 			    const char *username,
+			    const char *grpname,
 			    const char *domname,
 			    uid_t uid,
 			    gid_t gid,
@@ -181,18 +227,18 @@ static bool fillup_pw_field(const char *lp_template,
 
 	if ((in != NULL) && (in[0] != '\0') && (lp_security() == SEC_ADS)) {
 		templ = talloc_sub_specified(talloc_tos(), in,
-					     username, domname,
+					     username, grpname, domname,
 					     uid, gid);
 	} else {
 		templ = talloc_sub_specified(talloc_tos(), lp_template,
-					     username, domname,
+					     username, grpname, domname,
 					     uid, gid);
 	}
 
 	if (!templ)
 		return False;
 
-	safe_strcpy(out, templ, sizeof(fstring) - 1);
+	strlcpy(out, templ, sizeof(fstring));
 	TALLOC_FREE(templ);
 
 	return True;

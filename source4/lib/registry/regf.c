@@ -163,7 +163,9 @@ static DATA_BLOB hbin_alloc(struct regf_data *data, uint32_t size,
 	struct hbin_block *hbin = NULL;
 	unsigned int i;
 
-	*offset = 0;
+	if (offset != NULL) {
+		*offset = 0;
+	}
 
 	if (size == 0)
 		return data_blob(NULL, 0);
@@ -1890,13 +1892,14 @@ static WERROR regf_set_value(struct hive_key *key, const char *name,
 	/* If it's new, create the vk struct, if it's old, free the old data. */
 	if (old_vk_offset == -1) {
 		vk.header = "vk";
-		vk.name_length = strlen(name);
-		if (name != NULL && name[0] != 0) {
+		if (name != NULL && name[0] != '\0') {
 			vk.flag = 1;
 			vk.data_name = name;
+			vk.name_length = strlen(name);
 		} else {
-			vk.data_name = NULL;
 			vk.flag = 0;
+			vk.data_name = NULL;
+			vk.name_length = 0;
 		}
 	} else {
 		/* Free data, if any */
@@ -2211,7 +2214,7 @@ WERROR reg_open_regf_file(TALLOC_CTX *parent_ctx, const char *location,
 	pull->data.data = (uint8_t*)fd_load(regf->fd, &pull->data.length, 0, regf);
 
 	if (pull->data.data == NULL) {
-		DEBUG(0, ("Error reading data\n"));
+		DEBUG(0, ("Error reading data from file: %s\n", location));
 		talloc_free(regf);
 		return WERR_GENERAL_FAILURE;
 	}
@@ -2220,6 +2223,7 @@ WERROR reg_open_regf_file(TALLOC_CTX *parent_ctx, const char *location,
 	W_ERROR_HAVE_NO_MEMORY(regf_hdr);
 
 	if (NT_STATUS_IS_ERR(tdr_pull_regf_hdr(pull, regf_hdr, regf_hdr))) {
+		DEBUG(0, ("Failed to pull regf header from file: %s\n", location));
 		talloc_free(regf);
 		return WERR_GENERAL_FAILURE;
 	}

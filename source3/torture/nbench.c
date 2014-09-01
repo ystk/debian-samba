@@ -96,7 +96,7 @@ static struct nbench_cmd_struct *nbench_parse(TALLOC_CTX *mem_ctx,
 	char *cmd;
 	char *status;
 
-	result = TALLOC_P(mem_ctx, struct nbench_cmd_struct);
+	result = talloc(mem_ctx, struct nbench_cmd_struct);
 	if (result == NULL) {
 		return NULL;
 	}
@@ -298,7 +298,7 @@ static struct tevent_req *nbench_cmd_send(TALLOC_CTX *mem_ctx,
 		}
 		subreq = cli_qpathinfo_send(state, ev, nb_state->cli, fname,
 					    ival(state->cmd->params[2]),
-					    0, nb_state->cli->max_xmit);
+					    0, CLI_BUFFER_SIZE);
 		break;
 	}
 	default:
@@ -338,7 +338,7 @@ static void nbench_cmd_done(struct tevent_req *subreq)
 	switch (state->cmd->cmd) {
 	case NBENCH_CMD_NTCREATEX: {
 		struct ftable *ft;
-		status = cli_ntcreate_recv(subreq, &state->ft->fnum);
+		status = cli_ntcreate_recv(subreq, &state->ft->fnum, NULL);
 		TALLOC_FREE(subreq);
 		if (status_wrong(req, state->cmd->status, status)) {
 			return;
@@ -465,7 +465,7 @@ bool run_nbench2(int dummy)
 			strerror(errno));
 		return false;
 	}
-	ev = tevent_context_init(talloc_tos());
+	ev = samba_tevent_context_init(talloc_tos());
 	if (ev == NULL) {
 		goto fail;
 	}

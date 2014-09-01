@@ -378,7 +378,7 @@ static bool dfs_auth(char *user, char *password)
 	}
 
 	DEBUG(0, ("DCE login succeeded for principal %s on pid %d\n",
-		  user, sys_getpid()));
+		  user, getpid()));
 
 	DEBUG(3, ("DCE principal: %s\n"
 		  "          uid: %d\n"
@@ -431,7 +431,7 @@ void dfs_unlogin(void)
 		dce_error_inq_text(err, dce_errstr, &err2);
 		DEBUG(0,
 		      ("DCE purge login context failed for server instance %d: %s\n",
-		       sys_getpid(), dce_errstr));
+		       getpid(), dce_errstr));
 	}
 }
 #endif
@@ -494,71 +494,9 @@ static char *osf1_bigcrypt(char *password, char *salt1)
 
 
 /****************************************************************************
-apply a function to upper/lower case combinations
-of a string and return true if one of them returns true.
-try all combinations with N uppercase letters.
-offset is the first char to try and change (start with 0)
-it assumes the string starts lowercased
-****************************************************************************/
-static NTSTATUS string_combinations2(char *s, int offset,
-				     NTSTATUS (*fn)(const char *s,
-						    void *private_data),
-				     int N, void *private_data)
-{
-	int len = strlen(s);
-	int i;
-	NTSTATUS nt_status;
-
-#ifdef PASSWORD_LENGTH
-	len = MIN(len, PASSWORD_LENGTH);
-#endif
-
-	if (N <= 0 || offset >= len)
-		return (fn(s, private_data));
-
-	for (i = offset; i < (len - (N - 1)); i++) {
-		char c = s[i];
-		if (!islower_m(c))
-			continue;
-		s[i] = toupper_m(c);
-		nt_status = string_combinations2(s, i + 1, fn, N - 1,
-						 private_data);
-		if (!NT_STATUS_EQUAL(nt_status, NT_STATUS_WRONG_PASSWORD)) {
-			return nt_status;
-		}
-		s[i] = c;
-	}
-	return (NT_STATUS_WRONG_PASSWORD);
-}
-
-/****************************************************************************
-apply a function to upper/lower case combinations
-of a string and return true if one of them returns true.
-try all combinations with up to N uppercase letters.
-offset is the first char to try and change (start with 0)
-it assumes the string starts lowercased
-****************************************************************************/
-static NTSTATUS string_combinations(char *s,
-				    NTSTATUS (*fn)(const char *s,
-						   void *private_data),
-				    int N, void *private_data)
-{
-	int n;
-	NTSTATUS nt_status;
-	for (n = 1; n <= N; n++) {
-		nt_status = string_combinations2(s, 0, fn, n, private_data);
-		if (!NT_STATUS_EQUAL(nt_status, NT_STATUS_WRONG_PASSWORD)) {
-			return nt_status;
-		}
-	}
-	return NT_STATUS_WRONG_PASSWORD;
-}
-
-
-/****************************************************************************
 core of password checking routine
 ****************************************************************************/
-static NTSTATUS password_check(const char *password, void *private_data)
+static NTSTATUS password_check(const char *password, const void *private_data)
 {
 #ifdef WITH_PAM
 	const char *rhost = (const char *)private_data;
@@ -673,7 +611,6 @@ NTSTATUS pass_check(const struct passwd *pass,
 		    bool run_cracker)
 {
 	char *pass2 = NULL;
-	int level = lp_passwordlevel();
 
 	NTSTATUS nt_status;
 
@@ -840,7 +777,7 @@ NTSTATUS pass_check(const struct passwd *pass,
 #endif /* defined(WITH_PAM) */
 
 	/* try it as it came to us */
-	nt_status = password_check(password, (void *)rhost);
+	nt_status = password_check(password, (const void *)rhost);
         if NT_STATUS_IS_OK(nt_status) {
 		return (nt_status);
 	} else if (!NT_STATUS_EQUAL(nt_status, NT_STATUS_WRONG_PASSWORD)) {
@@ -867,25 +804,13 @@ NTSTATUS pass_check(const struct passwd *pass,
 
 	/* try all lowercase if it's currently all uppercase */
 	if (strhasupper(pass2)) {
-		strlower_m(pass2);
-		nt_status = password_check(pass2, (void *)rhost);
+		if (!strlower_m(pass2)) {
+			return NT_STATUS_INVALID_PARAMETER;
+		}
+		nt_status = password_check(pass2, (const void *)rhost);
 		if (NT_STATUS_IS_OK(nt_status)) {
 			return (nt_status);
 		}
-	}
-
-	/* give up? */
-	if (level < 1) {
-		return NT_STATUS_WRONG_PASSWORD;
-	}
-
-	/* last chance - all combinations of up to level chars upper! */
-	strlower_m(pass2);
-
-	nt_status = string_combinations(pass2, password_check, level,
-					(void *)rhost);
-        if (NT_STATUS_IS_OK(nt_status)) {
-		return nt_status;
 	}
 
 	return NT_STATUS_WRONG_PASSWORD;

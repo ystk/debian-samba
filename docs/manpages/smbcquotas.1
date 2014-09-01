@@ -1,13 +1,22 @@
 '\" t
 .\"     Title: smbcquotas
 .\"    Author: [see the "AUTHOR" section]
-.\" Generator: DocBook XSL Stylesheets v1.75.2 <http://docbook.sf.net/>
-.\"      Date: 06/22/2012
+.\" Generator: DocBook XSL Stylesheets v1.78.1 <http://docbook.sf.net/>
+.\"      Date: 07/31/2014
 .\"    Manual: User Commands
-.\"    Source: Samba 3.6
+.\"    Source: Samba 4.0
 .\"  Language: English
 .\"
-.TH "SMBCQUOTAS" "1" "06/22/2012" "Samba 3\&.6" "User Commands"
+.TH "SMBCQUOTAS" "1" "07/31/2014" "Samba 4\&.0" "User Commands"
+.\" -----------------------------------------------------------------
+.\" * Define some portability stuff
+.\" -----------------------------------------------------------------
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.\" http://bugs.debian.org/507673
+.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.ie \n(.g .ds Aq \(aq
+.el       .ds Aq '
 .\" -----------------------------------------------------------------
 .\" * set default formatting
 .\" -----------------------------------------------------------------
@@ -22,7 +31,7 @@
 smbcquotas \- Set or get QUOTAs of NTFS 5 shares
 .SH "SYNOPSIS"
 .HP \w'\ 'u
-smbcquotas {//server/share} [\-u\ user] [\-L] [\-F] [\-S\ QUOTA_SET_COMMAND] [\-n] [\-t] [\-v] [\-d\ debuglevel] [\-s\ configfile] [\-l\ logdir] [\-V] [\-U\ username] [\-N] [\-k] [\-A]
+smbcquotas {//server/share} [\-u|\-\-user\ user] [\-L|\-\-list] [\-F|\-\-fs] [\-S|\-\-set\ QUOTA_SET_COMMAND] [\-n|\-\-numeric] [\-t|\-\-test\-args] [\-v|\-\-verbose] [\-d\ debuglevel] [\-s\ configfile] [\-l\ logdir] [\-V] [\-U\ username] [\-N] [\-k] [\-A]
 .SH "DESCRIPTION"
 .PP
 This tool is part of the
@@ -38,44 +47,39 @@ The following options are available to the
 smbcquotas
 program\&.
 .PP
-\-u user
+\-u|\-\-user user
 .RS 4
-Specifies the user of whom the quotas are get or set\&. By default the current user\'s username will be used\&.
+Specifies the user of whom the quotas are get or set\&. By default the current user\*(Aqs username will be used\&.
 .RE
 .PP
-\-L
+\-L|\-\-list
 .RS 4
 Lists all quota records of the share\&.
 .RE
 .PP
-\-F
+\-F|\-\-fs
 .RS 4
 Show the share quota status and default limits\&.
 .RE
 .PP
-\-S QUOTA_SET_COMMAND
+\-S|\-\-set QUOTA_SET_COMMAND
 .RS 4
 This command sets/modifies quotas for a user or on the share, depending on the QUOTA_SET_COMMAND parameter which is described later\&.
 .RE
 .PP
-\-n
+\-n|\-\-numeric
 .RS 4
 This option displays all QUOTA information in numeric format\&. The default is to convert SIDs to names and QUOTA limits to a readable string format\&.
 .RE
 .PP
-\-t
+\-t|\-\-test\-args
 .RS 4
-Don\'t actually do anything, only validate the correctness of the arguments\&.
+Don\*(Aqt actually do anything, only validate the correctness of the arguments\&.
 .RE
 .PP
-\-v
+\-v|\-\-verbose
 .RS 4
 Be verbose\&.
-.RE
-.PP
-\-h|\-\-help
-.RS 4
-Print a summary of command line options\&.
 .RE
 .PP
 \-d|\-\-debuglevel=level
@@ -88,7 +92,7 @@ The higher this value, the more detail will be logged to the log files about the
 Levels above 1 will generate considerable amounts of log data, and should only be used when investigating a problem\&. Levels above 3 are designed for use only by developers and generate HUGE amounts of log data, most of which is extremely cryptic\&.
 .sp
 Note that specifying this parameter here will override the
-\m[blue]\fB\%smb.conf.5.html#\fR\m[]
+\m[blue]\fBlog level\fR\m[]
 parameter in the
 smb\&.conf
 file\&.
@@ -99,7 +103,7 @@ file\&.
 Prints the program version number\&.
 .RE
 .PP
-\-s|\-\-configfile <configuration file>
+\-s|\-\-configfile=<configuration file>
 .RS 4
 The file specified contains the configuration details required by the server\&. The information in this file includes server\-specific information such as what printcap file to use, as well as descriptions of all the services that the server is to provide\&. See
 smb\&.conf
@@ -111,6 +115,13 @@ for more information\&. The default configuration file name is determined at com
 Base directory name for log/debug files\&. The extension
 \fB"\&.progname"\fR
 will be appended (e\&.g\&. log\&.smbclient, log\&.smbd, etc\&.\&.\&.)\&. The log file is never removed by the client\&.
+.RE
+.PP
+\-\-option=<name>=<value>
+.RS 4
+Set the
+\fBsmb.conf\fR(5)
+option "<name>" to value "<value>" from the command line\&. This overrides compiled\-in defaults and options read from the configuration file\&.
 .RE
 .PP
 \-N|\-\-no\-pass
@@ -173,6 +184,36 @@ command\&. To be safe always allow
 rpcclient
 to prompt for a password and type it in directly\&.
 .RE
+.PP
+\-S|\-\-signing on|off|required
+.RS 4
+Set the client signing state\&.
+.RE
+.PP
+\-P|\-\-machine\-pass
+.RS 4
+Use stored machine account password\&.
+.RE
+.PP
+\-e|\-\-encrypt
+.RS 4
+This command line parameter requires the remote server support the UNIX extensions or that the SMB3 protocol has been selected\&. Requests that the connection be encrypted\&. Negotiates SMB encryption using either SMB3 or POSIX extensions via GSSAPI\&. Uses the given credentials for the encryption negotiation (either kerberos or NTLMv1/v2 if given domain/username/password triple\&. Fails the connection if encryption cannot be negotiated\&.
+.RE
+.PP
+\-\-pw\-nt\-hash
+.RS 4
+The supplied password is the NT hash\&.
+.RE
+.PP
+\-?|\-\-help
+.RS 4
+Print a summary of command line options\&.
+.RE
+.PP
+\-\-usage
+.RS 4
+Display brief usage message\&.
+.RE
 .SH "QUOTA_SET_COMMAND"
 .PP
 The format of an the QUOTA_SET_COMMAND is an operation name followed by a set of parameters specific to that operation\&.
@@ -198,7 +239,7 @@ program sets the exit status depending on the success or otherwise of the operat
 .PP
 If the operation succeeded, smbcquotas returns an exit status of 0\&. If
 smbcquotas
-couldn\'t connect to the specified server, or when there was an error getting or setting the quota(s), an exit status of 1 is returned\&. If there was an error parsing any command line arguments, an exit status of 2 is returned\&.
+couldn\*(Aqt connect to the specified server, or when there was an error getting or setting the quota(s), an exit status of 1 is returned\&. If there was an error parsing any command line arguments, an exit status of 2 is returned\&.
 .SH "VERSION"
 .PP
 This man page is correct for version 3 of the Samba suite\&.

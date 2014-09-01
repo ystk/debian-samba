@@ -34,7 +34,10 @@ enum acl_mode { SMB_ACL_DELETE,
 	        SMB_ACL_ADD,
 	        SMB_ACL_SET,
 		SMB_SD_DELETE,
-	        SMB_ACL_VIEW };
+		SMB_SD_SETSDDL,
+		SMB_SD_VIEWSDDL,
+	        SMB_ACL_VIEW,
+		SMB_ACL_VIEW_ALL };
 
 struct perm_value {
 	const char *perm;
@@ -183,7 +186,7 @@ static bool parse_ace(struct security_ace *ace, const char *orig_str)
 	p++;
 	/* Try to parse numeric form */
 
-	if (sscanf(p, "%i/%i/%i", &atype, &aflags, &amask) == 3 &&
+	if (sscanf(p, "%u/%u/%u", &atype, &aflags, &amask) == 3 &&
 	    string_to_sid(&sid, str)) {
 		goto done;
 	}
@@ -223,7 +226,7 @@ static bool parse_ace(struct security_ace *ace, const char *orig_str)
 	/* no flags on share permissions */
 
 	if (!(next_token_talloc(frame, &cp, &tok, "/") &&
-	      sscanf(tok, "%i", &aflags) && aflags == 0)) {
+	      sscanf(tok, "%u", &aflags) && aflags == 0)) {
 		fprintf(stderr, "ACE '%s': bad integer flags entry at '%s'\n",
 			orig_str, tok);
 		SAFE_FREE(str);
@@ -240,7 +243,7 @@ static bool parse_ace(struct security_ace *ace, const char *orig_str)
 	}
 
 	if (strncmp(tok, "0x", 2) == 0) {
-		if (sscanf(tok, "%i", &amask) != 1) {
+		if (sscanf(tok, "%u", &amask) != 1) {
 			fprintf(stderr, "ACE '%s': bad hex number at '%s'\n",
 				orig_str, tok);
 			TALLOC_FREE(frame);
@@ -312,7 +315,7 @@ static struct security_descriptor* parse_acl_string(TALLOC_CTX *mem_ctx, const c
 	pacl = szACL;
 	num_ace = count_chars( pacl, ',' ) + 1;
 
-	if ( !(ace = TALLOC_ZERO_ARRAY( mem_ctx, struct security_ace, num_ace )) )
+	if ( !(ace = talloc_zero_array( mem_ctx, struct security_ace, num_ace )) )
 		return NULL;
 
 	for ( i=0; i<num_ace; i++ ) {
@@ -430,6 +433,9 @@ static int change_share_sec(TALLOC_CTX *mem_ctx, const char *sharename, char *th
 	}
 
 	switch (mode) {
+	case SMB_ACL_VIEW_ALL:
+		/* should not happen */
+		return 0;
 	case SMB_ACL_VIEW:
 		sec_desc_print( stdout, old);
 		return 0;
@@ -497,6 +503,9 @@ static int change_share_sec(TALLOC_CTX *mem_ctx, const char *sharename, char *th
 		return -1;
 	    }
 	    return 0;
+	default:
+		fprintf(stderr, "invalid command\n");
+		return -1;
 	}
 
 	/* Denied ACE entries must come before allowed ones */
@@ -509,9 +518,60 @@ static int change_share_sec(TALLOC_CTX *mem_ctx, const char *sharename, char *th
 	return 0;
 }
 
+static int set_sharesec_sddl(const char *sharename, const char *sddl)
+{
+	struct security_descriptor *sd;
+	bool ret;
+
+	sd = sddl_decode(talloc_tos(), sddl, get_global_sam_sid());
+	if (sd == NULL) {
+		fprintf(stderr, "Failed to parse acl\n");
+		return -1;
+	}
+
+	ret = set_share_security(sharename, sd);
+	TALLOC_FREE(sd);
+	if (!ret) {
+		fprintf(stderr, "Failed to store acl for share [%s]\n",
+			sharename);
+		return -1;
+	}
+
+	return 0;
+}
+
+static int view_sharesec_sddl(const char *sharename)
+{
+	struct security_descriptor *sd;
+	size_t sd_size;
+	char *acl;
+
+	sd = get_share_security(talloc_tos(), sharename, &sd_size);
+	if (sd == NULL) {
+		fprintf(stderr, "Unable to retrieve permissions for share "
+			"[%s]\n", sharename);
+		return -1;
+	}
+
+	acl = sddl_encode(talloc_tos(), sd, get_global_sam_sid());
+	TALLOC_FREE(sd);
+	if (acl == NULL) {
+		fprintf(stderr, "Unable to sddl-encode permissions for share "
+			"[%s]\n", sharename);
+		return -1;
+	}
+	printf("%s\n", acl);
+	TALLOC_FREE(acl);
+	return 0;
+}
+
 /********************************************************************
   main program
 ********************************************************************/
+
+enum {
+	OPT_VIEW_ALL = 1000,
+};
 
 int main(int argc, const char *argv[])
 {
@@ -531,7 +591,13 @@ int main(int argc, const char *argv[])
 		{ "add", 'a', POPT_ARG_STRING, &the_acl, 'a', "Add ACEs", "ACL" },
 		{ "replace", 'R', POPT_ARG_STRING, &the_acl, 'R', "Overwrite share permission ACL", "ACLS" },
 		{ "delete", 'D', POPT_ARG_NONE, NULL, 'D', "Delete the entire security descriptor" },
+		{ "setsddl", 'S', POPT_ARG_STRING, the_acl, 'S',
+		  "Set the SD in sddl format" },
+		{ "viewsddl", 'V', POPT_ARG_NONE, the_acl, 'V',
+		  "View the SD in sddl format" },
 		{ "view", 'v', POPT_ARG_NONE, NULL, 'v', "View current share permissions" },
+		{ "view-all", 0, POPT_ARG_NONE, NULL, OPT_VIEW_ALL,
+		  "View all current share permissions" },
 		{ "machine-sid", 'M', POPT_ARG_NONE, NULL, 'M', "Initialize the machine SID" },
 		{ "force", 'F', POPT_ARG_NONE, NULL, 'F', "Force storing the ACL", "ACLS" },
 		POPT_COMMON_SAMBA
@@ -580,6 +646,15 @@ int main(int argc, const char *argv[])
 			mode = SMB_SD_DELETE;
 			break;
 
+		case 'S':
+			mode = SMB_SD_SETSDDL;
+			the_acl = smb_xstrdup(poptGetOptArg(pc));
+			break;
+
+		case 'V':
+			mode = SMB_SD_VIEWSDDL;
+			break;
+
 		case 'v':
 			mode = SMB_ACL_VIEW;
 			break;
@@ -590,6 +665,9 @@ int main(int argc, const char *argv[])
 
 		case 'M':
 			initialize_sid = True;
+			break;
+		case OPT_VIEW_ALL:
+			mode = SMB_ACL_VIEW_ALL;
 			break;
 		}
 	}
@@ -618,6 +696,25 @@ int main(int argc, const char *argv[])
 		return -1;
 	}
 
+	if (mode == SMB_ACL_VIEW_ALL) {
+		int i;
+
+		for (i=0; i<lp_numservices(); i++) {
+			TALLOC_CTX *frame = talloc_stackframe();
+			const char *service = lp_servicename(frame, i);
+
+			if (service == NULL) {
+				continue;
+			}
+
+			printf("[%s]\n", service);
+			change_share_sec(frame, service, NULL, SMB_ACL_VIEW);
+			printf("\n");
+			TALLOC_FREE(frame);
+		}
+		goto done;
+	}
+
 	/* get the sharename */
 
 	if(!poptPeekArg(pc)) {
@@ -634,8 +731,19 @@ int main(int argc, const char *argv[])
 		return -1;
 	}
 
-	retval = change_share_sec(ctx, sharename, the_acl, mode);
+	switch (mode) {
+	case SMB_SD_SETSDDL:
+		retval = set_sharesec_sddl(sharename, the_acl);
+		break;
+	case SMB_SD_VIEWSDDL:
+		retval = view_sharesec_sddl(sharename);
+		break;
+	default:
+		retval = change_share_sec(ctx, sharename, the_acl, mode);
+		break;
+	}
 
+done:
 	talloc_destroy(ctx);
 
 	return retval;

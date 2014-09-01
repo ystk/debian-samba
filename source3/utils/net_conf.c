@@ -33,6 +33,7 @@
 #include "lib/smbconf/smbconf.h"
 #include "lib/smbconf/smbconf_init.h"
 #include "lib/smbconf/smbconf_reg.h"
+#include "lib/param/loadparm.h"
 
 /**********************************************************************
  *
@@ -90,7 +91,7 @@ static int net_conf_addshare_usage(struct net_context *c, int argc,
 	d_printf("%s\n%s",
 		 _("Usage:"),
 		 _(" net conf addshare <sharename> <path> "
-		   "[writeable={y|N} [guest_ok={y|N} [<comment>]]\n"
+		   "[writeable={y|N} [guest_ok={y|N} [<comment>]]]\n"
 		   "\t<sharename>      the new share name.\n"
 		   "\t<path>           the path on the filesystem to export.\n"
 		   "\twriteable={y|N}  set \"writeable to \"yes\" or "
@@ -178,13 +179,10 @@ static sbcErr import_process_service(struct net_context *c,
 				     struct smbconf_ctx *conf_ctx,
 				     struct smbconf_service *service)
 {
-	uint32_t idx;
 	sbcErr err = SBC_ERR_OK;
-	uint32_t num_includes = 0;
-	char **includes = NULL;
-	TALLOC_CTX *mem_ctx = talloc_stackframe();
 
 	if (c->opt_testmode) {
+		uint32_t idx;
 		const char *indent = "";
 		if (service->name != NULL) {
 			d_printf("[%s]\n", service->name);
@@ -205,52 +203,10 @@ static sbcErr import_process_service(struct net_context *c,
 			goto done;
 		}
 	}
-	err = smbconf_create_share(conf_ctx, service->name);
-	if (!SBC_ERROR_IS_OK(err)) {
-		goto done;
-	}
 
-	for (idx = 0; idx < service->num_params; idx ++) {
-		if (strequal(service->param_names[idx], "include")) {
-			includes = TALLOC_REALLOC_ARRAY(mem_ctx,
-							includes,
-							char *,
-							num_includes+1);
-			if (includes == NULL) {
-				err = SBC_ERR_NOMEM;
-				goto done;
-			}
-			includes[num_includes] = talloc_strdup(includes,
-						service->param_values[idx]);
-			if (includes[num_includes] == NULL) {
-				err = SBC_ERR_NOMEM;
-				goto done;
-			}
-			num_includes++;
-		} else {
-			err = smbconf_set_parameter(conf_ctx,
-						     service->name,
-						     service->param_names[idx],
-						     service->param_values[idx]);
-			if (!SBC_ERROR_IS_OK(err)) {
-				d_fprintf(stderr,
-					  _("Error in section [%s], parameter \"%s\": %s\n"),
-					  service->name, service->param_names[idx],
-					  sbcErrorString(err));
-				goto done;
-			}
-		}
-	}
+	err = smbconf_create_set_share(conf_ctx, service);
 
-	err = smbconf_set_includes(conf_ctx, service->name, num_includes,
-				   (const char **)includes);
-	if (!SBC_ERROR_IS_OK(err)) {
-		goto done;
-	}
-
-	err = SBC_ERR_OK;
 done:
-	TALLOC_FREE(mem_ctx);
 	return err;
 }
 
@@ -1130,6 +1086,7 @@ static int net_conf_wrap_function(struct net_context *c,
 
 	err = smbconf_init(mem_ctx, &conf_ctx, "registry:");
 	if (!SBC_ERROR_IS_OK(err)) {
+		talloc_free(mem_ctx);
 		return -1;
 	}
 
@@ -1137,6 +1094,7 @@ static int net_conf_wrap_function(struct net_context *c,
 
 	smbconf_shutdown(conf_ctx);
 
+	talloc_free(mem_ctx);
 	return ret;
 }
 
@@ -1166,7 +1124,7 @@ static int net_conf_run_function(struct net_context *c, int argc,
 
 	if (argc != 0) {
 		for (i=0; table[i].funcname; i++) {
-			if (StrCaseCmp(argv[0], table[i].funcname) == 0)
+			if (strcasecmp_m(argv[0], table[i].funcname) == 0)
 				return net_conf_wrap_function(c, table[i].fn,
 							      argc-1,
 							      argv+1);
@@ -1299,7 +1257,7 @@ int net_conf(struct net_context *c, int argc, const char **argv)
 			net_conf_delincludes,
 			NET_TRANSPORT_LOCAL,
 			N_("Delete includes from a share definition."),
-			N_("net conf setincludes\n"
+			N_("net conf delincludes\n"
 			   "    Delete includes from a share definition.")
 		},
 		{NULL, NULL, 0, NULL, NULL}

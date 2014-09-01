@@ -35,7 +35,7 @@ struct samba_runcmd_state {
 	int stderr_log_level;
 	struct tevent_fd *fde_stdout;
 	struct tevent_fd *fde_stderr;
-	int fd_stdout, fd_stderr;
+	int fd_stdin, fd_stdout, fd_stderr;
 	char *arg0;
 	pid_t pid;
 	char buf[1024];
@@ -48,6 +48,10 @@ static int samba_runcmd_state_destructor(struct samba_runcmd_state *state)
 		kill(state->pid, SIGKILL);
 		waitpid(state->pid, NULL, 0);
 		state->pid = -1;
+	}
+
+	if (state->fd_stdin != -1) {
+		close(state->fd_stdin);
 	}
 	return 0;
 }
@@ -72,9 +76,8 @@ struct tevent_req *samba_runcmd_send(TALLOC_CTX *mem_ctx,
 {
 	struct tevent_req *req;
 	struct samba_runcmd_state *state;
-	int p1[2], p2[2];
+	int p1[2], p2[2], p3[2];
 	char **argv;
-	int ret;
 	va_list ap;
 
 	req = tevent_req_create(mem_ctx, &state,
@@ -85,6 +88,7 @@ struct tevent_req *samba_runcmd_send(TALLOC_CTX *mem_ctx,
 
 	state->stdout_log_level = stdout_log_level;
 	state->stderr_log_level = stderr_log_level;
+	state->fd_stdin = -1;
 
 	state->arg0 = talloc_strdup(state, argv0[0]);
 	if (tevent_req_nomem(state->arg0, req)) {
@@ -101,9 +105,7 @@ struct tevent_req *samba_runcmd_send(TALLOC_CTX *mem_ctx,
 		tevent_req_error(req, errno);
 		return tevent_req_post(req, ev);
 	}
-
-	state->pid = fork();
-	if (state->pid == (pid_t)-1) {
+	if (pipe(p3) != 0) {
 		close(p1[0]);
 		close(p1[1]);
 		close(p2[0]);
@@ -112,14 +114,34 @@ struct tevent_req *samba_runcmd_send(TALLOC_CTX *mem_ctx,
 		return tevent_req_post(req, ev);
 	}
 
+	state->pid = fork();
+	if (state->pid == (pid_t)-1) {
+		close(p1[0]);
+		close(p1[1]);
+		close(p2[0]);
+		close(p2[1]);
+		close(p3[0]);
+		close(p3[1]);
+		tevent_req_error(req, errno);
+		return tevent_req_post(req, ev);
+	}
+
 	if (state->pid != 0) {
 		/* the parent */
 		close(p1[1]);
 		close(p2[1]);
+		close(p3[0]);
 		state->fd_stdout = p1[0];
 		state->fd_stderr = p2[0];
+		state->fd_stdin  = p3[1];
+
 		set_blocking(state->fd_stdout, false);
 		set_blocking(state->fd_stderr, false);
+		set_blocking(state->fd_stdin,  false);
+
+		smb_set_close_on_exec(state->fd_stdin);
+		smb_set_close_on_exec(state->fd_stdout);
+		smb_set_close_on_exec(state->fd_stderr);
 
 		talloc_set_destructor(state, samba_runcmd_state_destructor);
 
@@ -129,8 +151,8 @@ struct tevent_req *samba_runcmd_send(TALLOC_CTX *mem_ctx,
 						  samba_runcmd_io_handler,
 						  req);
 		if (tevent_req_nomem(state->fde_stdout, req)) {
-			close(p1[0]);
-			close(p2[0]);
+			close(state->fd_stdout);
+			close(state->fd_stderr);
 			return tevent_req_post(req, ev);
 		}
 		tevent_fd_set_auto_close(state->fde_stdout);
@@ -141,7 +163,7 @@ struct tevent_req *samba_runcmd_send(TALLOC_CTX *mem_ctx,
 						  samba_runcmd_io_handler,
 						  req);
 		if (tevent_req_nomem(state->fde_stdout, req)) {
-			close(p2[0]);
+			close(state->fd_stderr);
 			return tevent_req_post(req, ev);
 		}
 		tevent_fd_set_auto_close(state->fde_stderr);
@@ -156,6 +178,7 @@ struct tevent_req *samba_runcmd_send(TALLOC_CTX *mem_ctx,
 	/* the child */
 	close(p1[0]);
 	close(p2[0]);
+	close(p3[1]);
 	close(0);
 	close(1);
 	close(2);
@@ -165,9 +188,13 @@ struct tevent_req *samba_runcmd_send(TALLOC_CTX *mem_ctx,
 	tevent_re_initialise(ev);
 
 	/* setup for logging to go to the parents debug log */
-	open("/dev/null", O_RDONLY); /* for stdin */
+	dup2(p3[0], 0);
 	dup2(p1[1], 1);
 	dup2(p2[1], 2);
+
+	close(p1[1]);
+	close(p2[1]);
+	close(p3[0]);
 
 	argv = str_list_copy(state, discard_const_p(const char *, argv0));
 	if (!argv) {
@@ -187,7 +214,7 @@ struct tevent_req *samba_runcmd_send(TALLOC_CTX *mem_ctx,
 	}
 	va_end(ap);
 
-	ret = execvp(state->arg0, argv);
+	(void)execvp(state->arg0, argv);
 	fprintf(stderr, "Failed to exec child - %s\n", strerror(errno));
 	_exit(255);
 	return NULL;
@@ -212,9 +239,11 @@ static void samba_runcmd_io_handler(struct tevent_context *ev,
 	if (fde == state->fde_stdout) {
 		level = state->stdout_log_level;
 		fd = state->fd_stdout;
-	} else {
+	} else if (fde == state->fde_stderr) {
 		level = state->stderr_log_level;
 		fd = state->fd_stderr;
+	} else {
+		return;
 	}
 
 	if (!(flags & TEVENT_FD_READ)) {

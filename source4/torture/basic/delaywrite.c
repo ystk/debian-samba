@@ -29,6 +29,7 @@
 #include "system/filesys.h"
 #include "libcli/libcli.h"
 #include "torture/util.h"
+#include "torture/basic/proto.h"
 
 #define W2K8R2_TIMEDELAY_SECS 1
 #define W2K3_TIMEDELAY_SECS 2
@@ -53,9 +54,7 @@ static bool test_delayed_write_update(struct torture_context *tctx, struct smbcl
 
 	torture_comment(tctx, "\nRunning test_delayed_write_update\n");
 
-	if (!torture_setup_dir(cli, BASEDIR)) {
-		return false;
-	}
+	torture_assert(tctx, torture_setup_dir(cli, BASEDIR), "Failed to setup up test directory: " BASEDIR);
 
 	fnum1 = smbcli_open(cli->tree, fname, O_RDWR|O_CREAT, DENY_NONE);
 	if (fnum1 == -1) {
@@ -147,9 +146,7 @@ static bool test_delayed_write_update1(struct torture_context *tctx, struct smbc
 
 	torture_comment(tctx, "\nRunning test_delayed_write_update1\n");
 
-	if (!torture_setup_dir(cli, BASEDIR)) {
-		return false;
-	}
+	torture_assert(tctx, torture_setup_dir(cli, BASEDIR), "Failed to setup up test directory: " BASEDIR);
 
 	fnum1 = smbcli_open(cli->tree, fname, O_RDWR|O_CREAT, DENY_NONE);
 	if (fnum1 == -1) {
@@ -338,9 +335,7 @@ static bool test_delayed_write_update1a(struct torture_context *tctx, struct smb
 
 	torture_comment(tctx, "\nRunning test_delayed_write_update1a\n");
 
-	if (!torture_setup_dir(cli, BASEDIR)) {
-		return false;
-	}
+	torture_assert(tctx, torture_setup_dir(cli, BASEDIR), "Failed to setup up test directory: " BASEDIR);
 
 	fnum1 = smbcli_open(cli->tree, fname, O_RDWR|O_CREAT, DENY_NONE);
 	if (fnum1 == -1) {
@@ -520,9 +515,7 @@ static bool test_delayed_write_update1b(struct torture_context *tctx, struct smb
 
 	torture_comment(tctx, "\nRunning test_delayed_write_update1b\n");
 
-	if (!torture_setup_dir(cli, BASEDIR)) {
-		return false;
-	}
+	torture_assert(tctx, torture_setup_dir(cli, BASEDIR), "Failed to setup up test directory: " BASEDIR);
 
 	fnum1 = smbcli_open(cli->tree, fname, O_RDWR|O_CREAT, DENY_NONE);
 	if (fnum1 == -1) {
@@ -695,9 +688,7 @@ static bool test_delayed_write_update1c(struct torture_context *tctx, struct smb
 
 	torture_comment(tctx, "\nRunning test_delayed_write_update1c\n");
 
-	if (!torture_setup_dir(cli, BASEDIR)) {
-		return false;
-	}
+	torture_assert(tctx, torture_setup_dir(cli, BASEDIR), "Failed to setup up test directory: " BASEDIR);
 
 	fnum1 = smbcli_open(cli->tree, fname, O_RDWR|O_CREAT, DENY_NONE);
 	if (fnum1 == -1) {
@@ -877,9 +868,7 @@ static bool test_delayed_write_update2(struct torture_context *tctx, struct smbc
 
 	torture_comment(tctx, "\nRunning test_delayed_write_update2\n");
 
-	if (!torture_setup_dir(cli, BASEDIR)) {
-		return false;
-	}
+	torture_assert(tctx, torture_setup_dir(cli, BASEDIR), "Failed to setup up test directory: " BASEDIR);
 
 	fnum1 = smbcli_open(cli->tree, fname, O_RDWR|O_CREAT, DENY_NONE);
 	if (fnum1 == -1) {
@@ -1236,9 +1225,7 @@ static bool test_finfo_after_write(struct torture_context *tctx, struct smbcli_s
 
 	torture_comment(tctx, "\nRunning test_finfo_after_write\n");
 
-	if (!torture_setup_dir(cli, BASEDIR)) {
-		return false;
-	}
+	torture_assert(tctx, torture_setup_dir(cli, BASEDIR), "Failed to setup up test directory: " BASEDIR);
 
 	fnum1 = smbcli_open(cli->tree, fname, O_RDWR|O_CREAT, DENY_NONE);
 	if (fnum1 == -1) {
@@ -1275,42 +1262,42 @@ static bool test_finfo_after_write(struct torture_context *tctx, struct smbcli_s
 		ret = false;
 		goto done;
 	}
-	
+
 	written =  smbcli_write(cli2->tree, fnum2, 0, "x", 0, 1);
-	
+
 	if (written != 1) {
 		torture_result(tctx, TORTURE_FAIL, __location__": written gave %d - should have been 1", 
 		       (int)written);
 		ret = false;
 		goto done;
 	}
-	
+
 	finfo2.basic_info.level = RAW_FILEINFO_BASIC_INFO;
 	finfo2.basic_info.in.file.path = fname;
-	
+
 	status = smb_raw_pathinfo(cli2->tree, tctx, &finfo2);
-	
+
 	if (!NT_STATUS_IS_OK(status)) {
 		torture_result(tctx, TORTURE_FAIL, __location__": fileinfo failed: %s", 
 			  nt_errstr(status));
 		ret = false;
 		goto done;
 	}
-	
+
 	if (finfo1.basic_info.out.create_time !=
 	    finfo2.basic_info.out.create_time) {
 		torture_result(tctx, TORTURE_FAIL, __location__": create_time changed");
 		ret = false;
 		goto done;
 	}
-	
+
 	if (finfo1.basic_info.out.access_time !=
 	    finfo2.basic_info.out.access_time) {
 		torture_result(tctx, TORTURE_FAIL, __location__": access_time changed");
 		ret = false;
 		goto done;
 	}
-	
+
 	if (finfo1.basic_info.out.write_time !=
 	    finfo2.basic_info.out.write_time) {
 		torture_result(tctx, TORTURE_FAIL, __location__": write_time changed:\n"
@@ -1320,19 +1307,19 @@ static bool test_finfo_after_write(struct torture_context *tctx, struct smbcli_s
 		ret = false;
 		goto done;
 	}
-	
+
 	if (finfo1.basic_info.out.change_time !=
 	    finfo2.basic_info.out.change_time) {
 		torture_result(tctx, TORTURE_FAIL, __location__": change_time changed");
 		ret = false;
 		goto done;
 	}
-	
+
 	/* One of the two following calls updates the qpathinfo. */
-	
+
 	/* If you had skipped the smbcli_write on fnum2, it would
 	 * *not* have updated the stat on disk */
-	
+
 	smbcli_close(cli2->tree, fnum2);
 	cli2 = NULL;
 
@@ -1495,8 +1482,8 @@ static bool test_delayed_write_update3(struct torture_context *tctx,
 				       struct smbcli_state *cli,
 				       struct smbcli_state *cli2)
 {
-	union smb_fileinfo finfo0, finfo1, finfo2, finfo3, finfo4;
-	union smb_fileinfo pinfo0, pinfo1, pinfo2, pinfo3, pinfo4, pinfo5;
+	union smb_fileinfo finfo0, finfo1, finfo2, finfo3;
+	union smb_fileinfo pinfo0, pinfo1, pinfo2, pinfo3, pinfo4;
 	const char *fname = BASEDIR "\\torture_file3.txt";
 	int fnum1 = -1;
 	bool ret = true;
@@ -1510,9 +1497,7 @@ static bool test_delayed_write_update3(struct torture_context *tctx,
 
 	torture_comment(tctx, "\nRunning test_delayed_write_update3\n");
 
-	if (!torture_setup_dir(cli, BASEDIR)) {
-		return false;
-	}
+	torture_assert(tctx, torture_setup_dir(cli, BASEDIR), "Failed to setup up test directory: " BASEDIR);
 
 	torture_comment(tctx, "Open the file handle\n");
 	fnum1 = smbcli_open(cli->tree, fname, O_RDWR|O_CREAT, DENY_NONE);
@@ -1527,14 +1512,12 @@ static bool test_delayed_write_update3(struct torture_context *tctx,
 	finfo1 = finfo0;
 	finfo2 = finfo0;
 	finfo3 = finfo0;
-	finfo4 = finfo0;
 	pinfo0.basic_info.level = RAW_FILEINFO_BASIC_INFO;
 	pinfo0.basic_info.in.file.path = fname;
 	pinfo1 = pinfo0;
 	pinfo2 = pinfo0;
 	pinfo3 = pinfo0;
 	pinfo4 = pinfo0;
-	pinfo5 = pinfo0;
 
 	/* get the initial times */
 	GET_INFO_BOTH(finfo0,pinfo0);
@@ -1650,8 +1633,8 @@ static bool test_delayed_write_update3a(struct torture_context *tctx,
 				        struct smbcli_state *cli,
 				        struct smbcli_state *cli2)
 {
-	union smb_fileinfo finfo0, finfo1, finfo2, finfo3, finfo4;
-	union smb_fileinfo pinfo0, pinfo1, pinfo2, pinfo3, pinfo4, pinfo5;
+	union smb_fileinfo finfo0, finfo1, finfo2, finfo3;
+	union smb_fileinfo pinfo0, pinfo1, pinfo2, pinfo3, pinfo4;
 	const char *fname = BASEDIR "\\torture_file3a.txt";
 	int fnum1 = -1;
 	bool ret = true;
@@ -1666,9 +1649,7 @@ static bool test_delayed_write_update3a(struct torture_context *tctx,
 
 	torture_comment(tctx, "\nRunning test_delayed_write_update3a\n");
 
-	if (!torture_setup_dir(cli, BASEDIR)) {
-		return false;
-	}
+	torture_assert(tctx, torture_setup_dir(cli, BASEDIR), "Failed to setup up test directory: " BASEDIR);
 
 	torture_comment(tctx, "Open the file handle\n");
 	fnum1 = smbcli_open(cli->tree, fname, O_RDWR|O_CREAT, DENY_NONE);
@@ -1683,14 +1664,12 @@ static bool test_delayed_write_update3a(struct torture_context *tctx,
 	finfo1 = finfo0;
 	finfo2 = finfo0;
 	finfo3 = finfo0;
-	finfo4 = finfo0;
 	pinfo0.basic_info.level = RAW_FILEINFO_BASIC_INFO;
 	pinfo0.basic_info.in.file.path = fname;
 	pinfo1 = pinfo0;
 	pinfo2 = pinfo0;
 	pinfo3 = pinfo0;
 	pinfo4 = pinfo0;
-	pinfo5 = pinfo0;
 
 	/* get the initial times */
 	GET_INFO_BOTH(finfo0,pinfo0);
@@ -1866,8 +1845,8 @@ static bool test_delayed_write_update3b(struct torture_context *tctx,
 				        struct smbcli_state *cli,
 				        struct smbcli_state *cli2)
 {
-	union smb_fileinfo finfo0, finfo1, finfo2, finfo3, finfo4;
-	union smb_fileinfo pinfo0, pinfo1, pinfo2, pinfo3, pinfo4, pinfo5;
+	union smb_fileinfo finfo0, finfo1, finfo2, finfo3;
+	union smb_fileinfo pinfo0, pinfo1, pinfo2, pinfo3, pinfo4;
 	const char *fname = BASEDIR "\\torture_file3b.txt";
 	int fnum1 = -1;
 	bool ret = true;
@@ -1881,9 +1860,7 @@ static bool test_delayed_write_update3b(struct torture_context *tctx,
 
 	torture_comment(tctx, "\nRunning test_delayed_write_update3b\n");
 
-	if (!torture_setup_dir(cli, BASEDIR)) {
-		return false;
-	}
+	torture_assert(tctx, torture_setup_dir(cli, BASEDIR), "Failed to setup up test directory: " BASEDIR);
 
 	torture_comment(tctx, "Open the file handle\n");
 	fnum1 = smbcli_open(cli->tree, fname, O_RDWR|O_CREAT, DENY_NONE);
@@ -1898,14 +1875,12 @@ static bool test_delayed_write_update3b(struct torture_context *tctx,
 	finfo1 = finfo0;
 	finfo2 = finfo0;
 	finfo3 = finfo0;
-	finfo4 = finfo0;
 	pinfo0.basic_info.level = RAW_FILEINFO_BASIC_INFO;
 	pinfo0.basic_info.in.file.path = fname;
 	pinfo1 = pinfo0;
 	pinfo2 = pinfo0;
 	pinfo3 = pinfo0;
 	pinfo4 = pinfo0;
-	pinfo5 = pinfo0;
 
 	/* get the initial times */
 	GET_INFO_BOTH(finfo0,pinfo0);
@@ -2049,9 +2024,7 @@ static bool test_delayed_write_update3c(struct torture_context *tctx,
 
 	torture_comment(tctx, "\nRunning test_delayed_write_update3c\n");
 
-	if (!torture_setup_dir(cli, BASEDIR)) {
-		return false;
-	}
+	torture_assert(tctx, torture_setup_dir(cli, BASEDIR), "Failed to setup up test directory: " BASEDIR);
 
 	torture_comment(tctx, "Open the file handle\n");
 	fnum1 = smbcli_open(cli->tree, fname, O_RDWR|O_CREAT, DENY_NONE);
@@ -2244,8 +2217,8 @@ static bool test_delayed_write_update4(struct torture_context *tctx,
 				       struct smbcli_state *cli,
 				       struct smbcli_state *cli2)
 {
-	union smb_fileinfo finfo0, finfo1, finfo2, finfo3, finfo4;
-	union smb_fileinfo pinfo0, pinfo1, pinfo2, pinfo3, pinfo4, pinfo5;
+	union smb_fileinfo finfo0, finfo1, finfo2, finfo3;
+	union smb_fileinfo pinfo0, pinfo1, pinfo2, pinfo3, pinfo4;
 	const char *fname = BASEDIR "\\torture_file4.txt";
 	int fnum1 = -1;
 	bool ret = true;
@@ -2259,9 +2232,7 @@ static bool test_delayed_write_update4(struct torture_context *tctx,
 
 	torture_comment(tctx, "\nRunning test_delayed_write_update4\n");
 
-	if (!torture_setup_dir(cli, BASEDIR)) {
-		return false;
-	}
+	torture_assert(tctx, torture_setup_dir(cli, BASEDIR), "Failed to setup up test directory: " BASEDIR);
 
 	torture_comment(tctx, "Open the file handle\n");
 	fnum1 = smbcli_open(cli->tree, fname, O_RDWR|O_CREAT, DENY_NONE);
@@ -2276,14 +2247,12 @@ static bool test_delayed_write_update4(struct torture_context *tctx,
 	finfo1 = finfo0;
 	finfo2 = finfo0;
 	finfo3 = finfo0;
-	finfo4 = finfo0;
 	pinfo0.basic_info.level = RAW_FILEINFO_BASIC_INFO;
 	pinfo0.basic_info.in.file.path = fname;
 	pinfo1 = pinfo0;
 	pinfo2 = pinfo0;
 	pinfo3 = pinfo0;
 	pinfo4 = pinfo0;
-	pinfo5 = pinfo0;
 
 	/* get the initial times */
 	GET_INFO_BOTH(finfo0,pinfo0);
@@ -2420,9 +2389,7 @@ static bool test_delayed_write_update5(struct torture_context *tctx,
 
 	torture_comment(tctx, "\nRunning test_delayed_write_update5\n");
 
-	if (!torture_setup_dir(cli, BASEDIR)) {
-		return false;
-	}
+	torture_assert(tctx, torture_setup_dir(cli, BASEDIR), "Failed to setup up test directory: " BASEDIR);
 
 	torture_comment(tctx, "Open the file handle\n");
 	fnum1 = smbcli_open(cli->tree, fname, O_RDWR|O_CREAT, DENY_NONE);
@@ -2582,9 +2549,7 @@ static bool test_delayed_write_update5b(struct torture_context *tctx,
 
 	torture_comment(tctx, "\nRunning test_delayed_write_update5b\n");
 
-	if (!torture_setup_dir(cli, BASEDIR)) {
-		return false;
-	}
+	torture_assert(tctx, torture_setup_dir(cli, BASEDIR), "Failed to setup up test directory: " BASEDIR);
 
 	torture_comment(tctx, "Open the file handle\n");
 	fnum1 = smbcli_open(cli->tree, fname, O_RDWR|O_CREAT, DENY_NONE);
@@ -2750,9 +2715,7 @@ static bool test_delayed_write_update6(struct torture_context *tctx,
 
 	torture_comment(tctx, "\nRunning test_delayed_write_update6\n");
 
-	if (!torture_setup_dir(cli, BASEDIR)) {
-		return false;
-	}
+	torture_assert(tctx, torture_setup_dir(cli, BASEDIR), "Failed to setup up test directory: " BASEDIR);
 again:
 	torture_comment(tctx, "Open the file handle\n");
 	fnum1 = smbcli_open(cli->tree, fname, O_RDWR|O_CREAT, DENY_NONE);
@@ -3008,9 +2971,7 @@ static bool test_delayed_write_update7(struct torture_context *tctx, struct smbc
 	ZERO_STRUCT(finfo3);
 	ZERO_STRUCT(open_parms);
 
-	if (!torture_setup_dir(cli, BASEDIR)) {
-		return false;
-	}
+	torture_assert(tctx, torture_setup_dir(cli, BASEDIR), "Failed to setup up test directory: " BASEDIR);
 
 	/* Create the file. */
 	fnum1 = smbcli_open(cli->tree, fname, O_RDWR|O_CREAT, DENY_NONE);
@@ -3098,6 +3059,100 @@ static bool test_delayed_write_update7(struct torture_context *tctx, struct smbc
 }
 
 /*
+   Test if creating a file in a directory with an open handle updates the
+   write timestamp (it should).
+*/
+static bool test_directory_update8(struct torture_context *tctx, struct smbcli_state *cli)
+{
+	union smb_fileinfo dir_info1, dir_info2;
+	union smb_open open_parms;
+	const char *fname = BASEDIR "\\torture_file.txt";
+	NTSTATUS status;
+	int fnum1 = -1;
+	int fnum2 = -1;
+	bool ret = true;
+	int used_delay = torture_setting_int(tctx, "writetimeupdatedelay", 2000000);
+	int normal_delay = 2000000;
+	double sec = ((double)used_delay) / ((double)normal_delay);
+	int msec = 1000 * sec;
+	TALLOC_CTX *mem_ctx = talloc_init("test_delayed_write_update8");
+
+        if (!mem_ctx) return false;
+
+	torture_comment(tctx, "\nRunning test directory write update\n");
+
+	torture_assert(tctx, torture_setup_dir(cli, BASEDIR), "Failed to setup up test directory: " BASEDIR);
+
+	/* Open a handle on the directory - and leave it open. */
+	ZERO_STRUCT(open_parms);
+        open_parms.ntcreatex.level = RAW_OPEN_NTCREATEX;
+        open_parms.ntcreatex.in.flags = 0;
+        open_parms.ntcreatex.in.access_mask = SEC_RIGHTS_FILE_READ;
+        open_parms.ntcreatex.in.file_attr = 0;
+        open_parms.ntcreatex.in.share_access = NTCREATEX_SHARE_ACCESS_DELETE|
+                                        NTCREATEX_SHARE_ACCESS_READ|
+                                        NTCREATEX_SHARE_ACCESS_WRITE;
+        open_parms.ntcreatex.in.open_disposition = NTCREATEX_DISP_OPEN;
+        open_parms.ntcreatex.in.create_options = NTCREATEX_OPTIONS_DIRECTORY;
+        open_parms.ntcreatex.in.fname = BASEDIR;
+
+        status = smb_raw_open(cli->tree, mem_ctx, &open_parms);
+        talloc_free(mem_ctx);
+
+        if (!NT_STATUS_IS_OK(status)) {
+                torture_result(tctx, TORTURE_FAIL,
+                        "failed to open directory handle");
+                ret = false;
+		goto done;
+        }
+
+        fnum1 = open_parms.ntcreatex.out.file.fnum;
+
+        /* Store the returned write time. */
+	ZERO_STRUCT(dir_info1);
+	dir_info1.basic_info.out.write_time = open_parms.ntcreatex.out.write_time;
+
+	torture_comment(tctx, "Initial write time %s\n",
+	       nt_time_string(tctx, dir_info1.basic_info.out.write_time));
+
+	/* sleep */
+	smb_msleep(3 * msec);
+
+	/* Now create a file within the directory. */
+	fnum2 = smbcli_open(cli->tree, fname, O_RDWR|O_CREAT, DENY_NONE);
+	if (fnum2 == -1) {
+		torture_result(tctx, TORTURE_FAIL, "Failed to open %s", fname);
+                ret = false;
+		goto done;
+	}
+	smbcli_close(cli->tree, fnum2);
+
+	/* Read the directory write time again. */
+	ZERO_STRUCT(dir_info2);
+	dir_info2.basic_info.level = RAW_FILEINFO_BASIC_INFO;
+	dir_info2.basic_info.in.file.fnum = fnum1;
+
+	status = smb_raw_fileinfo(cli->tree, tctx, &dir_info2);
+
+	torture_assert_ntstatus_ok(tctx, status, "fileinfo failed");
+
+	/* Ensure it's been incremented. */
+	COMPARE_WRITE_TIME_GREATER(dir_info2, dir_info1);
+
+	torture_comment(tctx, "Updated write time %s\n",
+	       nt_time_string(tctx, dir_info2.basic_info.out.write_time));
+
+ done:
+
+	if (fnum1 != -1)
+		smbcli_close(cli->tree, fnum1);
+	smbcli_unlink(cli->tree, fname);
+	smbcli_deltree(cli->tree, BASEDIR);
+
+	return ret;
+}
+
+/*
    testing of delayed update of write_time
 */
 struct torture_suite *torture_delay_write(void)
@@ -3121,6 +3176,7 @@ struct torture_suite *torture_delay_write(void)
 	torture_suite_add_2smb_test(suite, "delayed update of write time 6", test_delayed_write_update6);
 	torture_suite_add_1smb_test(suite, "timestamp resolution test", test_delayed_write_update7);
 	torture_suite_add_1smb_test(suite, "timestamp resolution test", test_delayed_write_update7);
+	torture_suite_add_1smb_test(suite, "directory timestamp update test", test_directory_update8);
 
 	return suite;
 }

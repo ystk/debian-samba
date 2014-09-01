@@ -180,7 +180,7 @@ NTSTATUS smbsrv_blob_append_string(TALLOC_CTX *mem_ctx,
 				   int default_flags,
 				   int flags)
 {
-	size_t ret;
+	ssize_t ret;
 	uint32_t offset;
 	const int max_bytes_per_char = 3;
 
@@ -624,6 +624,12 @@ NTSTATUS smbsrv_pull_passthru_sfileinfo(TALLOC_CTX *mem_ctx,
 		st->position_information.in.position = BVAL(blob->data, 0);
 
 		return NT_STATUS_OK;
+
+	case RAW_SFILEINFO_FULL_EA_INFORMATION:
+		return ea_pull_list_chained(blob,
+					    mem_ctx,
+					&st->full_ea_information.in.eas.num_eas,
+					&st->full_ea_information.in.eas.eas);
 
 	case RAW_SFILEINFO_MODE_INFORMATION:
 		BLOB_CHECK_MIN_SIZE(blob, 4);

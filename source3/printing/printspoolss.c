@@ -18,12 +18,31 @@
 */
 
 #include "includes.h"
+#include "system/filesys.h"
 #include "printing.h"
 #include "rpc_client/rpc_client.h"
 #include "../librpc/gen_ndr/ndr_spoolss_c.h"
 #include "rpc_server/rpc_ncacn_np.h"
 #include "smbd/globals.h"
 #include "../libcli/security/security.h"
+
+struct print_file_data {
+	char *svcname;
+	char *docname;
+	char *filename;
+	struct policy_handle handle;
+	uint32_t jobid;
+	uint16 rap_jobid;
+};
+
+uint16_t print_spool_rap_jobid(struct print_file_data *print_file)
+{
+	if (print_file == NULL) {
+		return 0;
+	}
+
+	return print_file->rap_jobid;
+}
 
 void print_spool_terminate(struct connection_struct *conn,
 			   struct print_file_data *print_file);
@@ -39,16 +58,18 @@ void print_spool_terminate(struct connection_struct *conn,
 
 NTSTATUS print_spool_open(files_struct *fsp,
 			  const char *fname,
-			  uint16_t current_vuid)
+			  uint64_t current_vuid)
 {
 	NTSTATUS status;
 	TALLOC_CTX *tmp_ctx;
 	struct print_file_data *pf;
 	struct dcerpc_binding_handle *b = NULL;
 	struct spoolss_DevmodeContainer devmode_ctr;
-	union spoolss_DocumentInfo info;
+	struct spoolss_DocumentInfoCtr info_ctr;
+	struct spoolss_DocumentInfo1 *info1;
 	int fd = -1;
 	WERROR werr;
+	mode_t mask;
 
 	tmp_ctx = talloc_new(fsp);
 	if (!tmp_ctx) {
@@ -60,7 +81,7 @@ NTSTATUS print_spool_open(files_struct *fsp,
 		status = NT_STATUS_NO_MEMORY;
 		goto done;
 	}
-	pf->svcname = talloc_strdup(pf, lp_servicename(SNUM(fsp->conn)));
+	pf->svcname = lp_servicename(pf, SNUM(fsp->conn));
 
 	/* the document name is derived from the file name.
 	 * "Remote Downlevel Document" is added in front to
@@ -82,7 +103,8 @@ NTSTATUS print_spool_open(files_struct *fsp,
 		}
 	}
 
-	/* Ok, now we have to open an actual file.
+	/*
+	 * Ok, now we have to open an actual file.
 	 * Here is the reason:
 	 * We want to write the spool job to this file in
 	 * smbd for scalability reason (and also because
@@ -92,17 +114,24 @@ NTSTATUS print_spool_open(files_struct *fsp,
 	 * to spoolss in output_file so it can monitor and
 	 * take over once we call EndDocPrinter().
 	 * Of course we will not start writing until
-	 * StartDocPrinter() actually gives the ok. */
+	 * StartDocPrinter() actually gives the ok.
+	 * smbd spooler files do not include a print jobid
+	 * path component, as the jobid is only known after
+	 * calling StartDocPrinter().
+	 */
 
-	pf->filename = talloc_asprintf(pf, "%s/%s.XXXXXX",
-					lp_pathname(SNUM(fsp->conn)),
+	pf->filename = talloc_asprintf(pf, "%s/%sXXXXXX",
+					lp_pathname(talloc_tos(),
+						    SNUM(fsp->conn)),
 					PRINT_SPOOL_PREFIX);
 	if (!pf->filename) {
 		status = NT_STATUS_NO_MEMORY;
 		goto done;
 	}
 	errno = 0;
+	mask = umask(S_IRWXO | S_IRWXG);
 	fd = mkstemp(pf->filename);
+	umask(mask);
 	if (fd == -1) {
 		if (errno == EACCES) {
 			/* Common setup error, force a report. */
@@ -127,7 +156,7 @@ NTSTATUS print_spool_open(files_struct *fsp,
 	status = rpc_pipe_open_interface(fsp->conn,
 					 &ndr_table_spoolss.syntax_id,
 					 fsp->conn->session_info,
-					 &fsp->conn->sconn->client_id,
+					 fsp->conn->sconn->remote_address,
 					 fsp->conn->sconn->msg_ctx,
 					 &fsp->conn->spoolss_pipe);
 	if (!NT_STATUS_IS_OK(status)) {
@@ -139,7 +168,7 @@ NTSTATUS print_spool_open(files_struct *fsp,
 
 	status = dcerpc_spoolss_OpenPrinter(b, pf, pf->svcname,
 					    "RAW", devmode_ctr,
-					    SEC_FLAG_MAXIMUM_ALLOWED,
+					    PRINTER_ACCESS_USE,
 					    &pf->handle, &werr);
 	if (!NT_STATUS_IS_OK(status)) {
 		goto done;
@@ -149,17 +178,23 @@ NTSTATUS print_spool_open(files_struct *fsp,
 		goto done;
 	}
 
-	info.info1 = talloc(tmp_ctx, struct spoolss_DocumentInfo1);
-	if (!info.info1) {
+	info1 = talloc(tmp_ctx, struct spoolss_DocumentInfo1);
+	if (info1 == NULL) {
 		status = NT_STATUS_NO_MEMORY;
 		goto done;
 	}
-	info.info1->document_name = pf->docname;
-	info.info1->output_file = pf->filename;
-	info.info1->datatype = "RAW";
+	info1->document_name = pf->docname;
+	info1->output_file = pf->filename;
+	info1->datatype = "RAW";
 
-	status = dcerpc_spoolss_StartDocPrinter(b, tmp_ctx, &pf->handle,
-						1, info, &pf->jobid, &werr);
+	info_ctr.level = 1;
+	info_ctr.info.info1 = info1;
+
+	status = dcerpc_spoolss_StartDocPrinter(b, tmp_ctx,
+						&pf->handle,
+						&info_ctr,
+						&pf->jobid,
+						&werr);
 	if (!NT_STATUS_IS_OK(status)) {
 		goto done;
 	}
@@ -177,9 +212,9 @@ NTSTATUS print_spool_open(files_struct *fsp,
 	}
 
 	/* setup a full fsp */
-	status = create_synthetic_smb_fname(fsp, pf->filename, NULL,
-					    NULL, &fsp->fsp_name);
-	if (!NT_STATUS_IS_OK(status)) {
+	fsp->fsp_name = synthetic_smb_fname(fsp, pf->filename, NULL, NULL);
+	if (fsp->fsp_name == NULL) {
+		status = NT_STATUS_NO_MEMORY;
 		goto done;
 	}
 
@@ -189,7 +224,6 @@ NTSTATUS print_spool_open(files_struct *fsp,
 	}
 
 	fsp->file_id = vfs_file_id_from_sbuf(fsp->conn, &fsp->fsp_name->st);
-	fsp->mode = fsp->fsp_name->st.st_ex_mode;
 	fsp->fh->fd = fd;
 
 	fsp->vuid = current_vuid;
@@ -224,7 +258,7 @@ done:
 
 int print_spool_write(files_struct *fsp,
 		      const char *data, uint32_t size,
-		      SMB_OFF_T offset, uint32_t *written)
+		      off_t offset, uint32_t *written)
 {
 	SMB_STRUCT_STAT st;
 	ssize_t n;
@@ -311,7 +345,7 @@ void print_spool_terminate(struct connection_struct *conn,
 	status = rpc_pipe_open_interface(conn,
 					 &ndr_table_spoolss.syntax_id,
 					 conn->session_info,
-					 &conn->sconn->client_id,
+					 conn->sconn->remote_address,
 					 conn->sconn->msg_ctx,
 					 &conn->spoolss_pipe);
 	if (!NT_STATUS_IS_OK(status)) {

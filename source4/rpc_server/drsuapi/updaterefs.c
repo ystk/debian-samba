@@ -120,14 +120,31 @@ static WERROR uref_del_dest(struct ldb_context *sam_ctx, TALLOC_CTX *mem_ctx,
 	return WERR_OK;	
 }
 
-/* 
-  drsuapi_DsReplicaUpdateRefs - a non RPC version callable from getncchanges
-*/
+/**
+ * @brief Update the references for the given NC and the destination DSA object
+ *
+ * This function is callable from non RPC functions (ie. getncchanges), it
+ * will validate the request to update reference and then will add/del a repsTo
+ * to the specified server referenced by its DSA GUID in the request.
+ *
+ * @param[in]       b_state          A bind_state object
+ *
+ * @param[in]       mem_ctx          A talloc context for memory allocation
+ *
+ * @param[in]       req              A drsuapi_DsReplicaUpdateRefsRequest1
+ *                                   object which NC, which server and which
+ *                                   action (add/delete) should be performed
+ *
+ * @return                           WERR_OK is success, different error
+ *                                   otherwise.
+ */
 WERROR drsuapi_UpdateRefs(struct drsuapi_bind_state *b_state, TALLOC_CTX *mem_ctx,
 			  struct drsuapi_DsReplicaUpdateRefsRequest1 *req)
 {
 	WERROR werr;
+	int ret;
 	struct ldb_dn *dn;
+	struct ldb_dn *nc_root;
 	struct ldb_context *sam_ctx = b_state->sam_ctx_system?b_state->sam_ctx_system:b_state->sam_ctx;
 
 	DEBUG(4,("DsReplicaUpdateRefs for host '%s' with GUID %s options 0x%08x nc=%s\n",
@@ -135,15 +152,38 @@ WERROR drsuapi_UpdateRefs(struct drsuapi_bind_state *b_state, TALLOC_CTX *mem_ct
 		 req->options,
 		 drs_ObjectIdentifier_to_string(mem_ctx, req->naming_context)));
 
-	dn = ldb_dn_new(mem_ctx, sam_ctx, req->naming_context->dn);
-	if (dn == NULL) {
-		return WERR_DS_INVALID_DN_SYNTAX;
+	/*
+	 * 4.1.26.2 Server Behavior of the IDL_DRSUpdateRefs Method
+	 * Implements the input validation checks
+	 */
+	if (GUID_all_zero(&req->dest_dsa_guid)) {
+		return WERR_DS_DRA_INVALID_PARAMETER;
+	}
+
+	if (req->dest_dsa_dns_name == NULL) {
+		return WERR_DS_DRA_INVALID_PARAMETER;
+	}
+
+	if (!(req->options & (DRSUAPI_DRS_DEL_REF|DRSUAPI_DRS_ADD_REF))) {
+		return WERR_DS_DRA_INVALID_PARAMETER;
+	}
+
+	dn = drs_ObjectIdentifier_to_dn(mem_ctx, sam_ctx, req->naming_context);
+	W_ERROR_HAVE_NO_MEMORY(dn);
+	ret = dsdb_find_nc_root(sam_ctx, dn, dn, &nc_root);
+	if (ret != LDB_SUCCESS) {
+		DEBUG(2, ("Didn't find a nc for %s\n", ldb_dn_get_linearized(dn)));
+		return WERR_DS_DRA_BAD_NC;
+	}
+	if (ldb_dn_compare(dn, nc_root) != 0) {
+		DEBUG(2, ("dn %s is not equal to %s\n", ldb_dn_get_linearized(dn), ldb_dn_get_linearized(nc_root)));
+		return WERR_DS_DRA_BAD_NC;
 	}
 
 	if (ldb_transaction_start(sam_ctx) != LDB_SUCCESS) {
 		DEBUG(0,(__location__ ": Failed to start transaction on samdb: %s\n",
 			 ldb_errstring(sam_ctx)));
-		return WERR_DS_DRA_INTERNAL_ERROR;		
+		return WERR_DS_DRA_INTERNAL_ERROR;
 	}
 
 	if (req->options & DRSUAPI_DRS_DEL_REF) {

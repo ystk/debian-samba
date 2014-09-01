@@ -52,7 +52,7 @@ struct tevent_req *tdgram_sendto_queue_send(TALLOC_CTX *mem_ctx,
 {
 	struct tevent_req *req;
 	struct tdgram_sendto_queue_state *state;
-	bool ok;
+	struct tevent_queue_entry *e;
 
 	req = tevent_req_create(mem_ctx, &state,
 				struct tdgram_sendto_queue_state);
@@ -67,20 +67,23 @@ struct tevent_req *tdgram_sendto_queue_send(TALLOC_CTX *mem_ctx,
 	state->caller.dst	= dst;
 	state->ret		= -1;
 
-	ok = tevent_queue_add(queue,
-			      ev,
-			      req,
-			      tdgram_sendto_queue_trigger,
-			      NULL);
-	if (!ok) {
-		tevent_req_nomem(NULL, req);
-		goto post;
+	/*
+	 * we use tevent_queue_add_optimize_empty() with allow_direct
+	 * in order to optimize for the empty queue case.
+	 */
+	e = tevent_queue_add_optimize_empty(
+				queue,
+				ev,
+				req,
+				tdgram_sendto_queue_trigger,
+				NULL);
+	if (tevent_req_nomem(e, req)) {
+		return tevent_req_post(req, ev);
+	}
+	if (!tevent_req_is_in_progress(req)) {
+		return tevent_req_post(req, ev);
 	}
 
-	return req;
-
- post:
-	tevent_req_post(req, ev);
 	return req;
 }
 
@@ -212,6 +215,20 @@ static void tstream_readv_pdu_ask_for_next_vector(struct tevent_req *req)
 	size_t to_read = 0;
 	size_t i;
 	struct tevent_req *subreq;
+	bool optimize = false;
+	bool save_optimize = false;
+
+	if (state->count > 0) {
+		/*
+		 * This is not the first time we asked for a vector,
+		 * which means parts of the pdu already arrived.
+		 *
+		 * In this case it make sense to enable
+		 * a syscall/performance optimization if the
+		 * low level tstream implementation supports it.
+		 */
+		optimize = true;
+	}
 
 	TALLOC_FREE(state->vector);
 	state->count = 0;
@@ -255,11 +272,26 @@ static void tstream_readv_pdu_ask_for_next_vector(struct tevent_req *req)
 		return;
 	}
 
+	if (optimize) {
+		/*
+		 * If the low level stream is a bsd socket
+		 * we will get syscall optimization.
+		 *
+		 * If it is not a bsd socket
+		 * tstream_bsd_optimize_readv() just returns.
+		 */
+		save_optimize = tstream_bsd_optimize_readv(state->caller.stream,
+							   true);
+	}
 	subreq = tstream_readv_send(state,
 				    state->caller.ev,
 				    state->caller.stream,
 				    state->vector,
 				    state->count);
+	if (optimize) {
+		tstream_bsd_optimize_readv(state->caller.stream,
+					   save_optimize);
+	}
 	if (tevent_req_nomem(subreq, req)) {
 		return;
 	}
@@ -326,7 +358,7 @@ struct tevent_req *tstream_readv_pdu_queue_send(TALLOC_CTX *mem_ctx,
 {
 	struct tevent_req *req;
 	struct tstream_readv_pdu_queue_state *state;
-	bool ok;
+	struct tevent_queue_entry *e;
 
 	req = tevent_req_create(mem_ctx, &state,
 				struct tstream_readv_pdu_queue_state);
@@ -340,20 +372,24 @@ struct tevent_req *tstream_readv_pdu_queue_send(TALLOC_CTX *mem_ctx,
 	state->caller.next_vector_private	= next_vector_private;
 	state->ret				= -1;
 
-	ok = tevent_queue_add(queue,
-			      ev,
-			      req,
-			      tstream_readv_pdu_queue_trigger,
-			      NULL);
-	if (!ok) {
-		tevent_req_nomem(NULL, req);
-		goto post;
+	/*
+	 * we use tevent_queue_add_optimize_empty() with allow_direct
+	 * in order to optimize for the empty queue case.
+	 */
+	e = tevent_queue_add_optimize_empty(
+				queue,
+				ev,
+				req,
+				tstream_readv_pdu_queue_trigger,
+				NULL);
+	if (tevent_req_nomem(e, req)) {
+		return tevent_req_post(req, ev);
+	}
+	if (!tevent_req_is_in_progress(req)) {
+		return tevent_req_post(req, ev);
 	}
 
 	return req;
-
- post:
-	return tevent_req_post(req, ev);
 }
 
 static void tstream_readv_pdu_queue_trigger(struct tevent_req *req,
@@ -433,7 +469,7 @@ struct tevent_req *tstream_writev_queue_send(TALLOC_CTX *mem_ctx,
 {
 	struct tevent_req *req;
 	struct tstream_writev_queue_state *state;
-	bool ok;
+	struct tevent_queue_entry *e;
 
 	req = tevent_req_create(mem_ctx, &state,
 				struct tstream_writev_queue_state);
@@ -447,20 +483,24 @@ struct tevent_req *tstream_writev_queue_send(TALLOC_CTX *mem_ctx,
 	state->caller.count	= count;
 	state->ret		= -1;
 
-	ok = tevent_queue_add(queue,
-			      ev,
-			      req,
-			      tstream_writev_queue_trigger,
-			      NULL);
-	if (!ok) {
-		tevent_req_nomem(NULL, req);
-		goto post;
+	/*
+	 * we use tevent_queue_add_optimize_empty() with allow_direct
+	 * in order to optimize for the empty queue case.
+	 */
+	e = tevent_queue_add_optimize_empty(
+				queue,
+				ev,
+				req,
+				tstream_writev_queue_trigger,
+				NULL);
+	if (tevent_req_nomem(e, req)) {
+		return tevent_req_post(req, ev);
+	}
+	if (!tevent_req_is_in_progress(req)) {
+		return tevent_req_post(req, ev);
 	}
 
 	return req;
-
- post:
-	return tevent_req_post(req, ev);
 }
 
 static void tstream_writev_queue_trigger(struct tevent_req *req,

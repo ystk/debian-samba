@@ -60,7 +60,7 @@ static int socketpair_tcp(int fd[2])
 
 	sock.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
 
-	if (sys_connect(fd[1], (struct sockaddr *)&sock) == -1) {
+	if (connect(fd[1], (struct sockaddr *)&sock, socklen) == -1) {
 		if (errno != EINPROGRESS) goto failed;
 	} else {
 		connect_done = 1;
@@ -68,11 +68,11 @@ static int socketpair_tcp(int fd[2])
 
 	if ((fd[0] = accept(listener, (struct sockaddr *)&sock, &socklen)) == -1) goto failed;
 
-	close(listener);
 	if (connect_done == 0) {
-		if (sys_connect(fd[1], (struct sockaddr *)&sock) != 0
+		if (connect(fd[1], (struct sockaddr *)&sock, socklen) != 0
 		    && errno != EISCONN) goto failed;
 	}
+	close(listener);
 
 	set_blocking(fd[1], 1);
 

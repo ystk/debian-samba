@@ -1,20 +1,21 @@
-/* 
+/*
    Unix SMB/CIFS implementation.
 
    libndr interface
 
    Copyright (C) Andrew Tridgell 2003
-   
+   Copyright (C) Jelmer Vernooij 2005-2008
+
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
    the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
-   
+
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
-   
+
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
@@ -29,24 +30,21 @@
 #include "includes.h"
 #include "librpc/ndr/libndr.h"
 #include "../lib/util/dlinklist.h"
-#if _SAMBA_BUILD_ == 4
-#include "param/param.h"
-#endif
 
 #define NDR_BASE_MARSHALL_SIZE 1024
 
 /* this guid indicates NDR encoding in a protocol tower */
-const struct ndr_syntax_id ndr_transfer_syntax = {
+const struct ndr_syntax_id ndr_transfer_syntax_ndr = {
   { 0x8a885d04, 0x1ceb, 0x11c9, {0x9f, 0xe8}, {0x08,0x00,0x2b,0x10,0x48,0x60} },
   2
 };
 
-const struct ndr_syntax_id ndr64_transfer_syntax = {
+const struct ndr_syntax_id ndr_transfer_syntax_ndr64 = {
   { 0x71710533, 0xbeba, 0x4937, {0x83, 0x19}, {0xb5,0xdb,0xef,0x9c,0xcc,0x36} },
   1
 };
 
-const struct ndr_syntax_id null_ndr_syntax_id = {
+const struct ndr_syntax_id ndr_syntax_id_null = {
   { 0, 0, 0, { 0, 0 }, { 0, 0, 0, 0, 0, 0 } },
   0
 };
@@ -167,6 +165,38 @@ _PUBLIC_ enum ndr_err_code ndr_push_expand(struct ndr_push *ndr, uint32_t extra_
 	return NDR_ERR_SUCCESS;
 }
 
+_PUBLIC_ void ndr_print_debugc_helper(struct ndr_print *ndr, const char *format, ...)
+{
+	va_list ap;
+	char *s = NULL;
+	uint32_t i;
+	int ret;
+	int dbgc_class;
+
+	va_start(ap, format);
+	ret = vasprintf(&s, format, ap);
+	va_end(ap);
+
+	if (ret == -1) {
+		return;
+	}
+
+	dbgc_class = *(int *)ndr->private_data;
+
+	if (ndr->no_newline) {
+		DEBUGADDC(dbgc_class, 1,("%s", s));
+		free(s);
+		return;
+	}
+
+	for (i=0;i<ndr->depth;i++) {
+		DEBUGADDC(dbgc_class, 1,("    "));
+	}
+
+	DEBUGADDC(dbgc_class, 1,("%s\n", s));
+	free(s);
+}
+
 _PUBLIC_ void ndr_print_debug_helper(struct ndr_print *ndr, const char *format, ...) 
 {
 	va_list ap;
@@ -235,6 +265,25 @@ _PUBLIC_ void ndr_print_string_helper(struct ndr_print *ndr, const char *format,
 		ndr->private_data = talloc_asprintf_append_buffer((char *)ndr->private_data,
 								  "\n");
 	}
+}
+
+/*
+  a useful helper function for printing idl structures via DEBUGC()
+*/
+_PUBLIC_ void ndr_print_debugc(int dbgc_class, ndr_print_fn_t fn, const char *name, void *ptr)
+{
+	struct ndr_print *ndr;
+
+	DEBUGC(dbgc_class, 1,(" "));
+
+	ndr = talloc_zero(NULL, struct ndr_print);
+	if (!ndr) return;
+	ndr->private_data = &dbgc_class;
+	ndr->print = ndr_print_debugc_helper;
+	ndr->depth = 1;
+	ndr->flags = 0;
+	fn(ndr, name, ptr);
+	talloc_free(ndr);
 }
 
 /*

@@ -46,7 +46,6 @@ NTSTATUS smbd_smb2_request_process_getinfo(struct smbd_smb2_request *req)
 {
 	NTSTATUS status;
 	const uint8_t *inbody;
-	int i = req->current_idx;
 	uint8_t in_info_type;
 	uint8_t in_file_info_class;
 	uint32_t in_output_buffer_length;
@@ -64,7 +63,7 @@ NTSTATUS smbd_smb2_request_process_getinfo(struct smbd_smb2_request *req)
 	if (!NT_STATUS_IS_OK(status)) {
 		return smbd_smb2_request_error(req, status);
 	}
-	inbody = (const uint8_t *)req->in.vector[i+1].iov_base;
+	inbody = SMBD_SMB2_IN_BODY_PTR(req);
 
 	in_info_type			= CVAL(inbody, 0x02);
 	in_file_info_class		= CVAL(inbody, 0x03);
@@ -80,22 +79,36 @@ NTSTATUS smbd_smb2_request_process_getinfo(struct smbd_smb2_request *req)
 	if (in_input_buffer_offset == 0 && in_input_buffer_length == 0) {
 		/* This is ok */
 	} else if (in_input_buffer_offset !=
-		   (SMB2_HDR_BODY + req->in.vector[i+1].iov_len)) {
+		   (SMB2_HDR_BODY + SMBD_SMB2_IN_BODY_LEN(req))) {
 		return smbd_smb2_request_error(req, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	if (in_input_buffer_length > req->in.vector[i+2].iov_len) {
+	if (in_input_buffer_length > SMBD_SMB2_IN_DYN_LEN(req)) {
 		return smbd_smb2_request_error(req, NT_STATUS_INVALID_PARAMETER);
 	}
 
-	in_input_buffer.data = (uint8_t *)req->in.vector[i+2].iov_base;
+	in_input_buffer.data = SMBD_SMB2_IN_DYN_PTR(req);
 	in_input_buffer.length = in_input_buffer_length;
 
 	if (in_input_buffer.length > req->sconn->smb2.max_trans) {
+		DEBUG(2,("smbd_smb2_request_process_getinfo: "
+			 "client ignored max trans: %s: 0x%08X: 0x%08X\n",
+			 __location__, (unsigned)in_input_buffer.length,
+			 (unsigned)req->sconn->smb2.max_trans));
 		return smbd_smb2_request_error(req, NT_STATUS_INVALID_PARAMETER);
 	}
 	if (in_output_buffer_length > req->sconn->smb2.max_trans) {
+		DEBUG(2,("smbd_smb2_request_process_getinfo: "
+			 "client ignored max trans: %s: 0x%08X: 0x%08X\n",
+			 __location__, in_output_buffer_length,
+			 req->sconn->smb2.max_trans));
 		return smbd_smb2_request_error(req, NT_STATUS_INVALID_PARAMETER);
+	}
+
+	status = smbd_smb2_request_verify_creditcharge(req,
+			MAX(in_input_buffer.length,in_output_buffer_length));
+	if (!NT_STATUS_IS_OK(status)) {
+		return smbd_smb2_request_error(req, status);
 	}
 
 	in_fsp = file_fsp_smb2(req, in_file_id_persistent, in_file_id_volatile);
@@ -103,7 +116,7 @@ NTSTATUS smbd_smb2_request_process_getinfo(struct smbd_smb2_request *req)
 		return smbd_smb2_request_error(req, NT_STATUS_FILE_CLOSED);
 	}
 
-	subreq = smbd_smb2_getinfo_send(req, req->sconn->smb2.event_ctx,
+	subreq = smbd_smb2_getinfo_send(req, req->sconn->ev_ctx,
 					req, in_fsp,
 					in_info_type,
 					in_file_info_class,
@@ -116,15 +129,13 @@ NTSTATUS smbd_smb2_request_process_getinfo(struct smbd_smb2_request *req)
 	}
 	tevent_req_set_callback(subreq, smbd_smb2_request_getinfo_done, req);
 
-	return smbd_smb2_request_pending_queue(req, subreq);
+	return smbd_smb2_request_pending_queue(req, subreq, 500);
 }
 
 static void smbd_smb2_request_getinfo_done(struct tevent_req *subreq)
 {
 	struct smbd_smb2_request *req = tevent_req_callback_data(subreq,
 					struct smbd_smb2_request);
-	int i = req->current_idx;
-	uint8_t *outhdr;
 	DATA_BLOB outbody;
 	DATA_BLOB outdyn;
 	uint16_t out_output_buffer_offset;
@@ -148,7 +159,10 @@ static void smbd_smb2_request_getinfo_done(struct tevent_req *subreq)
 		return;
 	}
 
-	if (!NT_STATUS_IS_OK(call_status)) {
+	/* some GetInfo responses set STATUS_BUFFER_OVERFLOW and return partial,
+	   but valid data */
+	if (!(NT_STATUS_IS_OK(call_status) ||
+	      NT_STATUS_EQUAL(call_status, STATUS_BUFFER_OVERFLOW))) {
 		/* Return a specific error with data. */
 		error = smbd_smb2_request_error_ex(req,
 						call_status,
@@ -163,8 +177,6 @@ static void smbd_smb2_request_getinfo_done(struct tevent_req *subreq)
 	}
 
 	out_output_buffer_offset = SMB2_HDR_BODY + 0x08;
-
-	outhdr = (uint8_t *)req->out.vector[i].iov_base;
 
 	outbody = data_blob_talloc(req->out.vector, NULL, 0x08);
 	if (outbody.data == NULL) {
@@ -185,7 +197,7 @@ static void smbd_smb2_request_getinfo_done(struct tevent_req *subreq)
 
 	outdyn = out_output_buffer;
 
-	error = smbd_smb2_request_done(req, outbody, &outdyn);
+	error = smbd_smb2_request_done_ex(req, call_status, outbody, &outdyn, __location__);
 	if (!NT_STATUS_IS_OK(error)) {
 		smbd_server_connection_terminate(req->sconn,
 						 nt_errstr(error));
@@ -243,7 +255,7 @@ static struct tevent_req *smbd_smb2_getinfo_send(TALLOC_CTX *mem_ctx,
 	struct tevent_req *req;
 	struct smbd_smb2_getinfo_state *state;
 	struct smb_request *smbreq;
-	connection_struct *conn = smb2req->tcon->compat_conn;
+	connection_struct *conn = smb2req->tcon->compat;
 	NTSTATUS status;
 
 	req = tevent_req_create(mem_ctx, &state,
@@ -255,8 +267,8 @@ static struct tevent_req *smbd_smb2_getinfo_send(TALLOC_CTX *mem_ctx,
 	state->status = NT_STATUS_OK;
 	state->out_output_buffer = data_blob_null;
 
-	DEBUG(10,("smbd_smb2_getinfo_send: %s - fnum[%d]\n",
-		  fsp_str_dbg(fsp), fsp->fnum));
+	DEBUG(10,("smbd_smb2_getinfo_send: %s - %s\n",
+		  fsp_str_dbg(fsp), fsp_fnum_dbg(fsp)));
 
 	smbreq = smbd_smb2_fake_smb_request(smb2req);
 	if (tevent_req_nomem(smbreq, req)) {
@@ -270,7 +282,7 @@ static struct tevent_req *smbd_smb2_getinfo_send(TALLOC_CTX *mem_ctx,
 	}
 
 	switch (in_info_type) {
-	case 0x01:/* SMB2_GETINFO_FILE */
+	case SMB2_GETINFO_FILE:
 	{
 		uint16_t file_info_level;
 		char *data = NULL;
@@ -281,6 +293,7 @@ static struct tevent_req *smbd_smb2_getinfo_send(TALLOC_CTX *mem_ctx,
 		struct ea_list *ea_list = NULL;
 		int lock_data_count = 0;
 		char *lock_data = NULL;
+		size_t fixed_portion;
 
 		ZERO_STRUCT(write_time_ts);
 
@@ -306,7 +319,7 @@ static struct tevent_req *smbd_smb2_getinfo_send(TALLOC_CTX *mem_ctx,
 
 			/* We know this name is ok, it's already passed the checks. */
 
-		} else if (fsp && fsp->fh->fd == -1) {
+		} else if (fsp->fh->fd == -1) {
 			/*
 			 * This is actually a QFILEINFO on a directory
 			 * handle (returned from an NT SMB). NT5.0 seems
@@ -345,8 +358,8 @@ static struct tevent_req *smbd_smb2_getinfo_send(TALLOC_CTX *mem_ctx,
 
 			if (SMB_VFS_FSTAT(fsp, &fsp->fsp_name->st) != 0) {
 				DEBUG(3, ("smbd_smb2_getinfo_send: "
-					  "fstat of fnum %d failed (%s)\n",
-					  fsp->fnum, strerror(errno)));
+					  "fstat of %s failed (%s)\n",
+					  fsp_fnum_dbg(fsp), strerror(errno)));
 				status = map_nt_error_from_unix(errno);
 				tevent_req_nterror(req, status);
 				return tevent_req_post(req, ev);
@@ -368,6 +381,7 @@ static struct tevent_req *smbd_smb2_getinfo_send(TALLOC_CTX *mem_ctx,
 					       lock_data,
 					       STR_UNICODE,
 					       in_output_buffer_length,
+					       &fixed_portion,
 					       &data,
 					       &data_size);
 		if (!NT_STATUS_IS_OK(status)) {
@@ -378,40 +392,10 @@ static struct tevent_req *smbd_smb2_getinfo_send(TALLOC_CTX *mem_ctx,
 			tevent_req_nterror(req, status);
 			return tevent_req_post(req, ev);
 		}
-		if (data_size > 0) {
-			state->out_output_buffer = data_blob_talloc(state,
-								    data,
-								    data_size);
+		if (in_output_buffer_length < fixed_portion) {
 			SAFE_FREE(data);
-			if (tevent_req_nomem(state->out_output_buffer.data, req)) {
-				return tevent_req_post(req, ev);
-			}
-		}
-		SAFE_FREE(data);
-		break;
-	}
-
-	case 0x02:/* SMB2_GETINFO_FS */
-	{
-		uint16_t file_info_level;
-		char *data = NULL;
-		int data_size = 0;
-
-		/* the levels directly map to the passthru levels */
-		file_info_level = in_file_info_class + 1000;
-
-		status = smbd_do_qfsinfo(conn, state,
-					 file_info_level,
-					 STR_UNICODE,
-					 in_output_buffer_length,
-					 &data,
-					 &data_size);
-		if (!NT_STATUS_IS_OK(status)) {
-			SAFE_FREE(data);
-			if (NT_STATUS_EQUAL(status, NT_STATUS_INVALID_LEVEL)) {
-				status = NT_STATUS_INVALID_INFO_CLASS;
-			}
-			tevent_req_nterror(req, status);
+			tevent_req_nterror(
+				req, NT_STATUS_INFO_LENGTH_MISMATCH);
 			return tevent_req_post(req, ev);
 		}
 		if (data_size > 0) {
@@ -422,12 +406,70 @@ static struct tevent_req *smbd_smb2_getinfo_send(TALLOC_CTX *mem_ctx,
 			if (tevent_req_nomem(state->out_output_buffer.data, req)) {
 				return tevent_req_post(req, ev);
 			}
+			if (data_size > in_output_buffer_length) {
+				state->out_output_buffer.length =
+					in_output_buffer_length;
+				status = STATUS_BUFFER_OVERFLOW;
+			}
 		}
 		SAFE_FREE(data);
 		break;
 	}
 
-	case 0x03:/* SMB2_GETINFO_SEC */
+	case SMB2_GETINFO_FS:
+	{
+		uint16_t file_info_level;
+		char *data = NULL;
+		int data_size = 0;
+		size_t fixed_portion;
+
+		/* the levels directly map to the passthru levels */
+		file_info_level = in_file_info_class + 1000;
+
+		status = smbd_do_qfsinfo(conn, state,
+					 file_info_level,
+					 STR_UNICODE,
+					 in_output_buffer_length,
+					 &fixed_portion,
+					 fsp->fsp_name,
+					 &data,
+					 &data_size);
+		/* some responses set STATUS_BUFFER_OVERFLOW and return
+		   partial, but valid data */
+		if (!(NT_STATUS_IS_OK(status) ||
+		      NT_STATUS_EQUAL(status, STATUS_BUFFER_OVERFLOW))) {
+			SAFE_FREE(data);
+			if (NT_STATUS_EQUAL(status, NT_STATUS_INVALID_LEVEL)) {
+				status = NT_STATUS_INVALID_INFO_CLASS;
+			}
+			tevent_req_nterror(req, status);
+			return tevent_req_post(req, ev);
+		}
+		if (in_output_buffer_length < fixed_portion) {
+			SAFE_FREE(data);
+			tevent_req_nterror(
+				req, NT_STATUS_INFO_LENGTH_MISMATCH);
+			return tevent_req_post(req, ev);
+		}
+		if (data_size > 0) {
+			state->out_output_buffer = data_blob_talloc(state,
+								    data,
+								    data_size);
+			SAFE_FREE(data);
+			if (tevent_req_nomem(state->out_output_buffer.data, req)) {
+				return tevent_req_post(req, ev);
+			}
+			if (data_size > in_output_buffer_length) {
+				state->out_output_buffer.length =
+					in_output_buffer_length;
+				status = STATUS_BUFFER_OVERFLOW;
+			}
+		}
+		SAFE_FREE(data);
+		break;
+	}
+
+	case SMB2_GETINFO_SECURITY:
 	{
 		uint8_t *p_marshalled_sd = NULL;
 		size_t sd_size = 0;
@@ -473,6 +515,10 @@ static struct tevent_req *smbd_smb2_getinfo_send(TALLOC_CTX *mem_ctx,
 		break;
 	}
 
+	case SMB2_GETINFO_QUOTA:
+		tevent_req_nterror(req, NT_STATUS_NOT_SUPPORTED);
+		return tevent_req_post(req, ev);
+
 	default:
 		DEBUG(10,("smbd_smb2_getinfo_send: "
 			"unknown in_info_type of %u "
@@ -484,6 +530,7 @@ static struct tevent_req *smbd_smb2_getinfo_send(TALLOC_CTX *mem_ctx,
 		return tevent_req_post(req, ev);
 	}
 
+	state->status = status;
 	tevent_req_done(req);
 	return tevent_req_post(req, ev);
 }

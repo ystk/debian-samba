@@ -1,13 +1,22 @@
 '\" t
 .\"     Title: sharesec
 .\"    Author: [see the "AUTHOR" section]
-.\" Generator: DocBook XSL Stylesheets v1.75.2 <http://docbook.sf.net/>
-.\"      Date: 06/22/2012
+.\" Generator: DocBook XSL Stylesheets v1.78.1 <http://docbook.sf.net/>
+.\"      Date: 07/31/2014
 .\"    Manual: User Commands
-.\"    Source: Samba 3.6
+.\"    Source: Samba 4.0
 .\"  Language: English
 .\"
-.TH "SHARESEC" "1" "06/22/2012" "Samba 3\&.6" "User Commands"
+.TH "SHARESEC" "1" "07/31/2014" "Samba 4\&.0" "User Commands"
+.\" -----------------------------------------------------------------
+.\" * Define some portability stuff
+.\" -----------------------------------------------------------------
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.\" http://bugs.debian.org/507673
+.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.ie \n(.g .ds Aq \(aq
+.el       .ds Aq '
 .\" -----------------------------------------------------------------
 .\" * set default formatting
 .\" -----------------------------------------------------------------
@@ -22,7 +31,7 @@
 sharesec \- Set or get share ACLs
 .SH "SYNOPSIS"
 .HP \w'\ 'u
-sharesec {sharename} [\-r,\ \-\-remove=ACL] [\-m,\ \-\-modify=ACL] [\-a,\ \-\-add=ACL] [\-R,\ \-\-replace=ACLs] [\-D,\ \-\-delete] [\-v,\ \-\-view] [\-M,\ \-\-machine\-sid] [\-F,\ \-\-force] [\-d,\ \-\-debuglevel=DEBUGLEVEL] [\-s,\ \-\-configfile=CONFIGFILE] [\-l,\ \-\-log\-basename=LOGFILEBASE] [\-V,\ \-\-version] [\-?,\ \-\-help] [\-\-usage]
+sharesec {sharename} [\-r,\ \-\-remove=ACL] [\-m,\ \-\-modify=ACL] [\-a,\ \-\-add=ACL] [\-R,\ \-\-replace=ACLs] [\-D,\ \-\-delete] [\-v,\ \-\-view] [\-\-view\-all] [\-M,\ \-\-machine\-sid] [\-F,\ \-\-force] [\-d,\ \-\-debuglevel=DEBUGLEVEL] [\-s,\ \-\-configfile=CONFIGFILE] [\-l,\ \-\-log\-basename=LOGFILEBASE] [\-\-version] [\-?,\ \-\-help] [\-\-usage] [\-S,\ \-\-setsddl=STRING] [\-V,\ \-\-viewsddl]
 .SH "DESCRIPTION"
 .PP
 This tool is part of the
@@ -73,7 +82,27 @@ Remove ACEs\&.
 Overwrite an existing share permission ACL\&.
 .RE
 .PP
-\-h|\-\-help
+\-v|\-\-view
+.RS 4
+List a share acl
+.RE
+.PP
+\-\-view\-all
+.RS 4
+List all share acls
+.RE
+.PP
+\-S|\-\-setsddl=STRING
+.RS 4
+Set security descriptor by providing ACL in SDDL format\&.
+.RE
+.PP
+\-V|\-\-viewsddl
+.RS 4
+List a share acl in SDDL format\&.
+.RE
+.PP
+\-?|\-\-help
 .RS 4
 Print a summary of command line options\&.
 .RE
@@ -88,7 +117,7 @@ The higher this value, the more detail will be logged to the log files about the
 Levels above 1 will generate considerable amounts of log data, and should only be used when investigating a problem\&. Levels above 3 are designed for use only by developers and generate HUGE amounts of log data, most of which is extremely cryptic\&.
 .sp
 Note that specifying this parameter here will override the
-\m[blue]\fB\%smb.conf.5.html#\fR\m[]
+\m[blue]\fBlog level\fR\m[]
 parameter in the
 smb\&.conf
 file\&.
@@ -99,7 +128,7 @@ file\&.
 Prints the program version number\&.
 .RE
 .PP
-\-s|\-\-configfile <configuration file>
+\-s|\-\-configfile=<configuration file>
 .RS 4
 The file specified contains the configuration details required by the server\&. The information in this file includes server\-specific information such as what printcap file to use, as well as descriptions of all the services that the server is to provide\&. See
 smb\&.conf
@@ -111,6 +140,13 @@ for more information\&. The default configuration file name is determined at com
 Base directory name for log/debug files\&. The extension
 \fB"\&.progname"\fR
 will be appended (e\&.g\&. log\&.smbclient, log\&.smbd, etc\&.\&.\&.)\&. The log file is never removed by the client\&.
+.RE
+.PP
+\-\-option=<name>=<value>
+.RS 4
+Set the
+\fBsmb.conf\fR(5)
+option "<name>" to value "<value>" from the command line\&. This overrides compiled\-in defaults and options read from the configuration file\&.
 .RE
 .SH "ACL FORMAT"
 .PP
@@ -225,7 +261,7 @@ The following combined permissions can be specified:
 .IP \(bu 2.3
 .\}
 \fIREAD\fR
-\- Equivalent to \'RX\' permissions
+\- Equivalent to \*(AqRX\*(Aq permissions
 .RE
 .sp
 .RS 4
@@ -237,7 +273,7 @@ The following combined permissions can be specified:
 .IP \(bu 2.3
 .\}
 \fICHANGE\fR
-\- Equivalent to \'RXWD\' permissions
+\- Equivalent to \*(AqRXWD\*(Aq permissions
 .RE
 .sp
 .RS 4
@@ -249,7 +285,7 @@ The following combined permissions can be specified:
 .IP \(bu 2.3
 .\}
 \fIFULL\fR
-\- Equivalent to \'RWXDPO\' permissions
+\- Equivalent to \*(AqRWXDPO\*(Aq permissions
 .RE
 .SH "EXIT STATUS"
 .PP
@@ -259,7 +295,7 @@ program sets the exit status depending on the success or otherwise of the operat
 .PP
 If the operation succeeded, sharesec returns and exit status of 0\&. If
 sharesec
-couldn\'t connect to the specified server, or there was an error getting or setting the ACLs, an exit status of 1 is returned\&. If there was an error parsing any command line arguments, an exit status of 2 is returned\&.
+couldn\*(Aqt connect to the specified server, or there was an error getting or setting the ACLs, an exit status of 1 is returned\&. If there was an error parsing any command line arguments, an exit status of 2 is returned\&.
 .SH "EXAMPLES"
 .PP
 Add full access for SID

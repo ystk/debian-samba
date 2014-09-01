@@ -48,8 +48,8 @@ static char *counters_directory(const char *dbname)
 	TALLOC_CTX *ctx = talloc_tos();
 
 	path = state_path(PERFCOUNTDIR);
-	if (!directory_exist(path)) {
-		mkdir(path, 0755);
+	if (!directory_create_or_exist(path, geteuid(), 0755)) {
+		return NULL;
 	}
 
 	path = talloc_asprintf(ctx, "%s/%s", PERFCOUNTDIR, dbname);
@@ -77,7 +77,7 @@ uint32 reg_perfcount_get_base_index(void)
 	names = tdb_open_log(fname, 0, TDB_DEFAULT, O_RDONLY, 0444);
 
 	if ( !names ) {
-		DEBUG(1, ("reg_perfcount_get_base_index: unable to open [%s].\n", fname));
+		DEBUG(2, ("reg_perfcount_get_base_index: unable to open [%s].\n", fname));
 		return 0;
 	}    
 	/* needs to read the value of key "1" from the counter_names.tdb file, as that is
@@ -95,7 +95,7 @@ uint32 reg_perfcount_get_base_index(void)
 	   and so on.
 	   So last_counter becomes num_counters*2, and last_help will be last_counter+1 */
 	kbuf = string_tdb_data(key);
-	dbuf = tdb_fetch(names, kbuf);
+	dbuf = tdb_fetch_compat(names, kbuf);
 	if(dbuf.dptr == NULL)
 	{
 		DEBUG(1, ("reg_perfcount_get_base_index: failed to find key \'1\' in [%s].\n", fname));
@@ -158,11 +158,12 @@ static uint32 _reg_perfcount_multi_sz_from_tdb(TDB_CONTEXT *tdb,
 	char *buf1 = *retbuf;
 	uint32 working_size = 0;
 	DATA_BLOB name_index, name;
+	bool ok;
 
 	memset(temp, 0, sizeof(temp));
 	snprintf(temp, sizeof(temp), "%d", keyval);
 	kbuf = string_tdb_data(temp);
-	dbuf = tdb_fetch(tdb, kbuf);
+	dbuf = tdb_fetch_compat(tdb, kbuf);
 	if(dbuf.dptr == NULL)
 	{
 		/* If a key isn't there, just bypass it -- this really shouldn't 
@@ -178,7 +179,11 @@ static uint32 _reg_perfcount_multi_sz_from_tdb(TDB_CONTEXT *tdb,
 		buffer_size = 0;
 		return buffer_size;
 	}
-	push_reg_sz(talloc_tos(), &name_index, (const char *)kbuf.dptr);
+	ok = push_reg_sz(talloc_tos(), &name_index, (const char *)kbuf.dptr);
+	if (!ok) {
+		buffer_size = 0;
+		return buffer_size;
+	}
 	memcpy(buf1+buffer_size, (char *)name_index.data, working_size);
 	buffer_size += working_size;
 	/* Now encode the actual name */
@@ -191,7 +196,11 @@ static uint32 _reg_perfcount_multi_sz_from_tdb(TDB_CONTEXT *tdb,
 	memset(temp, 0, sizeof(temp));
 	memcpy(temp, dbuf.dptr, dbuf.dsize);
 	SAFE_FREE(dbuf.dptr);
-	push_reg_sz(talloc_tos(), &name, temp);
+	ok = push_reg_sz(talloc_tos(), &name, temp);
+	if (!ok) {
+		buffer_size = 0;
+		return buffer_size;
+	}
 	memcpy(buf1+buffer_size, (char *)name.data, working_size);
 	buffer_size += working_size;
 
@@ -347,7 +356,7 @@ static uint32 _reg_perfcount_get_numinst(int objInd, TDB_CONTEXT *names)
 	char buf[PERFCOUNT_MAX_LEN];
 
 	_reg_perfcount_make_key(&key, buf, PERFCOUNT_MAX_LEN, objInd, "inst");
-	data = tdb_fetch(names, key);
+	data = tdb_fetch_compat(names, key);
 
 	if(data.dptr == NULL)
 		return (uint32)PERF_NO_INSTANCES;
@@ -376,7 +385,7 @@ static bool _reg_perfcount_add_object(struct PERF_DATA_BLOCK *block,
 	bool success = True;
 	struct PERF_OBJECT_TYPE *obj;
 
-	block->objects = (struct PERF_OBJECT_TYPE *)TALLOC_REALLOC_ARRAY(mem_ctx,
+	block->objects = (struct PERF_OBJECT_TYPE *)talloc_realloc(mem_ctx,
 								  block->objects,
 								  struct PERF_OBJECT_TYPE,
 								  block->NumObjectTypes+1);
@@ -421,7 +430,7 @@ static bool _reg_perfcount_get_counter_data(TDB_DATA key, TDB_DATA *data)
 		return False;
 	}    
 
-	*data = tdb_fetch(counters, key);
+	*data = tdb_fetch_compat(counters, key);
 
 	tdb_close(counters);
 
@@ -488,7 +497,7 @@ static bool _reg_perfcount_get_counter_info(struct PERF_DATA_BLOCK *block,
 	padding = 0;
 
 	_reg_perfcount_make_key(&key, buf, PERFCOUNT_MAX_LEN, CounterIndex, "type");
-	data = tdb_fetch(names, key);
+	data = tdb_fetch_compat(names, key);
 	if(data.dptr == NULL)
 	{
 		DEBUG(3, ("_reg_perfcount_get_counter_info: No type data for counter [%d].\n", CounterIndex));
@@ -547,7 +556,7 @@ static bool _reg_perfcount_get_counter_info(struct PERF_DATA_BLOCK *block,
 	SAFE_FREE(data.dptr);
 
 	obj->counter_data.ByteLength += dsize + padding;
-	obj->counter_data.data = TALLOC_REALLOC_ARRAY(mem_ctx,
+	obj->counter_data.data = talloc_realloc(mem_ctx,
 						      obj->counter_data.data,
 						      uint8,
 						      obj->counter_data.ByteLength - sizeof(uint32));
@@ -635,7 +644,7 @@ static bool _reg_perfcount_add_counter(struct PERF_DATA_BLOCK *block,
 				  parent, num));
 			return False;
 		}
-		obj->counters = (struct PERF_COUNTER_DEFINITION *)TALLOC_REALLOC_ARRAY(mem_ctx,
+		obj->counters = (struct PERF_COUNTER_DEFINITION *)talloc_realloc(mem_ctx,
 										obj->counters,
 										struct PERF_COUNTER_DEFINITION,
 										obj->NumCounters+1);
@@ -687,7 +696,7 @@ static bool _reg_perfcount_get_instance_info(struct PERF_INSTANCE_DEFINITION *in
 		return False;
 	}
 	inst->counter_data.ByteLength = data.dsize + sizeof(inst->counter_data.ByteLength);
-	inst->counter_data.data = TALLOC_REALLOC_ARRAY(mem_ctx,
+	inst->counter_data.data = talloc_realloc(mem_ctx,
 						       inst->counter_data.data,
 						       uint8,
 						       data.dsize);
@@ -701,7 +710,7 @@ static bool _reg_perfcount_get_instance_info(struct PERF_INSTANCE_DEFINITION *in
 	memset(temp, 0, PERFCOUNT_MAX_LEN);
 	snprintf(temp, PERFCOUNT_MAX_LEN, "i%dname", instId);
 	_reg_perfcount_make_key(&key, buf, PERFCOUNT_MAX_LEN, obj->ObjectNameTitleIndex, temp);
-	data = tdb_fetch(names, key);
+	data = tdb_fetch_compat(names, key);
 	if(data.dptr == NULL)
 	{
 		/* Not actually an error, but possibly unintended? -- just logging FYI */
@@ -719,7 +728,7 @@ static bool _reg_perfcount_get_instance_info(struct PERF_INSTANCE_DEFINITION *in
 			SAFE_FREE(data.dptr);
 			return False;
 		}
-		inst->data = TALLOC_REALLOC_ARRAY(mem_ctx,
+		inst->data = talloc_realloc(mem_ctx,
 						  inst->data,
 						  uint8,
 						  inst->NameLength);
@@ -741,7 +750,7 @@ static bool _reg_perfcount_get_instance_info(struct PERF_INSTANCE_DEFINITION *in
 	if((pad = (inst->ByteLength % 8)))
 	{
 		pad = 8 - pad;
-		inst->data = TALLOC_REALLOC_ARRAY(mem_ctx,
+		inst->data = talloc_realloc(mem_ctx,
 						  inst->data,
 						  uint8,
 						  inst->NameLength + pad);
@@ -763,7 +772,7 @@ static bool _reg_perfcount_add_instance(struct PERF_OBJECT_TYPE *obj,
 	struct PERF_INSTANCE_DEFINITION *inst;
 
 	if(obj->instances == NULL) {
-		obj->instances = TALLOC_REALLOC_ARRAY(mem_ctx,
+		obj->instances = talloc_realloc(mem_ctx,
 						      obj->instances,
 						      struct PERF_INSTANCE_DEFINITION,
 						      obj->NumInstances);
@@ -793,7 +802,7 @@ static int _reg_perfcount_assemble_global(struct PERF_DATA_BLOCK *block,
 	{
 		j = i*2;
 		_reg_perfcount_make_key(&key, keybuf, PERFCOUNT_MAX_LEN, j, "rel");
-		data = tdb_fetch(names, key);
+		data = tdb_fetch_compat(names, key);
 		if(data.dptr != NULL)
 		{
 			if(_reg_perfcount_isparent(data))
@@ -831,7 +840,7 @@ static bool _reg_perfcount_get_64(uint64_t *retval,
 
 	_reg_perfcount_make_key(&key, buf, PERFCOUNT_MAX_LEN, key_part1, key_part2);
 
-	data = tdb_fetch(tdb, key);
+	data = tdb_fetch_compat(tdb, key);
 	if(data.dptr == NULL)
 	{
 		DEBUG(3,("_reg_perfcount_get_64: No data found for key [%s].\n", key.dptr));
@@ -919,13 +928,13 @@ static bool _reg_perfcount_init_data_block(struct PERF_DATA_BLOCK *block,
 					   bool bigendian_data)
 {
 	smb_ucs2_t *temp = NULL;
+	TALLOC_CTX *tmp_ctx = talloc_new(mem_ctx);
 	time_t tm;
+	size_t sz;
 
-	if (rpcstr_push_talloc(mem_ctx, &temp, "PERF")==(size_t)-1) {
-		return false;
-	}
-	if (!temp) {
-		return false;
+	sz = rpcstr_push_talloc(tmp_ctx, &temp, "PERF");
+	if ((sz == -1) || (temp == NULL)) {
+		goto err_out;
 	}
 	memcpy(block->Signature, temp, strlen_w(temp) *2);
 
@@ -942,12 +951,15 @@ static bool _reg_perfcount_init_data_block(struct PERF_DATA_BLOCK *block,
 	tm = time(NULL);
 	make_systemtime(&(block->SystemTime), gmtime(&tm));
 	_reg_perfcount_init_data_block_perf(block, names);
-	memset(temp, 0, sizeof(temp));
-	rpcstr_push((void *)temp, global_myname(), sizeof(temp), STR_TERMINATE);
+
+	sz = rpcstr_push_talloc(tmp_ctx, &temp, lp_netbios_name());
+	if ((sz == -1) || (temp == NULL)) {
+		goto err_out;
+	}
 	block->SystemNameLength = (strlen_w(temp) * 2) + 2;
-	block->data = TALLOC_ZERO_ARRAY(mem_ctx, uint8, block->SystemNameLength + (8 - (block->SystemNameLength % 8)));
+	block->data = talloc_zero_array(mem_ctx, uint8, block->SystemNameLength + (8 - (block->SystemNameLength % 8)));
 	if (block->data == NULL) {
-		return False;
+		goto err_out;
 	}
 	memcpy(block->data, temp, block->SystemNameLength);
 	block->SystemNameOffset = sizeof(struct PERF_DATA_BLOCK) - sizeof(block->objects) - sizeof(block->data);
@@ -955,8 +967,13 @@ static bool _reg_perfcount_init_data_block(struct PERF_DATA_BLOCK *block,
 	/* Make sure to adjust for 64-bit alignment for when we finish writing the system name,
 	   so that the PERF_OBJECT_TYPE struct comes out 64-bit aligned */
 	block->HeaderLength += 8 - (block->HeaderLength % 8);
+	talloc_free(tmp_ctx);
 
-	return True;
+	return true;
+
+err_out:
+	talloc_free(tmp_ctx);
+	return false;
 }
 
 /*********************************************************************
@@ -993,7 +1010,7 @@ static uint32 _reg_perfcount_perf_data_block_fixup(struct PERF_DATA_BLOCK *block
 				counter_data = &(instance->counter_data);
 				counter = &(object[obj].counters[object[obj].NumCounters - 1]);
 				counter_data->ByteLength = counter->CounterOffset + counter->CounterSize + sizeof(counter_data->ByteLength);
-				temp = TALLOC_REALLOC_ARRAY(mem_ctx,
+				temp = talloc_realloc(mem_ctx,
 							    temp, 
 							    char, 
 							    counter_data->ByteLength- sizeof(counter_data->ByteLength));
@@ -1014,7 +1031,7 @@ static uint32 _reg_perfcount_perf_data_block_fixup(struct PERF_DATA_BLOCK *block
 				{
 					pad = 8 - pad;
 				}
-				counter_data->data = TALLOC_REALLOC_ARRAY(mem_ctx,
+				counter_data->data = talloc_realloc(mem_ctx,
 									 counter_data->data,
 									 uint8,
 									 counter_data->ByteLength - sizeof(counter_data->ByteLength) + pad);
@@ -1034,7 +1051,7 @@ static uint32 _reg_perfcount_perf_data_block_fixup(struct PERF_DATA_BLOCK *block
 			if((pad = (object[obj].counter_data.ByteLength % 8)))
 			{
 				pad = 8 - pad;
-				object[obj].counter_data.data = TALLOC_REALLOC_ARRAY(mem_ctx,
+				object[obj].counter_data.data = talloc_realloc(mem_ctx,
 										     object[obj].counter_data.data,
 										     uint8, 
 										     object[obj].counter_data.ByteLength + pad);

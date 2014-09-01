@@ -1,13 +1,22 @@
 '\" t
 .\"     Title: smbclient
 .\"    Author: [see the "AUTHOR" section]
-.\" Generator: DocBook XSL Stylesheets v1.75.2 <http://docbook.sf.net/>
-.\"      Date: 06/22/2012
+.\" Generator: DocBook XSL Stylesheets v1.78.1 <http://docbook.sf.net/>
+.\"      Date: 07/31/2014
 .\"    Manual: User Commands
-.\"    Source: Samba 3.6
+.\"    Source: Samba 4.0
 .\"  Language: English
 .\"
-.TH "SMBCLIENT" "1" "06/22/2012" "Samba 3\&.6" "User Commands"
+.TH "SMBCLIENT" "1" "07/31/2014" "Samba 4\&.0" "User Commands"
+.\" -----------------------------------------------------------------
+.\" * Define some portability stuff
+.\" -----------------------------------------------------------------
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.\" http://bugs.debian.org/507673
+.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.ie \n(.g .ds Aq \(aq
+.el       .ds Aq '
 .\" -----------------------------------------------------------------
 .\" * set default formatting
 .\" -----------------------------------------------------------------
@@ -22,9 +31,9 @@
 smbclient \- ftp\-like client to access SMB/CIFS resources on servers
 .SH "SYNOPSIS"
 .HP \w'\ 'u
-smbclient [\-b\ <buffer\ size>] [\-d\ debuglevel] [\-e] [\-L\ <netbios\ name>] [\-U\ username] [\-I\ destinationIP] [\-M\ <netbios\ name>] [\-m\ maxprotocol] [\-A\ authfile] [\-N] [\-C] [\-g] [\-i\ scope] [\-O\ <socket\ options>] [\-p\ port] [\-R\ <name\ resolve\ order>] [\-s\ <smb\ config\ file>] [\-k] [\-P] [\-c\ <command>]
+smbclient [\-b\ <buffer\ size>] [\-d\ debuglevel] [\-e] [\-L\ <netbios\ name>] [\-U\ username] [\-I\ destinationIP] [\-M\ <netbios\ name>] [\-m\ maxprotocol] [\-A\ authfile] [\-N] [\-C] [\-g] [\-i\ scope] [\-O\ <socket\ options>] [\-p\ port] [\-R\ <name\ resolve\ order>] [\-s\ <smb\ config\ file>] [\-t\ <per\-operation\ timeout\ in\ seconds>] [\-k] [\-P] [\-c\ <command>]
 .HP \w'\ 'u
-smbclient {servicename} [password] [\-b\ <buffer\ size>] [\-d\ debuglevel] [\-e] [\-D\ Directory] [\-U\ username] [\-W\ workgroup] [\-M\ <netbios\ name>] [\-m\ maxprotocol] [\-A\ authfile] [\-N] [\-C] [\-g] [\-l\ log\-basename] [\-I\ destinationIP] [\-E] [\-c\ <command\ string>] [\-i\ scope] [\-O\ <socket\ options>] [\-p\ port] [\-R\ <name\ resolve\ order>] [\-s\ <smb\ config\ file>] [\-T<c|x>IXFqgbNan] [\-k]
+smbclient {servicename} [password] [\-b\ <buffer\ size>] [\-d\ debuglevel] [\-e] [\-D\ Directory] [\-U\ username] [\-W\ workgroup] [\-M\ <netbios\ name>] [\-m\ maxprotocol] [\-A\ authfile] [\-N] [\-C] [\-g] [\-l\ log\-basename] [\-I\ destinationIP] [\-E] [\-c\ <command\ string>] [\-i\ scope] [\-O\ <socket\ options>] [\-p\ port] [\-R\ <name\ resolve\ order>] [\-s\ <smb\ config\ file>] [\-t\ <per\-operation\ timeout\ in\ seconds>] [\-T<c|x>IXFqgbNan] [\-k]
 .SH "DESCRIPTION"
 .PP
 This tool is part of the
@@ -32,7 +41,7 @@ This tool is part of the
 suite\&.
 .PP
 smbclient
-is a client that can \'talk\' to an SMB/CIFS server\&. It offers an interface similar to that of the ftp program (see
+is a client that can \*(Aqtalk\*(Aq to an SMB/CIFS server\&. It offers an interface similar to that of the ftp program (see
 \fBftp\fR(1))\&. Operations include things like getting files from the server to the local machine, putting files from the local machine to the server, retrieving directory information from the server and so on\&.
 .SH "OPTIONS"
 .PP
@@ -188,17 +197,12 @@ easy parseable output that allows processing with utilities such as grep and cut
 .PP
 \-m|\-\-max\-protocol protocol
 .RS 4
-This parameter sets the maximum protocol version announced by the client\&.
+This allows the user to select the highest SMB protocol level that smbclient will use to connect to the server\&. By default this is set to NT1, which is the highest available SMB1 protocol\&. To connect using SMB2 or SMB3 protocol, use the strings SMB2 or SMB3 respectively\&. Note that to connect to a Windows 2012 server with encrypted transport selecting a max\-protocol of SMB3 is required\&.
 .RE
 .PP
 \-P|\-\-machine\-pass
 .RS 4
 Make queries to the external server using the machine account of the local server\&.
-.RE
-.PP
-\-h|\-\-help
-.RS 4
-Print a summary of command line options\&.
 .RE
 .PP
 \-I|\-\-ip\-address IP\-address
@@ -217,7 +221,7 @@ There is no default for this parameter\&. If not supplied, it will be determined
 .RS 4
 This parameter causes the client to write messages to the standard error stream (stderr) rather than to the standard output stream\&.
 .sp
-By default, the client writes messages to standard output \- typically the user\'s tty\&.
+By default, the client writes messages to standard output \- typically the user\*(Aqs tty\&.
 .RE
 .PP
 \-L|\-\-list
@@ -226,17 +230,19 @@ This option allows you to look at what services are available on a server\&. You
 smbclient \-L host
 and a list should appear\&. The
 \fI\-I \fR
-option may be useful if your NetBIOS names don\'t match your TCP/IP DNS host names or if you are trying to reach a host on another network\&.
+option may be useful if your NetBIOS names don\*(Aqt match your TCP/IP DNS host names or if you are trying to reach a host on another network\&.
 .RE
 .PP
 \-b|\-\-send\-buffer buffersize
 .RS 4
-This option changes the transmit/send buffer size when getting or putting a file from/to the server\&. The default is 65520 bytes\&. Setting this value smaller (to 1200 bytes) has been observed to speed up file transfers to and from a Win9x server\&.
+When sending or receiving files, smbclient uses an internal buffer sized by the maximum number of allowed requests to the connected server\&. This command allows this size to be set to any range between 0 (which means use the default server controlled size) bytes and 16776960 (0xFFFF00) bytes\&. Using the server controlled size is the most efficient as smbclient will pipeline as many simultaneous reads or writes needed to keep the server as busy as possible\&. Setting this to any other size will slow down the transfer\&. This can also be set using the
+iosize
+command inside smbclient\&.
 .RE
 .PP
-\-e|\-\-encrypt
+\-B|\-\-browse
 .RS 4
-This command line parameter requires the remote server support the UNIX extensions\&. Request that the connection be encrypted\&. This is new for Samba 3\&.2 and will only work with Samba 3\&.2 or above servers\&. Negotiates SMB encryption using GSSAPI\&. Uses the given credentials for the encryption negotiation (either kerberos or NTLMv1/v2 if given domain/username/password triple\&. Fails the connection if encryption cannot be negotiated\&.
+Browse SMB servers using DNS\&.
 .RE
 .PP
 \-d|\-\-debuglevel=level
@@ -249,7 +255,7 @@ The higher this value, the more detail will be logged to the log files about the
 Levels above 1 will generate considerable amounts of log data, and should only be used when investigating a problem\&. Levels above 3 are designed for use only by developers and generate HUGE amounts of log data, most of which is extremely cryptic\&.
 .sp
 Note that specifying this parameter here will override the
-\m[blue]\fB\%smb.conf.5.html#\fR\m[]
+\m[blue]\fBlog level\fR\m[]
 parameter in the
 smb\&.conf
 file\&.
@@ -260,7 +266,7 @@ file\&.
 Prints the program version number\&.
 .RE
 .PP
-\-s|\-\-configfile <configuration file>
+\-s|\-\-configfile=<configuration file>
 .RS 4
 The file specified contains the configuration details required by the server\&. The information in this file includes server\-specific information such as what printcap file to use, as well as descriptions of all the services that the server is to provide\&. See
 smb\&.conf
@@ -272,6 +278,13 @@ for more information\&. The default configuration file name is determined at com
 Base directory name for log/debug files\&. The extension
 \fB"\&.progname"\fR
 will be appended (e\&.g\&. log\&.smbclient, log\&.smbd, etc\&.\&.\&.)\&. The log file is never removed by the client\&.
+.RE
+.PP
+\-\-option=<name>=<value>
+.RS 4
+Set the
+\fBsmb.conf\fR(5)
+option "<name>" to value "<value>" from the command line\&. This overrides compiled\-in defaults and options read from the configuration file\&.
 .RE
 .PP
 \-N|\-\-no\-pass
@@ -335,10 +348,30 @@ rpcclient
 to prompt for a password and type it in directly\&.
 .RE
 .PP
+\-S|\-\-signing on|off|required
+.RS 4
+Set the client signing state\&.
+.RE
+.PP
+\-P|\-\-machine\-pass
+.RS 4
+Use stored machine account password\&.
+.RE
+.PP
+\-e|\-\-encrypt
+.RS 4
+This command line parameter requires the remote server support the UNIX extensions or that the SMB3 protocol has been selected\&. Requests that the connection be encrypted\&. Negotiates SMB encryption using either SMB3 or POSIX extensions via GSSAPI\&. Uses the given credentials for the encryption negotiation (either kerberos or NTLMv1/v2 if given domain/username/password triple\&. Fails the connection if encryption cannot be negotiated\&.
+.RE
+.PP
+\-\-pw\-nt\-hash
+.RS 4
+The supplied password is the NT hash\&.
+.RE
+.PP
 \-n|\-\-netbiosname <primary NetBIOS name>
 .RS 4
 This option allows you to override the NetBIOS name that Samba uses for itself\&. This is identical to setting the
-\m[blue]\fB\%smb.conf.5.html#\fR\m[]
+\m[blue]\fBnetbios name\fR\m[]
 parameter in the
 smb\&.conf
 file\&. However, a command line setting will take precedence over settings in
@@ -364,6 +397,23 @@ Set the SMB domain of the username\&. This overrides the default domain which is
 TCP socket options to set on the client socket\&. See the socket options parameter in the
 smb\&.conf
 manual page for the list of valid options\&.
+.RE
+.PP
+\-?|\-\-help
+.RS 4
+Print a summary of command line options\&.
+.RE
+.PP
+\-\-usage
+.RS 4
+Display brief usage message\&.
+.RE
+.PP
+\-t|\-\-timeout <timeout\-seconds>
+.RS 4
+This allows the user to tune the default timeout used for each SMB request\&. The default setting is 20 seconds\&. Increase it if requests to the server sometimes time out\&. This can happen when SMB3 encryption is selected and smbclient is overwhelming the server with requests\&. This can also be set using the
+timeout
+command inside smbclient\&.
 .RE
 .PP
 \-T|\-\-tar tar options
@@ -491,7 +541,7 @@ flag\&.
 .IP \(bu 2.3
 .\}
 \fIr\fR
-\- Regular expression include or exclude\&. Uses regular expression matching for excluding or excluding files if compiled with HAVE_REGEX_H\&. However this mode can be very slow\&. If not compiled with HAVE_REGEX_H, does a limited wildcard match on \'*\' and \'?\'\&.
+\- Regular expression include or exclude\&. Uses regular expression matching for excluding or excluding files if compiled with HAVE_REGEX_H\&. However this mode can be very slow\&. If not compiled with HAVE_REGEX_H, does a limited wildcard match on \*(Aq*\*(Aq and \*(Aq?\*(Aq\&.
 .RE
 .sp
 .RS 4
@@ -527,12 +577,12 @@ flags\&.
 .RE
 \fITar Long File Names\fR
 .sp
-smbclient\'s tar option now supports long file names both on backup and restore\&. However, the full path name of the file must be less than 1024 bytes\&. Also, when a tar archive is created,
-smbclient\'s tar option places all files in the archive with relative names, not absolute names\&.
+smbclient\*(Aqs tar option now supports long file names both on backup and restore\&. However, the full path name of the file must be less than 1024 bytes\&. Also, when a tar archive is created,
+smbclient\*(Aqs tar option places all files in the archive with relative names, not absolute names\&.
 .sp
 \fITar Filenames\fR
 .sp
-All file names can be given as DOS path names (with \'\e\e\' as the component separator) or as UNIX path names (with \'/\' as the component separator)\&.
+All file names can be given as DOS path names (with \*(Aq\e\e\*(Aq as the component separator) or as UNIX path names (with \*(Aq/\*(Aq as the component separator)\&.
 .sp
 \fIExamples\fR
 .sp
@@ -554,7 +604,7 @@ smbclient //mypc/myshare "" \-N \-Tc backup\&.tar users/docs
 .sp
 Create the same tar file as above, but now use a DOS path name\&.
 .sp
-smbclient //mypc/myshare "" \-N \-tc backup\&.tar users\eedocs
+smbclient //mypc/myshare "" \-N \-Tc backup\&.tar users\eedocs
 .sp
 Create a tar file of the files listed in the file
 tarlist\&.
@@ -579,7 +629,7 @@ is implied by
 \fI\-c\fR\&.
 .sp
 This is particularly useful in scripts and for printing stdin to the server, e\&.g\&.
-\-c \'print \-\'\&.
+\-c \*(Aqprint \-\*(Aq\&.
 .RE
 .SH "OPERATIONS"
 .PP
@@ -626,6 +676,11 @@ The client will request that the server return the "alternate" name (the 8\&.3 n
 archive <number>
 .RS 4
 Sets the archive level when operating on files\&. 0 means ignore the archive bit, 1 means only operate on files with this bit set, 2 means only operate on files with this bit set and reset it after operation, 3 means operate on all files and reset it after operation\&. The default is 0\&.
+.RE
+.PP
+backup
+.RS 4
+Toggle the state of the "backup intent" flag sent to the server on directory listings and file opens\&. If the "backup intent" flag is true, the server will try and bypass some file system checks if the user has been granted SE_BACKUP or SE_RESTORE privileges\&. This state is useful when performing a backup or restore operation\&.
 .RE
 .PP
 blocksize <number>
@@ -726,7 +781,7 @@ Displays the command history\&.
 .PP
 iosize <bytes>
 .RS 4
-When sending or receiving files, smbclient uses an internal memory buffer by default of size 64512 bytes\&. This command allows this size to be set to any range between 16384 (0x4000) bytes and 16776960 (0xFFFF00) bytes\&. Larger sizes may mean more efficient data transfer as smbclient will try and use the most efficient read and write calls for the connected server\&.
+When sending or receiving files, smbclient uses an internal buffer sized by the maximum number of allowed requests to the connected server\&. This command allows this size to be set to any range between 0 (which means use the default server controlled size) bytes and 16776960 (0xFFFF00) bytes\&. Using the server controlled size is the most efficient as smbclient will pipeline as many simultaneous reads or writes needed to keep the server as busy as possible\&. Setting this to any other size will slow down the transfer\&.
 .RE
 .PP
 lcd [directory name]
@@ -756,6 +811,11 @@ This command depends on the server supporting the CIFS UNIX extensions and will 
 logon <username> <password>
 .RS 4
 Establishes a new vuid for this session by logging on again\&. Replaces the current vuid\&. Prints out the new vuid\&. Used for internal Samba testing purposes\&.
+.RE
+.PP
+logoff
+.RS 4
+Logs the user off the server, closing the session\&. Used for internal Samba testing purposes\&.
 .RE
 .PP
 lowercase
@@ -962,7 +1022,12 @@ Blocksize\&. Must be followed by a valid (greater than zero) blocksize\&. Causes
 .PP
 tarmode <full|inc|reset|noreset>
 .RS 4
-Changes tar\'s behavior with regard to archive bits\&. In full mode, tar will back up everything regardless of the archive bit setting (this is the default mode)\&. In incremental mode, tar will only back up files with the archive bit set\&. In reset mode, tar will reset the archive bit on all files it backs up (implies read/write share)\&.
+Changes tar\*(Aqs behavior with regard to archive bits\&. In full mode, tar will back up everything regardless of the archive bit setting (this is the default mode)\&. In incremental mode, tar will only back up files with the archive bit set\&. In reset mode, tar will reset the archive bit on all files it backs up (implies read/write share)\&.
+.RE
+.PP
+timeout <per\-operation timeout in seconds>
+.RS 4
+This allows the user to tune the default timeout used for each SMB request\&. The default setting is 20 seconds\&. Increase it if requests to the server sometimes time out\&. This can happen when SMB3 encryption is selected and smbclient is overwhelming the server with requests\&.
 .RE
 .PP
 unlock <filenum> <hex\-start> <hex\-len>
@@ -978,6 +1043,21 @@ Prints the current volume name of the share\&.
 vuid <number>
 .RS 4
 Changes the currently used vuid in the protocol to the given arbitrary number\&. Without an argument prints out the current vuid being used\&. Used for internal Samba testing purposes\&.
+.RE
+.PP
+tcon <sharename>
+.RS 4
+Establishes a new tree connect (connection to a share)\&. Replaces the current tree connect\&. Prints the new tid (tree id)\&. Used for internal Samba testing purposes\&.
+.RE
+.PP
+tdis
+.RS 4
+Close the current share connection (tree disconnect)\&. Used for internal Samba testing purposes\&.
+.RE
+.PP
+tid <number>
+.RS 4
+Changes the current tree id (tid) in the protocol to a new arbitrary number\&. Without an argument, it prints out the tid currently used\&. Used for internal Samba testing purposes\&.
 .RE
 .SH "NOTES"
 .PP

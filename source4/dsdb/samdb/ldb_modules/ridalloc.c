@@ -34,6 +34,7 @@
 #include "lib/messaging/irpc.h"
 #include "param/param.h"
 #include "librpc/gen_ndr/ndr_misc.h"
+#include "dsdb/samdb/ldb_modules/ridalloc.h"
 
 /*
   Note: the RID allocation attributes in AD are very badly named. Here
@@ -63,34 +64,50 @@
   returns immediately. It should be called well before we
   completely run out of RIDs
  */
-static void ridalloc_poke_rid_manager(struct ldb_module *module)
+static int ridalloc_poke_rid_manager(struct ldb_module *module)
 {
-	struct messaging_context *msg;
+	struct imessaging_context *msg;
 	struct server_id *server;
 	struct ldb_context *ldb = ldb_module_get_ctx(module);
 	struct loadparm_context *lp_ctx =
 		(struct loadparm_context *)ldb_get_opaque(ldb, "loadparm");
 	TALLOC_CTX *tmp_ctx = talloc_new(module);
+	NTSTATUS status;
 
-	msg = messaging_client_init(tmp_ctx, lpcfg_messaging_path(tmp_ctx, lp_ctx),
+	msg = imessaging_client_init(tmp_ctx, lp_ctx,
 				    ldb_get_event_context(ldb));
 	if (!msg) {
+		ldb_asprintf_errstring(ldb_module_get_ctx(module),
+				"Failed to send MSG_DREPL_ALLOCATE_RID, "
+				"unable init client messaging context");
 		DEBUG(3,(__location__ ": Failed to create messaging context\n"));
 		talloc_free(tmp_ctx);
-		return;
+		return LDB_ERR_UNWILLING_TO_PERFORM;
 	}
 
 	server = irpc_servers_byname(msg, msg, "dreplsrv");
 	if (!server) {
+		ldb_asprintf_errstring(ldb_module_get_ctx(module),
+				"Failed to send MSG_DREPL_ALLOCATE_RID, "
+				"unable to locate dreplsrv");
 		/* this means the drepl service is not running */
 		talloc_free(tmp_ctx);
-		return;
+		return LDB_ERR_UNWILLING_TO_PERFORM;
 	}
 
-	messaging_send(msg, server[0], MSG_DREPL_ALLOCATE_RID, NULL);
+	status = imessaging_send(msg, server[0], MSG_DREPL_ALLOCATE_RID, NULL);
 
-	/* we don't care if the message got through */
+	/* Only error out if an error happened, not on STATUS_MORE_ENTRIES, ie a delayed message */
+	if (NT_STATUS_IS_ERR(status)) {
+		ldb_asprintf_errstring(ldb_module_get_ctx(module),
+				"Failed to send MSG_DREPL_ALLOCATE_RID to dreplsrv at %s: %s",
+				server_id_str(tmp_ctx, server), nt_errstr(status));
+		talloc_free(tmp_ctx);
+		return LDB_ERR_UNWILLING_TO_PERFORM;
+	}
+
 	talloc_free(tmp_ctx);
+	return LDB_SUCCESS;
 }
 
 
@@ -262,6 +279,8 @@ static int ridalloc_create_rid_set_ntds(struct ldb_module *module, TALLOC_CTX *m
 		.next_rid	= 0,
 		.used_pool	= 0,
 	};
+	const char *no_attrs[] = { NULL };
+	struct ldb_result *res;
 
 	/*
 	  steps:
@@ -338,7 +357,21 @@ static int ridalloc_create_rid_set_ntds(struct ldb_module *module, TALLOC_CTX *m
 	msg = ldb_msg_new(tmp_ctx);
 	msg->dn = machine_dn;
 
-	ret = ldb_msg_add_string(msg, "rIDSetReferences", ldb_dn_get_linearized(rid_set_dn));
+	/* we need the extended DN of the RID Set object for
+	 * rIDSetReferences */
+	ret = dsdb_module_search_dn(module, msg, &res, rid_set_dn, no_attrs,
+				    DSDB_FLAG_NEXT_MODULE | DSDB_SEARCH_SHOW_DN_IN_STORAGE_FORMAT, parent);
+	if (ret != LDB_SUCCESS) {
+		ldb_asprintf_errstring(ldb, "Failed to find extended DN of RID Set %s - %s",
+				       ldb_dn_get_linearized(msg->dn),
+				       ldb_errstring(ldb));
+		talloc_free(tmp_ctx);
+		return ret;
+	}
+	rid_set_dn = res->msgs[0]->dn;
+
+
+	ret = ldb_msg_add_string(msg, "rIDSetReferences", ldb_dn_get_extended_linearized(msg, rid_set_dn, 1));
 	if (ret != LDB_SUCCESS) {
 		talloc_free(tmp_ctx);
 		return ret;
@@ -371,6 +404,9 @@ static int ridalloc_create_own_rid_set(struct ldb_module *module, TALLOC_CTX *me
 	struct ldb_dn *rid_manager_dn, *fsmo_role_dn;
 	int ret;
 	struct ldb_context *ldb = ldb_module_get_ctx(module);
+	struct GUID fsmo_role_guid;
+	const struct GUID *our_ntds_guid;
+	NTSTATUS status;
 
 	/* work out who is the RID Manager */
 	ret = dsdb_module_rid_manager_dn(module, tmp_ctx, &rid_manager_dn, parent);
@@ -390,9 +426,29 @@ static int ridalloc_create_own_rid_set(struct ldb_module *module, TALLOC_CTX *me
 		return ret;
 	}
 
-	if (ldb_dn_compare(samdb_ntds_settings_dn(ldb), fsmo_role_dn) != 0) {
-		ridalloc_poke_rid_manager(module);
-		ldb_asprintf_errstring(ldb, "Remote RID Set allocation needs refresh");
+	status = dsdb_get_extended_dn_guid(fsmo_role_dn, &fsmo_role_guid, "GUID");
+	if (!NT_STATUS_IS_OK(status)) {
+		talloc_free(tmp_ctx);
+		return ldb_operr(ldb_module_get_ctx(module));
+	}
+
+	our_ntds_guid = samdb_ntds_objectGUID(ldb_module_get_ctx(module));
+	if (!our_ntds_guid) {
+		talloc_free(tmp_ctx);
+		return ldb_operr(ldb_module_get_ctx(module));
+	}
+
+	if (!GUID_equal(&fsmo_role_guid, our_ntds_guid)) {
+		ret = ridalloc_poke_rid_manager(module);
+		if (ret != LDB_SUCCESS) {
+			ldb_asprintf_errstring(ldb,
+					"Request for remote creation of "
+					"RID Set for this DC failed: %s",
+					ldb_errstring(ldb));
+		} else {
+			ldb_asprintf_errstring(ldb,
+					"Remote RID Set creation needed");
+		}
 		talloc_free(tmp_ctx);
 		return LDB_ERR_UNWILLING_TO_PERFORM;
 	}
@@ -412,6 +468,7 @@ static int ridalloc_new_own_pool(struct ldb_module *module, uint64_t *new_pool, 
 	struct ldb_dn *rid_manager_dn, *fsmo_role_dn;
 	int ret;
 	struct ldb_context *ldb = ldb_module_get_ctx(module);
+	bool is_us;
 
 	/* work out who is the RID Manager */
 	ret = dsdb_module_rid_manager_dn(module, tmp_ctx, &rid_manager_dn, parent);
@@ -431,9 +488,22 @@ static int ridalloc_new_own_pool(struct ldb_module *module, uint64_t *new_pool, 
 		return ret;
 	}
 
-	if (ldb_dn_compare(samdb_ntds_settings_dn(ldb), fsmo_role_dn) != 0) {
-		ridalloc_poke_rid_manager(module);
-		ldb_asprintf_errstring(ldb, "Remote RID Set allocation needs refresh");
+	ret = samdb_dn_is_our_ntdsa(ldb, fsmo_role_dn, &is_us);
+	if (ret != LDB_SUCCESS) {
+		ldb_asprintf_errstring(ldb, "Failed to confirm if our ntdsDsa is %s: %s",
+				       ldb_dn_get_linearized(fsmo_role_dn), ldb_errstring(ldb));
+		talloc_free(tmp_ctx);
+		return ret;
+	}
+	
+	if (!is_us) {
+		ret = ridalloc_poke_rid_manager(module);
+		if (ret != LDB_SUCCESS) {
+			ldb_asprintf_errstring(ldb, "Request for remote refresh of RID Set allocation failed: %s",
+					       ldb_errstring(ldb));
+		} else {
+			ldb_asprintf_errstring(ldb, "Remote RID Set refresh needed");
+		}
 		talloc_free(tmp_ctx);
 		return LDB_ERR_UNWILLING_TO_PERFORM;
 	}
@@ -527,12 +597,9 @@ int ridalloc_allocate_rid(struct ldb_module *module, uint32_t *rid, struct ldb_r
 			 * ask async for a new pool.
 			 */
 			ret = ridalloc_new_own_pool(module, &nridset.alloc_pool, parent);
-			if (ret == LDB_ERR_UNWILLING_TO_PERFORM) {
-				ridalloc_poke_rid_manager(module);
-				talloc_free(tmp_ctx);
-				return ret;
-			}
 			if (ret != LDB_SUCCESS) {
+				ldb_asprintf_errstring(ldb, "NO RID values available: %s",
+						       ldb_errstring(ldb));
 				talloc_free(tmp_ctx);
 				return ret;
 			}
@@ -565,7 +632,8 @@ int ridalloc_allocate_rid(struct ldb_module *module, uint32_t *rid, struct ldb_r
 	/*
 	 * if we are half-exhausted then try to get a new pool.
 	 */
-	if (nridset.next_rid > (prev_pool_hi + prev_pool_lo)/2) {
+	if (nridset.next_rid > (prev_pool_hi + prev_pool_lo)/2 &&
+	    nridset.alloc_pool == nridset.prev_pool) {
 		/*
 		 * if we are the RID Manager,
 		 * we can get a new pool localy.
@@ -574,7 +642,7 @@ int ridalloc_allocate_rid(struct ldb_module *module, uint32_t *rid, struct ldb_r
 		 */
 		ret = ridalloc_new_own_pool(module, &nridset.alloc_pool, parent);
 		if (ret == LDB_ERR_UNWILLING_TO_PERFORM) {
-			ridalloc_poke_rid_manager(module);
+			ldb_reset_err_string(ldb);
 			ret = LDB_SUCCESS;
 		}
 		if (ret != LDB_SUCCESS) {

@@ -171,7 +171,7 @@ struct rpc_tstream_read_state {
 static void rpc_tstream_read_done(struct tevent_req *subreq);
 
 static struct tevent_req *rpc_tstream_read_send(TALLOC_CTX *mem_ctx,
-					     struct event_context *ev,
+					     struct tevent_context *ev,
 					     uint8_t *data, size_t size,
 					     void *priv)
 {
@@ -186,7 +186,11 @@ static struct tevent_req *rpc_tstream_read_send(TALLOC_CTX *mem_ctx,
 		return NULL;
 	}
 	if (!rpc_tstream_is_connected(transp)) {
-		tevent_req_nterror(req, NT_STATUS_CONNECTION_INVALID);
+		NTSTATUS status = NT_STATUS_CONNECTION_DISCONNECTED;
+		if (tstream_is_cli_np(transp->stream)) {
+			status = NT_STATUS_PIPE_DISCONNECTED;
+		}
+		tevent_req_nterror(req, status);
 		return tevent_req_post(req, ev);
 	}
 	state->transp = transp;
@@ -202,7 +206,7 @@ static struct tevent_req *rpc_tstream_read_send(TALLOC_CTX *mem_ctx,
 		return tevent_req_post(req, ev);
 	}
 
-	endtime = timeval_current_ofs(0, transp->timeout * 1000);
+	endtime = timeval_current_ofs_msec(transp->timeout);
 	if (!tevent_req_set_endtime(subreq, ev, endtime)) {
 		goto fail;
 	}
@@ -246,7 +250,7 @@ static NTSTATUS rpc_tstream_read_recv(struct tevent_req *req, ssize_t *size)
 }
 
 struct rpc_tstream_write_state {
-	struct event_context *ev;
+	struct tevent_context *ev;
 	struct rpc_tstream_state *transp;
 	struct iovec iov;
 	ssize_t nwritten;
@@ -255,7 +259,7 @@ struct rpc_tstream_write_state {
 static void rpc_tstream_write_done(struct tevent_req *subreq);
 
 static struct tevent_req *rpc_tstream_write_send(TALLOC_CTX *mem_ctx,
-					      struct event_context *ev,
+					      struct tevent_context *ev,
 					      const uint8_t *data, size_t size,
 					      void *priv)
 {
@@ -270,7 +274,11 @@ static struct tevent_req *rpc_tstream_write_send(TALLOC_CTX *mem_ctx,
 		return NULL;
 	}
 	if (!rpc_tstream_is_connected(transp)) {
-		tevent_req_nterror(req, NT_STATUS_CONNECTION_INVALID);
+		NTSTATUS status = NT_STATUS_CONNECTION_DISCONNECTED;
+		if (tstream_is_cli_np(transp->stream)) {
+			status = NT_STATUS_PIPE_DISCONNECTED;
+		}
+		tevent_req_nterror(req, status);
 		return tevent_req_post(req, ev);
 	}
 	state->ev = ev;
@@ -286,7 +294,7 @@ static struct tevent_req *rpc_tstream_write_send(TALLOC_CTX *mem_ctx,
 		goto fail;
 	}
 
-	endtime = timeval_current_ofs(0, transp->timeout * 1000);
+	endtime = timeval_current_ofs_msec(transp->timeout);
 	if (!tevent_req_set_endtime(subreq, ev, endtime)) {
 		goto fail;
 	}
@@ -357,6 +365,7 @@ static struct tevent_req *rpc_tstream_trans_send(TALLOC_CTX *mem_ctx,
 	struct tevent_req *req, *subreq;
 	struct rpc_tstream_trans_state *state;
 	struct timeval endtime;
+	bool use_trans = false;
 
 	req = tevent_req_create(mem_ctx, &state,
 				struct rpc_tstream_trans_state);
@@ -365,7 +374,11 @@ static struct tevent_req *rpc_tstream_trans_send(TALLOC_CTX *mem_ctx,
 	}
 
 	if (!rpc_tstream_is_connected(transp)) {
-		tevent_req_nterror(req, NT_STATUS_CONNECTION_INVALID);
+		NTSTATUS status = NT_STATUS_CONNECTION_DISCONNECTED;
+		if (tstream_is_cli_np(transp->stream)) {
+			status = NT_STATUS_PIPE_DISCONNECTED;
+		}
+		tevent_req_nterror(req, status);
 		return tevent_req_post(req, ev);
 	}
 	state->ev = ev;
@@ -374,7 +387,21 @@ static struct tevent_req *rpc_tstream_trans_send(TALLOC_CTX *mem_ctx,
 	state->req.iov_base = discard_const_p(void *, data);
 	state->max_rdata_len = max_rdata_len;
 
-	endtime = timeval_current_ofs(0, transp->timeout * 1000);
+	endtime = timeval_current_ofs_msec(transp->timeout);
+
+	if (tstream_is_cli_np(transp->stream)) {
+		use_trans = true;
+	}
+	if (tevent_queue_length(transp->write_queue) > 0) {
+		use_trans = false;
+	}
+	if (tevent_queue_length(transp->read_queue) > 0) {
+		use_trans = false;
+	}
+
+	if (use_trans) {
+		tstream_cli_np_use_trans(transp->stream);
+	}
 
 	subreq = tstream_writev_queue_send(state, ev,
 					   transp->stream,
@@ -387,10 +414,6 @@ static struct tevent_req *rpc_tstream_trans_send(TALLOC_CTX *mem_ctx,
 		return tevent_req_post(req, ev);
 	}
 	tevent_req_set_callback(subreq, rpc_tstream_trans_writev, req);
-
-	if (tstream_is_cli_np(transp->stream)) {
-		tstream_cli_np_use_trans(transp->stream);
-	}
 
 	subreq = tstream_readv_pdu_queue_send(state, ev,
 					      transp->stream,

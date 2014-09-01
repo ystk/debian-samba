@@ -275,6 +275,7 @@ static bool test_create_gentest(struct torture_context *tctx, struct smb2_tree *
 				ok_mask |= 1<<i;
 
 				expected = (io.in.file_attributes | FILE_ATTRIBUTE_ARCHIVE) & 0x00005127;
+				io.out.file_attr &= ~FILE_ATTRIBUTE_NONINDEXED;
 				CHECK_EQUAL(io.out.file_attr, expected);
 				file_attributes_set |= io.out.file_attr;
 
@@ -394,7 +395,10 @@ static bool test_create_blob(struct torture_context *tctx, struct smb2_tree *tre
 	CHECK_STATUS(status, NT_STATUS_OK);
 
 	torture_comment(tctx, "Testing alloc size\n");
-	io.in.alloc_size = 4096;
+	/* FIXME We use 1M cause that's the rounded size of Samba.
+	 * We should ask the server for the cluser size and calulate it
+	 * correctly. */
+	io.in.alloc_size = 0x00100000;
 	status = smb2_create(tree, tctx, &io);
 	CHECK_STATUS(status, NT_STATUS_OK);
 	CHECK_EQUAL(io.out.alloc_size, io.in.alloc_size);
@@ -444,13 +448,102 @@ static bool test_create_blob(struct torture_context *tctx, struct smb2_tree *tre
 	status = smb2_util_close(tree, io.out.file.handle);
 	CHECK_STATUS(status, NT_STATUS_OK);
 
-	torture_comment(tctx, "Testing bad tag length\n");
+	torture_comment(tctx, "Testing bad tag length 0\n");
+	ZERO_STRUCT(io.in.blobs);
+	status = smb2_create_blob_add(tctx, &io.in.blobs,
+				      "x", data_blob(NULL, 0));
+	CHECK_STATUS(status, NT_STATUS_OK);
+	status = smb2_create(tree, tctx, &io);
+	CHECK_STATUS(status, NT_STATUS_INVALID_PARAMETER);
+
+	torture_comment(tctx, "Testing bad tag length 1\n");
+	ZERO_STRUCT(io.in.blobs);
+	status = smb2_create_blob_add(tctx, &io.in.blobs,
+				      "x", data_blob(NULL, 0));
+	CHECK_STATUS(status, NT_STATUS_OK);
+	status = smb2_create(tree, tctx, &io);
+	CHECK_STATUS(status, NT_STATUS_INVALID_PARAMETER);
+
+	torture_comment(tctx, "Testing bad tag length 2\n");
+	ZERO_STRUCT(io.in.blobs);
+	status = smb2_create_blob_add(tctx, &io.in.blobs,
+				      "xx", data_blob(NULL, 0));
+	CHECK_STATUS(status, NT_STATUS_OK);
+	status = smb2_create(tree, tctx, &io);
+	CHECK_STATUS(status, NT_STATUS_INVALID_PARAMETER);
+
+	torture_comment(tctx, "Testing bad tag length 3\n");
+	ZERO_STRUCT(io.in.blobs);
 	status = smb2_create_blob_add(tctx, &io.in.blobs,
 				      "xxx", data_blob(NULL, 0));
 	CHECK_STATUS(status, NT_STATUS_OK);
-
 	status = smb2_create(tree, tctx, &io);
 	CHECK_STATUS(status, NT_STATUS_INVALID_PARAMETER);
+
+	torture_comment(tctx, "Testing tag length 4\n");
+	ZERO_STRUCT(io.in.blobs);
+	status = smb2_create_blob_add(tctx, &io.in.blobs,
+				      "xxxx", data_blob(NULL, 0));
+	CHECK_STATUS(status, NT_STATUS_OK);
+	status = smb2_create(tree, tctx, &io);
+	CHECK_STATUS(status, NT_STATUS_OK);
+
+	torture_comment(tctx, "Testing tag length 5\n");
+	ZERO_STRUCT(io.in.blobs);
+	status = smb2_create_blob_add(tctx, &io.in.blobs,
+				      "xxxxx", data_blob(NULL, 0));
+	CHECK_STATUS(status, NT_STATUS_OK);
+	status = smb2_create(tree, tctx, &io);
+	CHECK_STATUS(status, NT_STATUS_OK);
+
+	torture_comment(tctx, "Testing tag length 6\n");
+	ZERO_STRUCT(io.in.blobs);
+	status = smb2_create_blob_add(tctx, &io.in.blobs,
+				      "xxxxxx", data_blob(NULL, 0));
+	CHECK_STATUS(status, NT_STATUS_OK);
+	status = smb2_create(tree, tctx, &io);
+	CHECK_STATUS(status, NT_STATUS_OK);
+
+	torture_comment(tctx, "Testing tag length 7\n");
+	ZERO_STRUCT(io.in.blobs);
+	status = smb2_create_blob_add(tctx, &io.in.blobs,
+				      "xxxxxxx", data_blob(NULL, 0));
+	CHECK_STATUS(status, NT_STATUS_OK);
+	status = smb2_create(tree, tctx, &io);
+	CHECK_STATUS(status, NT_STATUS_OK);
+
+	torture_comment(tctx, "Testing tag length 8\n");
+	ZERO_STRUCT(io.in.blobs);
+	status = smb2_create_blob_add(tctx, &io.in.blobs,
+				      "xxxxxxxx", data_blob(NULL, 0));
+	CHECK_STATUS(status, NT_STATUS_OK);
+	status = smb2_create(tree, tctx, &io);
+	CHECK_STATUS(status, NT_STATUS_OK);
+
+	torture_comment(tctx, "Testing tag length 16\n");
+	ZERO_STRUCT(io.in.blobs);
+	status = smb2_create_blob_add(tctx, &io.in.blobs,
+				      "xxxxxxxxxxxxxxxx", data_blob(NULL, 0));
+	CHECK_STATUS(status, NT_STATUS_OK);
+	status = smb2_create(tree, tctx, &io);
+	CHECK_STATUS(status, NT_STATUS_OK);
+
+	torture_comment(tctx, "Testing tag length 17\n");
+	ZERO_STRUCT(io.in.blobs);
+	status = smb2_create_blob_add(tctx, &io.in.blobs,
+				      "xxxxxxxxxxxxxxxxx", data_blob(NULL, 0));
+	CHECK_STATUS(status, NT_STATUS_OK);
+	status = smb2_create(tree, tctx, &io);
+	CHECK_STATUS(status, NT_STATUS_OK);
+
+	torture_comment(tctx, "Testing tag length 34\n");
+	ZERO_STRUCT(io.in.blobs);
+	status = smb2_create_blob_add(tctx, &io.in.blobs,
+				      "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+				      data_blob(NULL, 0));
+	CHECK_STATUS(status, NT_STATUS_OK);
+	status = smb2_create(tree, tctx, &io);
+	CHECK_STATUS(status, NT_STATUS_OK);
 
 	smb2_deltree(tree, FNAME);
 	
@@ -966,8 +1059,8 @@ static bool test_smb2_open_multi(struct torture_context *tctx,
 			break;
 		}
 
-		if (event_loop_once(tctx->ev) != 0) {
-			torture_comment(tctx, "event_loop_once failed\n");
+		if (tevent_loop_once(tctx->ev) != 0) {
+			torture_comment(tctx, "tevent_loop_once failed\n");
 			ret = false;
 			goto done;
 		}

@@ -39,6 +39,7 @@ struct dsdb_schema *dsdb_new_schema(TALLOC_CTX *mem_ctx)
 	if (!schema) {
 		return NULL;
 	}
+	schema->refresh_interval = 120;
 
 	return schema;
 }
@@ -55,12 +56,6 @@ struct dsdb_schema *dsdb_schema_copy_shallow(TALLOC_CTX *mem_ctx,
 	schema_copy = dsdb_new_schema(mem_ctx);
 	if (!schema_copy) {
 		return NULL;
-	}
-
-	/* schema base_dn */
-	schema_copy->base_dn = ldb_dn_copy(schema_copy, schema->base_dn);
-	if (!schema_copy->base_dn) {
-		goto failed;
 	}
 
 	/* copy prexiMap & schemaInfo */
@@ -93,6 +88,8 @@ struct dsdb_schema *dsdb_schema_copy_shallow(TALLOC_CTX *mem_ctx,
 	}
 	schema_copy->num_attributes = schema->num_attributes;
 
+	schema_copy->refresh_interval = schema->refresh_interval;
+
 	/* rebuild indexes */
 	ret = dsdb_setup_sorted_accessors(ldb, schema_copy);
 	if (ret != LDB_SUCCESS) {
@@ -100,8 +97,6 @@ struct dsdb_schema *dsdb_schema_copy_shallow(TALLOC_CTX *mem_ctx,
 	}
 
 	/* leave reload_seq_number = 0 so it will be refresh ASAP */
-	schema_copy->refresh_fn = schema->refresh_fn;
-	schema_copy->loaded_from_module = schema->loaded_from_module;
 
 	return schema_copy;
 
@@ -458,7 +453,7 @@ static bool dsdb_schema_unique_attribute(const char *attr)
 	const char *attrs[] = { "objectGUID", "objectSid" , NULL };
 	unsigned int i;
 	for (i=0;attrs[i];i++) {
-		if (strcasecmp(attr, attrs[i]) == 0) {
+		if (ldb_attr_cmp(attr, attrs[i]) == 0) {
 			return true;
 		}
 	}
@@ -614,14 +609,17 @@ static int dsdb_schema_setup_ldb_schema_attribute(struct ldb_context *ldb,
 	}\
 } while (0)
 
-WERROR dsdb_attribute_from_ldb(struct ldb_context *ldb,
-			       struct dsdb_schema *schema,
-			       struct ldb_message *msg)
+/** Create an dsdb_attribute out of ldb message, attr must be already talloced
+ */
+
+WERROR dsdb_attribute_from_ldb(const struct dsdb_schema *schema,
+			       struct ldb_message *msg,
+			       struct dsdb_attribute *attr)
 {
 	WERROR status;
-	struct dsdb_attribute *attr = talloc_zero(schema, struct dsdb_attribute);
-	if (!attr) {
-		return WERR_NOMEM;
+	if (attr == NULL) {
+		DEBUG(0, ("%s: attr is null, it's expected not to be so\n", __location__));
+		return WERR_INVALID_PARAM;
 	}
 
 	GET_STRING_LDB(msg, "cn", attr, attr, cn, false);
@@ -690,6 +688,25 @@ WERROR dsdb_attribute_from_ldb(struct ldb_context *ldb,
 	GET_BOOL_LDB(msg, "isDefunct", attr, isDefunct, false);
 	GET_BOOL_LDB(msg, "systemOnly", attr, systemOnly, false);
 
+	return WERR_OK;
+}
+
+WERROR dsdb_set_attribute_from_ldb_dups(struct ldb_context *ldb,
+					struct dsdb_schema *schema,
+					struct ldb_message *msg,
+					bool checkdups)
+{
+	WERROR status;
+	struct dsdb_attribute *attr = talloc_zero(schema, struct dsdb_attribute);
+	if (!attr) {
+		return WERR_NOMEM;
+	}
+
+	status = dsdb_attribute_from_ldb(schema, msg, attr);
+	if (!W_ERROR_IS_OK(status)) {
+		return status;
+	}
+
 	attr->syntax = dsdb_syntax_for_attribute(attr);
 	if (!attr->syntax) {
 		DEBUG(0,(__location__ ": Unknown schema syntax for %s\n",
@@ -705,12 +722,44 @@ WERROR dsdb_attribute_from_ldb(struct ldb_context *ldb,
 		return WERR_DS_ATT_SCHEMA_REQ_SYNTAX;
 	}
 
+	if (checkdups) {
+		const struct dsdb_attribute *a2;
+		struct dsdb_attribute **a;
+		uint32_t i;
+
+		a2 = dsdb_attribute_by_attributeID_id(schema,
+						      attr->attributeID_id);
+		if (a2 == NULL) {
+			goto done;
+		}
+
+		i = schema->attributes_to_remove_size;
+		a = talloc_realloc(schema, schema->attributes_to_remove,
+				   struct dsdb_attribute *, i + 1);
+		if (a == NULL) {
+			return WERR_NOMEM;
+		}
+		/* Mark the old attribute as to be removed */
+		a[i] = discard_const_p(struct dsdb_attribute, a2);
+		schema->attributes_to_remove = a;
+		schema->attributes_to_remove_size++;
+	}
+
+done:
 	DLIST_ADD(schema->attributes, attr);
 	return WERR_OK;
 }
 
-WERROR dsdb_class_from_ldb(struct dsdb_schema *schema,
-			   struct ldb_message *msg)
+WERROR dsdb_set_attribute_from_ldb(struct ldb_context *ldb,
+				   struct dsdb_schema *schema,
+				   struct ldb_message *msg)
+{
+	return dsdb_set_attribute_from_ldb_dups(ldb, schema, msg, false);
+}
+
+WERROR dsdb_set_class_from_ldb_dups(struct dsdb_schema *schema,
+				    struct ldb_message *msg,
+				    bool checkdups)
 {
 	WERROR status;
 	struct dsdb_class *obj = talloc_zero(schema, struct dsdb_class);
@@ -757,6 +806,7 @@ WERROR dsdb_class_from_ldb(struct dsdb_schema *schema,
 	GET_STRING_LDB(msg, "defaultSecurityDescriptor", obj, obj, defaultSecurityDescriptor, false);
 
 	GET_UINT32_LDB(msg, "schemaFlagsEx", obj, schemaFlagsEx);
+	GET_UINT32_LDB(msg, "systemFlags", obj, systemFlags);
 	GET_BLOB_LDB(msg, "msDs-Schema-Extensions", obj, obj, msDs_Schema_Extensions);
 
 	GET_BOOL_LDB(msg, "showInAdvancedViewOnly", obj, showInAdvancedViewOnly, false);
@@ -767,13 +817,70 @@ WERROR dsdb_class_from_ldb(struct dsdb_schema *schema,
 	GET_BOOL_LDB(msg, "isDefunct", obj, isDefunct, false);
 	GET_BOOL_LDB(msg, "systemOnly", obj, systemOnly, false);
 
+	if (checkdups) {
+		const struct dsdb_class *c2;
+		struct dsdb_class **c;
+		uint32_t i;
+
+		c2 = dsdb_class_by_governsID_id(schema, obj->governsID_id);
+		if (c2 == NULL) {
+			goto done;
+		}
+
+		i = schema->classes_to_remove_size;
+		c = talloc_realloc(schema, schema->classes_to_remove,
+				   struct dsdb_class *, i + 1);
+		if (c == NULL) {
+			return WERR_NOMEM;
+		}
+		/* Mark the old class to be removed */
+		c[i] = discard_const_p(struct dsdb_class, c2);
+		schema->classes_to_remove = c;
+		schema->classes_to_remove_size++;
+	}
+
+done:
 	DLIST_ADD(schema->classes, obj);
 	return WERR_OK;
+}
+
+WERROR dsdb_set_class_from_ldb(struct dsdb_schema *schema,
+			       struct ldb_message *msg)
+{
+	return dsdb_set_class_from_ldb_dups(schema, msg, false);
 }
 
 #define dsdb_oom(error_string, mem_ctx) *error_string = talloc_asprintf(mem_ctx, "dsdb out of memory at %s:%d\n", __FILE__, __LINE__)
 
 /* 
+ Fill a DSDB schema from the ldb results provided.  This is called
+ directly when a schema must be created with a pre-initialised prefixMap
+*/
+
+int dsdb_load_ldb_results_into_schema(TALLOC_CTX *mem_ctx, struct ldb_context *ldb,
+				      struct dsdb_schema *schema,
+				      struct ldb_result *attrs_class_res,
+				      char **error_string)
+{
+	unsigned int i;
+
+	schema->ts_last_change = 0;
+	for (i=0; i < attrs_class_res->count; i++) {
+		WERROR status = dsdb_schema_set_el_from_ldb_msg(ldb, schema, attrs_class_res->msgs[i]);
+		if (!W_ERROR_IS_OK(status)) {
+			*error_string = talloc_asprintf(mem_ctx,
+				      "dsdb_load_ldb_results_into_schema: failed to load attribute or class definition: %s:%s",
+				      ldb_dn_get_linearized(attrs_class_res->msgs[i]->dn),
+				      win_errstr(status));
+			DEBUG(0,(__location__ ": %s\n", *error_string));
+			return LDB_ERR_CONSTRAINT_VIOLATION;
+		}
+	}
+
+	return LDB_SUCCESS;
+}
+
+/*
  Create a DSDB schema from the ldb results provided.  This is called
  directly when the schema is provisioned from an on-disk LDIF file, or
  from dsdb_schema_from_schema_dn in schema_fsmo
@@ -781,30 +888,47 @@ WERROR dsdb_class_from_ldb(struct dsdb_schema *schema,
 
 int dsdb_schema_from_ldb_results(TALLOC_CTX *mem_ctx, struct ldb_context *ldb,
 				 struct ldb_result *schema_res,
-				 struct ldb_result *attrs_res, struct ldb_result *objectclass_res, 
+				 struct ldb_result *attrs_class_res,
 				 struct dsdb_schema **schema_out,
 				 char **error_string)
 {
 	WERROR status;
-	unsigned int i;
 	const struct ldb_val *prefix_val;
 	const struct ldb_val *info_val;
 	struct ldb_val info_val_default;
 	struct dsdb_schema *schema;
+	void *lp_opaque = ldb_get_opaque(ldb, "loadparm");
+	int ret;
 
-	schema = dsdb_new_schema(mem_ctx);
-	if (!schema) {
+	TALLOC_CTX *tmp_ctx = talloc_new(mem_ctx);
+	if (!tmp_ctx) {
 		dsdb_oom(error_string, mem_ctx);
 		return ldb_operr(ldb);
 	}
 
-	schema->base_dn = talloc_steal(schema, schema_res->msgs[0]->dn);
+	schema = dsdb_new_schema(tmp_ctx);
+	if (!schema) {
+		dsdb_oom(error_string, mem_ctx);
+		talloc_free(tmp_ctx);
+		return ldb_operr(ldb);
+	}
+
+	if (lp_opaque) {
+		struct loadparm_context *lp_ctx = talloc_get_type_abort(lp_opaque, struct loadparm_context);
+		schema->refresh_interval = lpcfg_parm_int(lp_ctx, NULL, "dsdb", "schema_reload_interval", schema->refresh_interval);
+		lp_ctx = talloc_get_type(ldb_get_opaque(ldb, "loadparm"),
+					 struct loadparm_context);
+		schema->fsmo.update_allowed = lpcfg_parm_bool(lp_ctx, NULL,
+							      "dsdb", "schema update allowed",
+							      false);
+	}
 
 	prefix_val = ldb_msg_find_ldb_val(schema_res->msgs[0], "prefixMap");
 	if (!prefix_val) {
 		*error_string = talloc_asprintf(mem_ctx, 
 						"schema_fsmo_init: no prefixMap attribute found");
 		DEBUG(0,(__location__ ": %s\n", *error_string));
+		talloc_free(tmp_ctx);
 		return LDB_ERR_CONSTRAINT_VIOLATION;
 	}
 	info_val = ldb_msg_find_ldb_val(schema_res->msgs[0], "schemaInfo");
@@ -815,6 +939,7 @@ int dsdb_schema_from_ldb_results(TALLOC_CTX *mem_ctx, struct ldb_context *ldb,
 			                                "schema_fsmo_init: dsdb_schema_info_blob_new() failed - %s",
 			                                win_errstr(status));
 			DEBUG(0,(__location__ ": %s\n", *error_string));
+			talloc_free(tmp_ctx);
 			return ldb_operr(ldb);
 		}
 		info_val = &info_val_default;
@@ -826,43 +951,28 @@ int dsdb_schema_from_ldb_results(TALLOC_CTX *mem_ctx, struct ldb_context *ldb,
 			      "schema_fsmo_init: failed to load oid mappings: %s",
 			      win_errstr(status));
 		DEBUG(0,(__location__ ": %s\n", *error_string));
+		talloc_free(tmp_ctx);
 		return LDB_ERR_CONSTRAINT_VIOLATION;
 	}
 
-	for (i=0; i < attrs_res->count; i++) {
-		status = dsdb_attribute_from_ldb(ldb, schema, attrs_res->msgs[i]);
-		if (!W_ERROR_IS_OK(status)) {
-			*error_string = talloc_asprintf(mem_ctx, 
-				      "schema_fsmo_init: failed to load attribute definition: %s:%s",
-				      ldb_dn_get_linearized(attrs_res->msgs[i]->dn),
-				      win_errstr(status));
-			DEBUG(0,(__location__ ": %s\n", *error_string));
-			return LDB_ERR_CONSTRAINT_VIOLATION;
-		}
-	}
-
-	for (i=0; i < objectclass_res->count; i++) {
-		status = dsdb_class_from_ldb(schema, objectclass_res->msgs[i]);
-		if (!W_ERROR_IS_OK(status)) {
-			*error_string = talloc_asprintf(mem_ctx, 
-				      "schema_fsmo_init: failed to load class definition: %s:%s",
-				      ldb_dn_get_linearized(objectclass_res->msgs[i]->dn),
-				      win_errstr(status));
-			DEBUG(0,(__location__ ": %s\n", *error_string));
-			return LDB_ERR_CONSTRAINT_VIOLATION;
-		}
+	ret = dsdb_load_ldb_results_into_schema(mem_ctx, ldb, schema, attrs_class_res, error_string);
+	if (ret != LDB_SUCCESS) {
+		talloc_free(tmp_ctx);
+		return ret;
 	}
 
 	schema->fsmo.master_dn = ldb_msg_find_attr_as_dn(ldb, schema, schema_res->msgs[0], "fSMORoleOwner");
-	if (ldb_dn_compare(samdb_ntds_settings_dn(ldb), schema->fsmo.master_dn) == 0) {
+	if (ldb_dn_compare(samdb_ntds_settings_dn(ldb, tmp_ctx), schema->fsmo.master_dn) == 0) {
 		schema->fsmo.we_are_master = true;
 	} else {
 		schema->fsmo.we_are_master = false;
 	}
 
-	DEBUG(5, ("schema_fsmo_init: we are master: %s\n",
-		  (schema->fsmo.we_are_master?"yes":"no")));
+	DEBUG(5, ("schema_fsmo_init: we are master[%s] updates allowed[%s]\n",
+		  (schema->fsmo.we_are_master?"yes":"no"),
+		  (schema->fsmo.update_allowed?"yes":"no")));
 
-	*schema_out = schema;
+	*schema_out = talloc_steal(mem_ctx, schema);
+	talloc_free(tmp_ctx);
 	return LDB_SUCCESS;
 }

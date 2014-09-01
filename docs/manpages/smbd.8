@@ -1,13 +1,22 @@
 '\" t
 .\"     Title: smbd
 .\"    Author: [see the "AUTHOR" section]
-.\" Generator: DocBook XSL Stylesheets v1.75.2 <http://docbook.sf.net/>
-.\"      Date: 06/22/2012
+.\" Generator: DocBook XSL Stylesheets v1.78.1 <http://docbook.sf.net/>
+.\"      Date: 07/31/2014
 .\"    Manual: System Administration tools
-.\"    Source: Samba 3.6
+.\"    Source: Samba 4.0
 .\"  Language: English
 .\"
-.TH "SMBD" "8" "06/22/2012" "Samba 3\&.6" "System Administration tools"
+.TH "SMBD" "8" "07/31/2014" "Samba 4\&.0" "System Administration tools"
+.\" -----------------------------------------------------------------
+.\" * Define some portability stuff
+.\" -----------------------------------------------------------------
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.\" http://bugs.debian.org/507673
+.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.ie \n(.g .ds Aq \(aq
+.el       .ds Aq '
 .\" -----------------------------------------------------------------
 .\" * set default formatting
 .\" -----------------------------------------------------------------
@@ -22,7 +31,7 @@
 smbd \- server to provide SMB/CIFS services to clients
 .SH "SYNOPSIS"
 .HP \w'\ 'u
-smbd [\-D] [\-F] [\-S] [\-i] [\-h] [\-V] [\-b] [\-d\ <debug\ level>] [\-l\ <log\ directory>] [\-p\ <port\ number(s)>] [\-P\ <profiling\ level>] [\-O\ <socket\ option>] [\-s\ <configuration\ file>]
+smbd [\-D|\-\-daemon] [\-F|\-\-foreground] [\-S|\-\-log\-stdout] [\-i|\-\-interactive] [\-V] [\-b|\-\-build\-options] [\-d\ <debug\ level>] [\-l|\-\-log\-basename\ <log\ directory>] [\-p\ <port\ number(s)>] [\-P\ <profiling\ level>] [\-s\ <configuration\ file>] [\-\-no\-process\-group]
 .SH "DESCRIPTION"
 .PP
 This program is part of the
@@ -46,7 +55,7 @@ smbd
 killed and restarted\&.
 .SH "OPTIONS"
 .PP
-\-D
+\-D|\-\-daemon
 .RS 4
 If specified, this parameter causes the server to operate as a daemon\&. That is, it detaches itself and runs in the background, fielding requests on the appropriate port\&. Operating the server as a daemon is the recommended way of running
 smbd
@@ -55,7 +64,7 @@ smbd
 is executed on the command line of a shell\&.
 .RE
 .PP
-\-F
+\-F|\-\-foreground
 .RS 4
 If specified, this parameter causes the main
 smbd
@@ -65,19 +74,19 @@ under process supervisors such as
 supervise
 and
 svscan
-from Daniel J\&. Bernstein\'s
+from Daniel J\&. Bernstein\*(Aqs
 daemontools
 package, or the AIX process monitor\&.
 .RE
 .PP
-\-S
+\-S|\-\-log\-stdout
 .RS 4
 If specified, this parameter causes
 smbd
 to log to standard output rather than a file\&.
 .RE
 .PP
-\-i
+\-i|\-\-interactive
 .RS 4
 If this parameter is specified it causes the server to run "interactively", not as a daemon, even if the server is executed on the command line of a shell\&. Setting this parameter negates the implicit daemon mode when run from the command line\&.
 smbd
@@ -96,7 +105,7 @@ The higher this value, the more detail will be logged to the log files about the
 Levels above 1 will generate considerable amounts of log data, and should only be used when investigating a problem\&. Levels above 3 are designed for use only by developers and generate HUGE amounts of log data, most of which is extremely cryptic\&.
 .sp
 Note that specifying this parameter here will override the
-\m[blue]\fB\%smb.conf.5.html#\fR\m[]
+\m[blue]\fBlog level\fR\m[]
 parameter in the
 smb\&.conf
 file\&.
@@ -107,7 +116,7 @@ file\&.
 Prints the program version number\&.
 .RE
 .PP
-\-s|\-\-configfile <configuration file>
+\-s|\-\-configfile=<configuration file>
 .RS 4
 The file specified contains the configuration details required by the server\&. The information in this file includes server\-specific information such as what printcap file to use, as well as descriptions of all the services that the server is to provide\&. See
 smb\&.conf
@@ -121,12 +130,29 @@ Base directory name for log/debug files\&. The extension
 will be appended (e\&.g\&. log\&.smbclient, log\&.smbd, etc\&.\&.\&.)\&. The log file is never removed by the client\&.
 .RE
 .PP
-\-h|\-\-help
+\-\-option=<name>=<value>
+.RS 4
+Set the
+\fBsmb.conf\fR(5)
+option "<name>" to value "<value>" from the command line\&. This overrides compiled\-in defaults and options read from the configuration file\&.
+.RE
+.PP
+\-?|\-\-help
 .RS 4
 Print a summary of command line options\&.
 .RE
 .PP
-\-b
+\-\-usage
+.RS 4
+Display brief usage message\&.
+.RE
+.PP
+\-\-no\-process\-group
+.RS 4
+Do not create a new process group for smbd\&.
+.RE
+.PP
+\-b|\-\-build\-options
 .RS 4
 Prints information about how Samba was built\&.
 .RE
@@ -198,8 +224,7 @@ if this variable is not defined) as the name of the printer to use\&. This is no
 .SH "PAM INTERACTION"
 .PP
 Samba uses PAM for authentication (when presented with a plaintext password), for account checking (is this account disabled?) and for session management\&. The degree too which samba supports PAM is restricted by the limitations of the SMB protocol and the
-\m[blue]\fBobey pam restrictions\fR\m[]
-\fBsmb.conf\fR(5)
+\m[blue]\fBobey pam restrictions\fR\m[]\fBsmb.conf\fR(5)
 parameter\&. When this is set, the following restrictions apply:
 .sp
 .RS 4
@@ -221,7 +246,7 @@ parameter\&. When this is set, the following restrictions apply:
 .sp -1
 .IP \(bu 2.3
 .\}
-\fISession Management\fR: When not using share level security, users must pass PAM\'s session checks before access is granted\&. Note however, that this is bypassed in share level security\&. Note also that some older pam configuration files may need a line added for session support\&.
+\fISession Management\fR: When not using share level security, users must pass PAM\*(Aqs session checks before access is granted\&. Note however, that this is bypassed in share level security\&. Note also that some older pam configuration files may need a line added for session support\&.
 .RE
 .SH "VERSION"
 .PP
@@ -235,7 +260,7 @@ The number and nature of diagnostics available depends on the debug level used b
 Most messages are reasonably self\-explanatory\&. Unfortunately, at the time this man page was created, there are too many diagnostics available in the source code to warrant describing each and every diagnostic\&. At this stage your best bet is still to grep the source code and inspect the conditions that gave rise to the diagnostics you are seeing\&.
 .SH "TDB FILES"
 .PP
-Samba stores it\'s data in several TDB (Trivial Database) files, usually located in
+Samba stores it\*(Aqs data in several TDB (Trivial Database) files, usually located in
 /var/lib/samba\&.
 .PP
 (*) information persistent across restarts (but not necessarily important to backup)\&.
@@ -253,11 +278,6 @@ byte range locks
 browse\&.dat
 .RS 4
 browse lists
-.RE
-.PP
-connections\&.tdb
-.RS 4
-share connections (used to enforce max connections, etc\&.\&.\&.)
 .RE
 .PP
 gencache\&.tdb
@@ -315,9 +335,19 @@ registry\&.tdb
 Windows registry skeleton (connect via regedit\&.exe)
 .RE
 .PP
-sessionid\&.tdb
+smbXsrv_session_global\&.tdb
 .RS 4
-session information (e\&.g\&. support for \'utmp = yes\')
+session information (e\&.g\&. support for \*(Aqutmp = yes\*(Aq)
+.RE
+.PP
+smbXsrv_tcon_global\&.tdb
+.RS 4
+share connections (used to enforce max connections, etc\&.\&.\&.)
+.RE
+.PP
+smbXsrv_open_global\&.tdb
+.RS 4
+open file handles (used durable handles, etc\&.\&.\&.)
 .RE
 .PP
 share_info\&.tdb*
@@ -327,17 +357,17 @@ share acls
 .PP
 winbindd_cache\&.tdb
 .RS 4
-winbindd\'s cache of user lists, etc\&.\&.\&.
+winbindd\*(Aqs cache of user lists, etc\&.\&.\&.
 .RE
 .PP
 winbindd_idmap\&.tdb*
 .RS 4
-winbindd\'s local idmap db
+winbindd\*(Aqs local idmap db
 .RE
 .PP
 wins\&.dat*
 .RS 4
-wins database when \'wins support = yes\'
+wins database when \*(Aqwins support = yes\*(Aq
 .RE
 .SH "SIGNALS"
 .PP
@@ -347,11 +377,10 @@ a SIGHUP will cause it to reload its
 smb\&.conf
 configuration file within a short period of time\&.
 .PP
-To shut down a user\'s
+To shut down a user\*(Aqs
 smbd
 process it is recommended that
-SIGKILL (\-9)
-\fINOT\fR
+SIGKILL (\-9)\fINOT\fR
 be used, except as a last resort, as this may leave the shared memory area in an inconsistent state\&. The safe way to terminate an
 smbd
 is to send it a SIGTERM (\-15) signal and wait for it to die on its own\&.
@@ -373,8 +402,7 @@ is in a state of waiting for an incoming SMB before issuing them\&. It is possib
 \fBnmbd\fR(8),
 \fBsmb.conf\fR(5),
 \fBsmbclient\fR(1),
-\fBtestparm\fR(1),
-\fBtestprns\fR(1), and the Internet RFC\'s
+\fBtestparm\fR(1), and the Internet RFC\*(Aqs
 rfc1001\&.txt,
 rfc1002\&.txt\&. In addition the CIFS (formerly SMB) specification is available as a link from the Web page
 http://samba\&.org/cifs/\&.

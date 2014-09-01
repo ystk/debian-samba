@@ -386,7 +386,9 @@ struct ncList {
 static WERROR get_master_ncs(TALLOC_CTX *mem_ctx, struct ldb_context *samdb,
 			     const char *ntds_guid_str, struct ncList **master_nc_list)
 {
-	const char *attrs[] = { "hasMasterNCs", NULL };
+	const char *post_2003_attrs[] = { "msDS-hasMasterNCs", "hasPartialReplicaNCs", NULL };
+	const char *pre_2003_attrs[] = { "hasMasterNCs", "hasPartialReplicaNCs", NULL };
+	const char **attrs = post_2003_attrs;
 	struct ldb_result *res;
 	struct ncList *nc_list = NULL;
 	struct ncList *nc_list_elem;
@@ -394,8 +396,17 @@ static WERROR get_master_ncs(TALLOC_CTX *mem_ctx, struct ldb_context *samdb,
 	unsigned int i;
 	char *nc_str;
 
+	/* In W2003 and greater, msDS-hasMasterNCs attribute lists the writable NC replicas */
 	ret = ldb_search(samdb, mem_ctx, &res, ldb_get_config_basedn(samdb),
-			LDB_SCOPE_DEFAULT, attrs, "(objectguid=%s)", ntds_guid_str);
+			LDB_SCOPE_DEFAULT, post_2003_attrs, "(objectguid=%s)", ntds_guid_str);
+
+	if (ret != LDB_SUCCESS) {
+		DEBUG(0,(__location__ ": Failed objectguid search - %s\n", ldb_errstring(samdb)));
+
+		attrs = post_2003_attrs;
+		ret = ldb_search(samdb, mem_ctx, &res, ldb_get_config_basedn(samdb),
+			LDB_SCOPE_DEFAULT, pre_2003_attrs, "(objectguid=%s)", ntds_guid_str);
+	}
 
 	if (ret != LDB_SUCCESS) {
 		DEBUG(0,(__location__ ": Failed objectguid search - %s\n", ldb_errstring(samdb)));
@@ -408,27 +419,27 @@ static WERROR get_master_ncs(TALLOC_CTX *mem_ctx, struct ldb_context *samdb,
 	}
 
 	for (i = 0; i < res->count; i++) {
-		struct ldb_message_element *msg_elem = ldb_msg_find_element(res->msgs[i], "hasMasterNCs");
-		unsigned int k;
+		struct ldb_message_element *msg_elem;
+		unsigned int k, a;
 
-		if (!msg_elem || msg_elem->num_values == 0) {
-			DEBUG(0,(__location__ ": Failed: Attribute hasMasterNCs not found - %s\n",
-			      ldb_errstring(samdb)));
-			return WERR_INTERNAL_ERROR;
+		for (a=0; attrs[a]; a++) {
+			msg_elem = ldb_msg_find_element(res->msgs[i], attrs[a]);
+			if (!msg_elem || msg_elem->num_values == 0) {
+				continue;
+			}
+
+			for (k = 0; k < msg_elem->num_values; k++) {
+				/* copy the string on msg_elem->values[k]->data to nc_str */
+				nc_str = talloc_strndup(mem_ctx, (char *)msg_elem->values[k].data, msg_elem->values[k].length);
+				W_ERROR_HAVE_NO_MEMORY(nc_str);
+
+				nc_list_elem = talloc_zero(mem_ctx, struct ncList);
+				W_ERROR_HAVE_NO_MEMORY(nc_list_elem);
+				nc_list_elem->dn = ldb_dn_new(mem_ctx, samdb, nc_str);
+				W_ERROR_HAVE_NO_MEMORY(nc_list_elem);
+				DLIST_ADD(nc_list, nc_list_elem);
+			}
 		}
-
-		for (k = 0; k < msg_elem->num_values; k++) {
-			/* copy the string on msg_elem->values[k]->data to nc_str */
-			nc_str = talloc_strndup(mem_ctx, (char *)msg_elem->values[k].data, msg_elem->values[k].length);
-			W_ERROR_HAVE_NO_MEMORY(nc_str);
-
-			nc_list_elem = talloc_zero(mem_ctx, struct ncList);
-			W_ERROR_HAVE_NO_MEMORY(nc_list_elem);
-			nc_list_elem->dn = ldb_dn_new(mem_ctx, samdb, nc_str);
-			W_ERROR_HAVE_NO_MEMORY(nc_list_elem);
-			DLIST_ADD(nc_list, nc_list_elem);
-		}
-
 	}
 
 	*master_nc_list = nc_list;
@@ -522,6 +533,7 @@ static WERROR fill_neighbor_from_repsFrom(TALLOC_CTX *mem_ctx,
 	neigh->source_dsa_obj_guid = reps_from->source_dsa_obj_guid;
 
 	ret = dsdb_find_dn_by_guid(samdb, mem_ctx, &reps_from->source_dsa_obj_guid,
+				   DSDB_SEARCH_SHOW_RECYCLED,
 				   &source_dsa_dn);
 
 	if (ret != LDB_SUCCESS) {
@@ -533,13 +545,15 @@ static WERROR fill_neighbor_from_repsFrom(TALLOC_CTX *mem_ctx,
 	neigh->source_dsa_obj_dn = ldb_dn_get_linearized(source_dsa_dn);
 	neigh->naming_context_dn = ldb_dn_get_linearized(nc_dn);
 
-	if (dsdb_find_guid_by_dn(samdb, nc_dn, &neigh->naming_context_obj_guid)
+	if (dsdb_find_guid_by_dn(samdb, nc_dn,
+				 &neigh->naming_context_obj_guid)
 			!= LDB_SUCCESS) {
 		return WERR_DS_DRA_INTERNAL_ERROR;
 	}
 
 	if (!GUID_all_zero(&reps_from->transport_guid)) {
 		ret = dsdb_find_dn_by_guid(samdb, mem_ctx, &reps_from->transport_guid,
+					   DSDB_SEARCH_SHOW_RECYCLED,
 					   &transport_obj_dn);
 		if (ret != LDB_SUCCESS) {
 			return WERR_DS_DRA_INTERNAL_ERROR;
@@ -657,7 +671,10 @@ static WERROR fill_neighbor_from_repsTo(TALLOC_CTX *mem_ctx,
 	neigh->last_attempt = reps_to->last_attempt;
 	neigh->source_dsa_obj_guid = reps_to->source_dsa_obj_guid;
 
-	ret = dsdb_find_dn_by_guid(samdb, mem_ctx, &reps_to->source_dsa_obj_guid, &source_dsa_dn);
+	ret = dsdb_find_dn_by_guid(samdb, mem_ctx,
+				   &reps_to->source_dsa_obj_guid,
+				   DSDB_SEARCH_SHOW_RECYCLED,
+				   &source_dsa_dn);
 	if (ret != LDB_SUCCESS) {
 		DEBUG(0,(__location__ ": Failed to find DN for neighbor GUID %s\n",
 			 GUID_string(mem_ctx, &reps_to->source_dsa_obj_guid)));
@@ -675,6 +692,9 @@ static WERROR fill_neighbor_from_repsTo(TALLOC_CTX *mem_ctx,
 		return WERR_DS_DRA_INTERNAL_ERROR;
 	}
 
+	neigh->last_success = reps_to->last_success;
+	neigh->result_last_attempt = reps_to->result_last_attempt;
+	neigh->consecutive_sync_failures = reps_to->consecutive_sync_failures;
 	return WERR_OK;
 }
 
@@ -770,8 +790,6 @@ NTSTATUS kccdrs_replica_get_info(struct irpc_message *msg,
 	struct ldb_context *samdb;
 	TALLOC_CTX *mem_ctx;
 	enum drsuapi_DsReplicaInfoType info_type;
-	uint32_t flags;
-	const char *attribute_name, *value_dn;
 
 	service = talloc_get_type(msg->private_data, struct kccsrv_service);
 	samdb = service->samdb;
@@ -810,9 +828,6 @@ NTSTATUS kccdrs_replica_get_info(struct irpc_message *msg,
 		info_type = req2->info_type;
 		object_dn_str = req2->object_dn;
 		req_src_dsa_guid = req2->source_dsa_guid;
-		flags = req2->flags;
-		attribute_name = req2->attribute_name;
-		value_dn = req2->value_dn_str;
 	}
 
 	reply = req->out.info;
@@ -845,35 +860,39 @@ NTSTATUS kccdrs_replica_get_info(struct irpc_message *msg,
 							     ldb_dn_new(mem_ctx, samdb, object_dn_str));
 		break;
 	case DRSUAPI_DS_REPLICA_INFO_CURSORS3: /* On MS-DRSR it is DS_REPL_INFO_CURSORS_3_FOR_NC */
-		status = WERR_INVALID_LEVEL;
+		status = WERR_NOT_SUPPORTED;
 		break;
 	case DRSUAPI_DS_REPLICA_INFO_UPTODATE_VECTOR_V1: /* On MS-DRSR it is DS_REPL_INFO_UPTODATE_VECTOR_V1 */
-		status = WERR_INVALID_LEVEL;
+		status = WERR_NOT_SUPPORTED;
 		break;
 	case DRSUAPI_DS_REPLICA_INFO_OBJ_METADATA: /* On MS-DRSR it is DS_REPL_INFO_METADATA_FOR_OBJ */
-		status = WERR_INVALID_LEVEL;
+		/*
+		 * It should be too complicated to filter the metadata2 to remove the additional data
+		 * as metadata2 is a superset of metadata
+		 */
+		status = WERR_NOT_SUPPORTED;
 		break;
 	case DRSUAPI_DS_REPLICA_INFO_OBJ_METADATA2: /* On MS-DRSR it is DS_REPL_INFO_METADATA_FOR_OBJ */
 		status = kccdrs_replica_get_info_obj_metadata2(mem_ctx, samdb, req, reply,
 							       ldb_dn_new(mem_ctx, samdb, object_dn_str), base_index);
 		break;
 	case DRSUAPI_DS_REPLICA_INFO_ATTRIBUTE_VALUE_METADATA: /* On MS-DRSR it is DS_REPL_INFO_METADATA_FOR_ATTR_VALUE */
-		status = WERR_INVALID_LEVEL;
+		status = WERR_NOT_SUPPORTED;
 		break;
 	case DRSUAPI_DS_REPLICA_INFO_ATTRIBUTE_VALUE_METADATA2: /* On MS-DRSR it is DS_REPL_INFO_METADATA_2_FOR_ATTR_VALUE */
-		status = WERR_INVALID_LEVEL;
+		status = WERR_NOT_SUPPORTED;
 		break;
 	case DRSUAPI_DS_REPLICA_INFO_KCC_DSA_CONNECT_FAILURES: /* On MS-DRSR it is DS_REPL_INFO_KCC_DSA_CONNECT_FAILURES */
-		status = WERR_INVALID_LEVEL;
+		status = WERR_NOT_SUPPORTED;
 		break;
 	case DRSUAPI_DS_REPLICA_INFO_KCC_DSA_LINK_FAILURES: /* On MS-DRSR it is DS_REPL_INFO_KCC_LINK_FAILURES */
-		status = WERR_INVALID_LEVEL;
+		status = WERR_NOT_SUPPORTED;
 		break;
 	case DRSUAPI_DS_REPLICA_INFO_CLIENT_CONTEXTS: /* On MS-DRSR it is DS_REPL_INFO_CLIENT_CONTEXTS */
-		status = WERR_INVALID_LEVEL;
+		status = WERR_NOT_SUPPORTED;
 		break;
 	case DRSUAPI_DS_REPLICA_INFO_SERVER_OUTGOING_CALLS: /* On MS-DRSR it is DS_REPL_INFO_SERVER_OUTGOING_CALLS */
-		status = WERR_INVALID_LEVEL;
+		status = WERR_NOT_SUPPORTED;
 		break;
 	default:
 		DEBUG(1,(__location__ ": Unsupported DsReplicaGetInfo info_type %u\n",

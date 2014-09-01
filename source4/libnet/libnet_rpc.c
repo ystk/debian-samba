@@ -109,6 +109,10 @@ static struct composite_context* libnet_RpcConnectSrv_send(struct libnet_context
 	case LIBNET_RPC_CONNECT_SERVER:
 	case LIBNET_RPC_CONNECT_SERVER_ADDRESS:
 		b->flags = r->in.dcerpc_flags;
+		break;
+	default:
+		/* other types have already been checked before */
+		break;
 	}
 
 	if (DEBUGLEVEL >= 10) {
@@ -185,11 +189,11 @@ static NTSTATUS libnet_RpcConnectSrv_recv(struct composite_context *c,
 					  struct libnet_RpcConnect *r)
 {
 	NTSTATUS status;
-	struct rpc_connect_srv_state *s = talloc_get_type(c->private_data,
-					  struct rpc_connect_srv_state);
 
 	status = composite_wait(c);
 	if (NT_STATUS_IS_OK(status)) {
+		struct rpc_connect_srv_state *s;
+
 		/* move the returned rpc pipe between memory contexts */
 		s = talloc_get_type(c->private_data, struct rpc_connect_srv_state);
 		r->out.dcerpc_pipe = talloc_steal(mem_ctx, s->r.out.dcerpc_pipe);
@@ -568,6 +572,15 @@ static void continue_dci_rpc_connect(struct composite_context *ctx)
 	s->qos.effective_only      = 0;
 
 	s->attr.sec_qos = &s->qos;
+
+	if (s->lsa_pipe->binding->transport == NCACN_IP_TCP) {
+		/*
+		 * Skip to creating the actual connection. We can't open a
+		 * policy handle over tcpip.
+		 */
+		continue_epm_map_binding_send(c);
+		return;
+	}
 
 	s->lsa_open_policy.in.attr        = &s->attr;
 	s->lsa_open_policy.in.system_name = talloc_asprintf(c, "\\");

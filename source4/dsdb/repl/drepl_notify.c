@@ -195,7 +195,7 @@ static void dreplsrv_notify_op_callback(struct tevent_req *subreq)
 			 ldb_dn_get_linearized(op->source_dsa->partition->dn),
 			 nt_errstr(status), win_errstr(werr)));
 	} else {
-		DEBUG(2,("dreplsrv_notify: DsReplicaSync OK for %s\n",
+		DEBUG(2,("dreplsrv_notify: DsReplicaSync successfuly sent to %s\n",
 			 op->source_dsa->repsFrom1->other_info->dns_name));
 		op->source_dsa->notify_uSN = op->uSN;
 	}
@@ -451,7 +451,7 @@ WERROR dreplsrv_notify_schedule(struct dreplsrv_service *service, uint32_t next_
 	/* reset the next scheduled timestamp */
 	service->notify.next_event = next_time;
 
-	new_te = event_add_timed(service->task->event_ctx, service,
+	new_te = tevent_add_timer(service->task->event_ctx, service,
 			         service->notify.next_event,
 			         dreplsrv_notify_handler_te, service);
 	W_ERROR_HAVE_NO_MEMORY(new_te);

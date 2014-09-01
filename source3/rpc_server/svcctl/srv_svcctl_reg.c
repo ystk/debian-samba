@@ -224,13 +224,13 @@ static bool read_init_file(TALLOC_CTX *mem_ctx,
 		p = strstr(str, "Description:");
 		if (p != NULL) {
 			char *desc;
+			size_t len = strlen(p);
 
-			p += strlen( "Description:" ) + 1;
-			if (p == NULL) {
+			if (len <= 12) {
 				break;
 			}
 
-			desc = svcctl_cleanup_string(mem_ctx, p);
+			desc = svcctl_cleanup_string(mem_ctx, p + 12);
 			if (desc != NULL) {
 				info->description = talloc_strdup(info, desc);
 			}
@@ -392,10 +392,6 @@ static bool svcctl_add_service(TALLOC_CTX *mem_ctx,
 		}
 	}
 
-	if (ipath == NULL || dname == NULL || description == NULL) {
-		goto done;
-	}
-
 	/* Default to an external service if we haven't found a match */
 	if (builtin_svcs[i].servicename == NULL) {
 		struct rcinit_file_information *init_info = NULL;
@@ -510,12 +506,12 @@ static bool svcctl_add_service(TALLOC_CTX *mem_ctx,
 					 &action,
 					 &result);
 	if (!NT_STATUS_IS_OK(status)) {
-		DEBUG(0, ("eventlog_init_winreg_keys: Could not create key %s: %s\n",
+		DEBUG(0, ("svcctl_init_winreg_keys: Could not create key %s: %s\n",
 			wkey.name, nt_errstr(status)));
 		goto done;
 	}
 	if (!W_ERROR_IS_OK(result)) {
-		DEBUG(0, ("eventlog_init_winreg_keys: Could not create key %s: %s\n",
+		DEBUG(0, ("svcctl_init_winreg_keys: Could not create key %s: %s\n",
 			wkey.name, win_errstr(result)));
 		goto done;
 	}
@@ -702,6 +698,7 @@ done:
 		}
 	}
 	regdb_close();
+	talloc_free(tmp_ctx);
 	return ok;
 }
 

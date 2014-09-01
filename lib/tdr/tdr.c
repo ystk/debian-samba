@@ -1,21 +1,21 @@
-/* 
+/*
    Unix SMB/CIFS implementation.
 
    TDR (Trivial Data Representation) helper functions
      Based loosely on ndr.c by Andrew Tridgell.
 
    Copyright (C) Jelmer Vernooij 2005
-   
+
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
    the Free Software Foundation; either version 3 of the License, or
    (at your option) any later version.
-   
+
    This program is distributed in the hope that it will be useful,
    but WITHOUT ANY WARRANTY; without even the implied warranty of
    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
    GNU General Public License for more details.
-   
+
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
@@ -162,8 +162,8 @@ NTSTATUS tdr_pull_charset(struct tdr_pull *tdr, TALLOC_CTX *ctx, const char **v,
 	}
 
 	TDR_PULL_NEED_BYTES(tdr, el_size*length);
-	
-	if (!convert_string_talloc(ctx, chset, CH_UNIX, tdr->data.data+tdr->offset, el_size*length, discard_const_p(void *, v), &ret, false)) {
+
+	if (!convert_string_talloc(ctx, chset, CH_UNIX, tdr->data.data+tdr->offset, el_size*length, discard_const_p(void *, v), &ret)) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
@@ -174,7 +174,8 @@ NTSTATUS tdr_pull_charset(struct tdr_pull *tdr, TALLOC_CTX *ctx, const char **v,
 
 NTSTATUS tdr_push_charset(struct tdr_push *tdr, const char **v, uint32_t length, uint32_t el_size, charset_t chset)
 {
-	size_t ret, required;
+	size_t required, size = 0;
+	bool ret;
 
 	if (length == -1) {
 		length = strlen(*v) + 1; /* Extra element for null character */
@@ -183,18 +184,18 @@ NTSTATUS tdr_push_charset(struct tdr_push *tdr, const char **v, uint32_t length,
 	required = el_size * length;
 	TDR_PUSH_NEED_BYTES(tdr, required);
 
-	ret = convert_string(CH_UNIX, chset, *v, strlen(*v), tdr->data.data+tdr->data.length, required, false);
-	if (ret == -1) {
+	ret = convert_string(CH_UNIX, chset, *v, strlen(*v), tdr->data.data+tdr->data.length, required, &size);
+	if (ret == false) {
 		return NT_STATUS_INVALID_PARAMETER;
 	}
 
 	/* Make sure the remaining part of the string is filled with zeroes */
-	if (ret < required) {
-		memset(tdr->data.data+tdr->data.length+ret, 0, required-ret);
+	if (size < required) {
+		memset(tdr->data.data+tdr->data.length+size, 0, required-size);
 	}
-	
+
 	tdr->data.length += required;
-						 
+
 	return NT_STATUS_OK;
 }
 
@@ -296,7 +297,7 @@ NTSTATUS tdr_print_DATA_BLOB(struct tdr_print *tdr, const char *name, DATA_BLOB 
 #define TDR_ALIGN(l,n) (((l) & ((n)-1)) == 0?0:((n)-((l)&((n)-1))))
 
 /*
-  push a DATA_BLOB onto the wire. 
+  push a DATA_BLOB onto the wire.
 */
 NTSTATUS tdr_push_DATA_BLOB(struct tdr_push *tdr, DATA_BLOB *blob)
 {
@@ -309,13 +310,13 @@ NTSTATUS tdr_push_DATA_BLOB(struct tdr_push *tdr, DATA_BLOB *blob)
 	}
 
 	TDR_PUSH_NEED_BYTES(tdr, blob->length);
-	
+
 	memcpy(tdr->data.data+tdr->data.length, blob->data, blob->length);
 	return NT_STATUS_OK;
 }
 
 /*
-  pull a DATA_BLOB from the wire. 
+  pull a DATA_BLOB from the wire.
 */
 NTSTATUS tdr_pull_DATA_BLOB(struct tdr_pull *tdr, TALLOC_CTX *ctx, DATA_BLOB *blob)
 {

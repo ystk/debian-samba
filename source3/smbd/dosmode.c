@@ -23,6 +23,12 @@
 #include "librpc/gen_ndr/ndr_xattr.h"
 #include "../libcli/security/security.h"
 #include "smbd/smbd.h"
+#include "lib/param/loadparm.h"
+
+static NTSTATUS get_file_handle_for_metadata(connection_struct *conn,
+				struct smb_filename *smb_fname,
+				files_struct **ret_fsp,
+				bool *need_close);
 
 static uint32_t filter_mode_by_protocol(uint32_t mode)
 {
@@ -83,20 +89,18 @@ mode_t unix_mode(connection_struct *conn, int dosmode,
 	}
 
 	if ((inherit_from_dir != NULL) && lp_inherit_perms(SNUM(conn))) {
-		struct smb_filename *smb_fname_parent = NULL;
-		NTSTATUS status;
+		struct smb_filename *smb_fname_parent;
 
 		DEBUG(2, ("unix_mode(%s) inheriting from %s\n",
 			  smb_fname_str_dbg(smb_fname),
 			  inherit_from_dir));
 
-		status = create_synthetic_smb_fname(talloc_tos(),
-						    inherit_from_dir, NULL,
-						    NULL, &smb_fname_parent);
-		if (!NT_STATUS_IS_OK(status)) {
-			DEBUG(1,("unix_mode(%s) failed, [dir %s]: %s\n",
+		smb_fname_parent = synthetic_smb_fname(
+			talloc_tos(), inherit_from_dir, NULL, NULL);
+		if (smb_fname_parent == NULL) {
+			DEBUG(1,("unix_mode(%s) failed, [dir %s]: No memory\n",
 				 smb_fname_str_dbg(smb_fname),
-				 inherit_from_dir, nt_errstr(status)));
+				 inherit_from_dir));
 			return(0);
 		}
 
@@ -170,6 +174,12 @@ static uint32 dos_mode_from_sbuf(connection_struct *conn,
 	int result = 0;
 	enum mapreadonly_options ro_opts = (enum mapreadonly_options)lp_map_readonly(SNUM(conn));
 
+#if defined(UF_IMMUTABLE) && defined(SF_IMMUTABLE)
+	/* if we can find out if a file is immutable we should report it r/o */
+	if (smb_fname->st.st_ex_flags & (UF_IMMUTABLE | SF_IMMUTABLE)) {
+		result |= FILE_ATTRIBUTE_READONLY;
+	}
+#endif
 	if (ro_opts == MAP_READONLY_YES) {
 		/* Original Samba method - map inverse of user "w" bit. */
 		if ((smb_fname->st.st_ex_mode & S_IWUSR) == 0) {
@@ -349,10 +359,6 @@ static bool set_ea_dos_attribute(connection_struct *conn,
 	enum ndr_err_code ndr_err;
 	DATA_BLOB blob;
 
-	if (!lp_store_dos_attributes(SNUM(conn))) {
-		return False;
-	}
-
 	ZERO_STRUCT(dosattrib);
 	ZERO_STRUCT(blob);
 
@@ -386,6 +392,7 @@ static bool set_ea_dos_attribute(connection_struct *conn,
 			     SAMBA_XATTR_DOS_ATTRIB, blob.data, blob.length,
 			     0) == -1) {
 		bool ret = false;
+		bool need_close = false;
 		files_struct *fsp = NULL;
 
 		if((errno != EPERM) && (errno != EACCES)) {
@@ -412,15 +419,22 @@ static bool set_ea_dos_attribute(connection_struct *conn,
 		if(!CAN_WRITE(conn) || !lp_dos_filemode(SNUM(conn)))
 			return false;
 
+		if (!can_write_to_file(conn, smb_fname)) {
+			return false;
+		}
+
 		/*
-		 * We need to open the file with write access whilst
-		 * still in our current user context. This ensures we
-		 * are not violating security in doing the setxattr.
+		 * We need to get an open file handle to do the
+		 * metadata operation under root.
 		 */
 
-		if (!NT_STATUS_IS_OK(open_file_fchmod(conn, smb_fname,
-						      &fsp)))
+		if (!NT_STATUS_IS_OK(get_file_handle_for_metadata(conn,
+						smb_fname,
+						&fsp,
+						&need_close))) {
 			return false;
+		}
+
 		become_root();
 		if (SMB_VFS_FSETXATTR(fsp,
 				     SAMBA_XATTR_DOS_ATTRIB, blob.data,
@@ -428,7 +442,9 @@ static bool set_ea_dos_attribute(connection_struct *conn,
 			ret = true;
 		}
 		unbecome_root();
-		close_file(NULL, fsp, NORMAL_CLOSE);
+		if (need_close) {
+			close_file(NULL, fsp, NORMAL_CLOSE);
+		}
 		return ret;
 	}
 	DEBUG(10,("set_ea_dos_attribute: set EA 0x%x on file %s\n",
@@ -483,6 +499,11 @@ uint32 dos_mode_msdfs(connection_struct *conn,
 	}
 
 	result = filter_mode_by_protocol(result);
+
+	/*
+	 * Add in that it is a reparse point
+	 */
+	result |= FILE_ATTRIBUTE_REPARSE_POINT;
 
 	DEBUG(8,("dos_mode_msdfs returning "));
 
@@ -677,6 +698,7 @@ uint32 dos_mode(connection_struct *conn, struct smb_filename *smb_fname)
 	if (result & FILE_ATTRIBUTE_DIRECTORY   ) DEBUG(8, ("d"));
 	if (result & FILE_ATTRIBUTE_ARCHIVE  ) DEBUG(8, ("a"));
 	if (result & FILE_ATTRIBUTE_SPARSE ) DEBUG(8, ("[sparse]"));
+	if (result & FILE_ATTRIBUTE_OFFLINE ) DEBUG(8, ("[offline]"));
 
 	DEBUG(8,("\n"));
 
@@ -699,6 +721,14 @@ int file_set_dosmode(connection_struct *conn, struct smb_filename *smb_fname,
 	int ret = -1, lret = -1;
 	uint32_t old_mode;
 	struct timespec new_create_timespec;
+	files_struct *fsp = NULL;
+	bool need_close = false;
+	NTSTATUS status;
+
+	if (!CAN_WRITE(conn)) {
+		errno = EROFS;
+		return -1;
+	}
 
 	/* We only allow READONLY|HIDDEN|SYSTEM|DIRECTORY|ARCHIVE here. */
 	dosmode &= (SAMBA_ATTRIBUTES_MASK | FILE_ATTRIBUTE_OFFLINE);
@@ -720,16 +750,21 @@ int file_set_dosmode(connection_struct *conn, struct smb_filename *smb_fname,
 
 	old_mode = dos_mode(conn, smb_fname);
 
-	if (dosmode & FILE_ATTRIBUTE_OFFLINE) {
-		if (!(old_mode & FILE_ATTRIBUTE_OFFLINE)) {
-			lret = SMB_VFS_SET_OFFLINE(conn, smb_fname);
-			if (lret == -1) {
-				DEBUG(0, ("set_dos_mode: client has asked to "
-					  "set FILE_ATTRIBUTE_OFFLINE to "
-					  "%s/%s but there was an error while "
-					  "setting it or it is not "
-					  "supported.\n", parent_dir,
-					  smb_fname_str_dbg(smb_fname)));
+	if ((dosmode & FILE_ATTRIBUTE_OFFLINE) &&
+	    !(old_mode & FILE_ATTRIBUTE_OFFLINE)) {
+		lret = SMB_VFS_SET_OFFLINE(conn, smb_fname);
+		if (lret == -1) {
+			if (errno == ENOTSUP) {
+				DEBUG(10, ("Setting FILE_ATTRIBUTE_OFFLINE for "
+					   "%s/%s is not supported.\n",
+					   parent_dir,
+					   smb_fname_str_dbg(smb_fname)));
+			} else {
+				DEBUG(0, ("An error occurred while setting "
+					  "FILE_ATTRIBUTE_OFFLINE for "
+					  "%s/%s: %s", parent_dir,
+					  smb_fname_str_dbg(smb_fname),
+					  strerror(errno)));
 			}
 		}
 	}
@@ -757,7 +792,14 @@ int file_set_dosmode(connection_struct *conn, struct smb_filename *smb_fname,
 	}
 #endif
 	/* Store the DOS attributes in an EA by preference. */
-	if (set_ea_dos_attribute(conn, smb_fname, dosmode)) {
+	if (lp_store_dos_attributes(SNUM(conn))) {
+		/*
+		 * Don't fall back to using UNIX modes. Finally
+		 * follow the smb.conf manpage.
+		 */
+		if (!set_ea_dos_attribute(conn, smb_fname, dosmode)) {
+			return -1;
+		}
 		if (!newfile) {
 			notify_fname(conn, NOTIFY_ACTION_MODIFIED,
 				     FILE_NOTIFY_CHANGE_ATTRIBUTES,
@@ -768,6 +810,9 @@ int file_set_dosmode(connection_struct *conn, struct smb_filename *smb_fname,
 	}
 
 	unixmode = unix_mode(conn, dosmode, smb_fname, parent_dir);
+
+	/* preserve the file type bits */
+	mask |= S_IFMT;
 
 	/* preserve the s bits */
 	mask |= (S_ISUID | S_ISGID);
@@ -841,29 +886,38 @@ int file_set_dosmode(connection_struct *conn, struct smb_filename *smb_fname,
 		bits on a file. Just like file_ntimes below.
 	*/
 
-	/* Check if we have write access. */
-	if (CAN_WRITE(conn)) {
-		/*
-		 * We need to open the file with write access whilst
-		 * still in our current user context. This ensures we
-		 * are not violating security in doing the fchmod.
-		 */
-		files_struct *fsp;
-		if (!NT_STATUS_IS_OK(open_file_fchmod(conn, smb_fname,
-				     &fsp)))
-			return -1;
-		become_root();
-		ret = SMB_VFS_FCHMOD(fsp, unixmode);
-		unbecome_root();
+	if (!can_write_to_file(conn, smb_fname)) {
+		errno = EACCES;
+		return -1;
+	}
+
+	/*
+	 * We need to get an open file handle to do the
+	 * metadata operation under root.
+	 */
+
+	status = get_file_handle_for_metadata(conn,
+					      smb_fname,
+					      &fsp,
+					      &need_close);
+	if (!NT_STATUS_IS_OK(status)) {
+		errno = map_errno_from_nt_status(status);
+		return -1;
+	}
+
+	become_root();
+	ret = SMB_VFS_FCHMOD(fsp, unixmode);
+	unbecome_root();
+	if (need_close) {
 		close_file(NULL, fsp, NORMAL_CLOSE);
-		if (!newfile) {
-			notify_fname(conn, NOTIFY_ACTION_MODIFIED,
-				     FILE_NOTIFY_CHANGE_ATTRIBUTES,
-				     smb_fname->base_name);
-		}
-		if (ret == 0) {
-			smb_fname->st.st_ex_mode = unixmode;
-		}
+	}
+	if (!newfile) {
+		notify_fname(conn, NOTIFY_ACTION_MODIFIED,
+			     FILE_NOTIFY_CHANGE_ATTRIBUTES,
+			     smb_fname->base_name);
+	}
+	if (ret == 0) {
+		smb_fname->st.st_ex_mode = unixmode;
 	}
 
 	return( ret );
@@ -883,7 +937,7 @@ NTSTATUS file_set_sparse(connection_struct *conn,
 			"on readonly share[%s]\n",
 			smb_fname_str_dbg(fsp->fsp_name),
 			sparse,
-			lp_servicename(SNUM(conn))));
+			lp_servicename(talloc_tos(), SNUM(conn))));
 		return NT_STATUS_MEDIA_WRITE_PROTECTED;
 	}
 
@@ -1041,8 +1095,7 @@ NTSTATUS set_create_timespec_ea(connection_struct *conn,
 				const struct smb_filename *psmb_fname,
 				struct timespec create_time)
 {
-	NTSTATUS status;
-	struct smb_filename *smb_fname = NULL;
+	struct smb_filename *smb_fname;
 	uint32_t dosmode;
 	int ret;
 
@@ -1050,13 +1103,11 @@ NTSTATUS set_create_timespec_ea(connection_struct *conn,
 		return NT_STATUS_OK;
 	}
 
-	status = create_synthetic_smb_fname(talloc_tos(),
-				psmb_fname->base_name,
-				NULL, &psmb_fname->st,
-				&smb_fname);
+	smb_fname = synthetic_smb_fname(talloc_tos(), psmb_fname->base_name,
+					NULL, &psmb_fname->st);
 
-	if (!NT_STATUS_IS_OK(status)) {
-		return status;
+	if (smb_fname == NULL) {
+		return NT_STATUS_NO_MEMORY;
 	}
 
 	dosmode = dos_mode(conn, smb_fname);
@@ -1094,4 +1145,63 @@ struct timespec get_change_timespec(connection_struct *conn,
 				const struct smb_filename *smb_fname)
 {
 	return smb_fname->st.st_ex_mtime;
+}
+
+/****************************************************************************
+ Get a real open file handle we can do meta-data operations on. As it's
+ going to be used under root access only on meta-data we should look for
+ any existing open file handle first, and use that in preference (also to
+ avoid kernel self-oplock breaks). If not use an INTERNAL_OPEN_ONLY handle.
+****************************************************************************/
+
+static NTSTATUS get_file_handle_for_metadata(connection_struct *conn,
+				struct smb_filename *smb_fname,
+				files_struct **ret_fsp,
+				bool *need_close)
+{
+	NTSTATUS status;
+	files_struct *fsp;
+	struct file_id file_id;
+
+	*need_close = false;
+
+	if (!VALID_STAT(smb_fname->st)) {
+		return NT_STATUS_INVALID_PARAMETER;
+	}
+
+	file_id = vfs_file_id_from_sbuf(conn, &smb_fname->st);
+
+	for(fsp = file_find_di_first(conn->sconn, file_id);
+			fsp;
+			fsp = file_find_di_next(fsp)) {
+		if (fsp->fh->fd != -1) {
+			*ret_fsp = fsp;
+			return NT_STATUS_OK;
+		}
+	}
+
+	/* Opens an INTERNAL_OPEN_ONLY write handle. */
+	status = SMB_VFS_CREATE_FILE(
+		conn,                                   /* conn */
+		NULL,                                   /* req */
+		0,                                      /* root_dir_fid */
+		smb_fname,                              /* fname */
+		FILE_WRITE_DATA,                        /* access_mask */
+		(FILE_SHARE_READ | FILE_SHARE_WRITE |   /* share_access */
+			FILE_SHARE_DELETE),
+		FILE_OPEN,                              /* create_disposition*/
+		0,                                      /* create_options */
+		0,                                      /* file_attributes */
+		INTERNAL_OPEN_ONLY,                     /* oplock_request */
+                0,                                      /* allocation_size */
+		0,                                      /* private_flags */
+		NULL,                                   /* sd */
+		NULL,                                   /* ea_list */
+		ret_fsp,                                /* result */
+		NULL);                                  /* pinfo */
+
+	if (NT_STATUS_IS_OK(status)) {
+		*need_close = true;
+	}
+	return status;
 }

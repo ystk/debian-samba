@@ -31,7 +31,6 @@
 #include "ads.h"
 #include "libads/ldap_schema.h"
 #include "nss_info.h"
-#include "secrets.h"
 #include "idmap.h"
 #include "../libcli/ldap/ldap_ndr.h"
 #include "../libcli/security/security.h"
@@ -39,9 +38,6 @@
 #undef DBGC_CLASS
 #define DBGC_CLASS DBGC_IDMAP
 
-#define WINBIND_CCACHE_NAME "MEMORY:winbind_ccache"
-
-#define IDMAP_AD_MAX_IDS 30
 #define CHECK_ALLOC_DONE(mem) do { \
      if (!mem) { \
            DEBUG(0, ("Out of memory!\n")); \
@@ -56,108 +52,6 @@ struct idmap_ad_context {
 	enum wb_posix_mapping ad_map_type; /* WB_POSIX_MAP_UNKNOWN */
 };
 
-NTSTATUS init_module(void);
-
-/************************************************************************
- ***********************************************************************/
-
-static ADS_STATUS ad_idmap_cached_connection_internal(struct idmap_domain *dom)
-{
-	ADS_STRUCT *ads;
-	ADS_STATUS status;
-	bool local = False;
-	fstring dc_name;
-	struct sockaddr_storage dc_ip;
-	struct idmap_ad_context *ctx;
-	char *ldap_server = NULL;
-	char *realm = NULL;
-	struct winbindd_domain *wb_dom;
-
-	DEBUG(10, ("ad_idmap_cached_connection: called for domain '%s'\n",
-		   dom->name));
-
-	ctx = talloc_get_type(dom->private_data, struct idmap_ad_context);
-
-	if (ctx->ads != NULL) {
-
-		time_t expire;
-		time_t now = time(NULL);
-
-		ads = ctx->ads;
-
-		expire = MIN(ads->auth.tgt_expire, ads->auth.tgs_expire);
-
-		/* check for a valid structure */
-		DEBUG(7, ("Current tickets expire in %d seconds (at %d, time is now %d)\n",
-			  (uint32)expire-(uint32)now, (uint32) expire, (uint32) now));
-
-		if ( ads->config.realm && (expire > time(NULL))) {
-			return ADS_SUCCESS;
-		} else {
-			/* we own this ADS_STRUCT so make sure it goes away */
-			DEBUG(7,("Deleting expired krb5 credential cache\n"));
-			ads->is_mine = True;
-			ads_destroy( &ads );
-			ads_kdestroy(WINBIND_CCACHE_NAME);
-			ctx->ads = NULL;
-		}
-	}
-
-	if (!local) {
-		/* we don't want this to affect the users ccache */
-		setenv("KRB5CCNAME", WINBIND_CCACHE_NAME, 1);
-	}
-
-	/*
-	 * At this point we only have the NetBIOS domain name.
-	 * Check if we can get server nam and realm from SAF cache
-	 * and the domain list.
-	 */
-	ldap_server = saf_fetch(dom->name);
-	DEBUG(10, ("ldap_server from saf cache: '%s'\n", ldap_server?ldap_server:""));
-
-	wb_dom = find_domain_from_name_noinit(dom->name);
-	if (wb_dom == NULL) {
-		DEBUG(10, ("find_domain_from_name_noinit did not find domain '%s'\n",
-			   dom->name));
-		realm = NULL;
-	} else {
-		DEBUG(10, ("find_domain_from_name_noinit found realm '%s' for "
-			  " domain '%s'\n", wb_dom->alt_name, dom->name));
-		realm = wb_dom->alt_name;
-	}
-
-	if ( (ads = ads_init(realm, dom->name, ldap_server)) == NULL ) {
-		DEBUG(1,("ads_init failed\n"));
-		return ADS_ERROR_NT(NT_STATUS_NO_MEMORY);
-	}
-
-	/* the machine acct password might have change - fetch it every time */
-	SAFE_FREE(ads->auth.password);
-	ads->auth.password = secrets_fetch_machine_password(lp_workgroup(), NULL, NULL);
-
-	SAFE_FREE(ads->auth.realm);
-	ads->auth.realm = SMB_STRDUP(lp_realm());
-
-	/* setup server affinity */
-
-	get_dc_name(dom->name, realm, dc_name, &dc_ip );
-
-	status = ads_connect(ads);
-	if (!ADS_ERR_OK(status)) {
-		DEBUG(1, ("ad_idmap_cached_connection_internal: failed to "
-			  "connect to AD\n"));
-		ads_destroy(&ads);
-		return status;
-	}
-
-	ads->is_mine = False;
-
-	ctx->ads = ads;
-
-	return ADS_SUCCESS;
-}
-
 /************************************************************************
  ***********************************************************************/
 
@@ -166,7 +60,12 @@ static ADS_STATUS ad_idmap_cached_connection(struct idmap_domain *dom)
 	ADS_STATUS status;
 	struct idmap_ad_context * ctx;
 
-	status = ad_idmap_cached_connection_internal(dom);
+	DEBUG(10, ("ad_idmap_cached_connection: called for domain '%s'\n",
+		   dom->name));
+
+	ctx = talloc_get_type(dom->private_data, struct idmap_ad_context);
+
+	status = ads_idmap_cached_connection(&ctx->ads, dom->name);
 	if (!ADS_ERR_OK(status)) {
 		return status;
 	}
@@ -216,7 +115,7 @@ static NTSTATUS idmap_ad_initialize(struct idmap_domain *dom)
 	char *config_option;
 	const char *schema_mode = NULL;	
 
-	ctx = TALLOC_ZERO_P(dom, struct idmap_ad_context);
+	ctx = talloc_zero(dom, struct idmap_ad_context);
 	if (ctx == NULL) {
 		DEBUG(0, ("Out of memory!\n"));
 		return NT_STATUS_NO_MEMORY;
@@ -252,40 +151,6 @@ static NTSTATUS idmap_ad_initialize(struct idmap_domain *dom)
 	talloc_free(config_option);
 
 	return NT_STATUS_OK;
-}
-
-/************************************************************************
- Search up to IDMAP_AD_MAX_IDS entries in maps for a match.
- ***********************************************************************/
-
-static struct id_map *find_map_by_id(struct id_map **maps, enum id_type type, uint32_t id)
-{
-	int i;
-
-	for (i = 0; maps[i] && i<IDMAP_AD_MAX_IDS; i++) {
-		if ((maps[i]->xid.type == type) && (maps[i]->xid.id == id)) {
-			return maps[i];
-		}
-	}
-
-	return NULL;	
-}
-
-/************************************************************************
- Search up to IDMAP_AD_MAX_IDS entries in maps for a match
- ***********************************************************************/
-
-static struct id_map *find_map_by_sid(struct id_map **maps, struct dom_sid *sid)
-{
-	int i;
-
-	for (i = 0; maps[i] && i<IDMAP_AD_MAX_IDS; i++) {
-		if (dom_sid_equal(maps[i]->sid, sid)) {
-			return maps[i];
-		}
-	}
-
-	return NULL;	
 }
 
 /************************************************************************
@@ -342,7 +207,7 @@ static NTSTATUS idmap_ad_unixids_to_sids(struct idmap_domain *dom, struct id_map
 
 again:
 	bidx = idx;
-	for (i = 0; (i < IDMAP_AD_MAX_IDS) && ids[idx]; i++, idx++) {
+	for (i = 0; (i < IDMAP_LDAP_MAX_IDS) && ids[idx]; i++, idx++) {
 		switch (ids[idx]->xid.type) {
 		case ID_TYPE_UID:     
 			if ( ! u_filter) {
@@ -457,7 +322,7 @@ again:
 				                 ctx->ad_schema->posix_gidnumber_attr,
 				     &id)) 
 		{
-			DEBUG(1, ("Could not get unix ID\n"));
+			DEBUG(1, ("Could not get SID for unix ID %u\n", (unsigned) id));
 			continue;
 		}
 
@@ -467,7 +332,7 @@ again:
 			continue;
 		}
 
-		map = find_map_by_id(&ids[bidx], type, id);
+		map = idmap_find_map_by_id(&ids[bidx], type, id);
 		if (!map) {
 			DEBUG(2, ("WARNING: couldn't match result with requested ID\n"));
 			continue;
@@ -572,7 +437,7 @@ again:
 	CHECK_ALLOC_DONE(filter);
 
 	bidx = idx;
-	for (i = 0; (i < IDMAP_AD_MAX_IDS) && ids[idx]; i++, idx++) {
+	for (i = 0; (i < IDMAP_LDAP_MAX_IDS) && ids[idx]; i++, idx++) {
 
 		ids[idx]->status = ID_UNKNOWN;
 
@@ -622,7 +487,7 @@ again:
 			continue;
 		}
 
-		map = find_map_by_sid(&ids[bidx], &sid);
+		map = idmap_find_map_by_sid(&ids[bidx], &sid);
 		if (!map) {
 			DEBUG(2, ("WARNING: couldn't match result with requested SID\n"));
 			continue;
@@ -654,7 +519,8 @@ again:
 				                 ctx->ad_schema->posix_gidnumber_attr,
 				     &id)) 
 		{
-			DEBUG(1, ("Could not get unix ID\n"));
+			DEBUG(1, ("Could not get unix ID for SID %s\n",
+				sid_string_dbg(map->sid)));
 			continue;
 		}
 		if (!idmap_unix_id_is_in_range(id, dom)) {
@@ -736,7 +602,7 @@ static NTSTATUS nss_ad_generic_init(struct nss_domain_entry *e,
 	if (e->state != NULL) {
 		dom = talloc_get_type(e->state, struct idmap_domain);
 	} else {
-		dom = TALLOC_ZERO_P(e, struct idmap_domain);
+		dom = talloc_zero(e, struct idmap_domain);
 		if (dom == NULL) {
 			DEBUG(0, ("Out of memory!\n"));
 			return NT_STATUS_NO_MEMORY;
@@ -756,7 +622,7 @@ static NTSTATUS nss_ad_generic_init(struct nss_domain_entry *e,
 		ctx = talloc_get_type(dom->private_data,
 				      struct idmap_ad_context);
 	} else {
-		ctx = TALLOC_ZERO_P(dom, struct idmap_ad_context);
+		ctx = talloc_zero(dom, struct idmap_ad_context);
 		if (ctx == NULL) {
 			DEBUG(0, ("Out of memory!\n"));
 			return NT_STATUS_NO_MEMORY;
@@ -1096,7 +962,7 @@ static struct nss_info_methods nss_sfu20_methods = {
  Initialize the plugins
  ***********************************************************************/
 
-NTSTATUS idmap_ad_init(void)
+NTSTATUS samba_init_module(void)
 {
 	static NTSTATUS status_idmap_ad = NT_STATUS_UNSUCCESSFUL;
 	static NTSTATUS status_nss_rfc2307 = NT_STATUS_UNSUCCESSFUL;

@@ -35,8 +35,16 @@ bool fill_grent(TALLOC_CTX *mem_ctx, struct winbindd_gr *gr,
 {
 	fstring full_group_name;
 	char *mapped_name = NULL;
-	struct winbindd_domain *domain = find_domain_from_name_noinit(dom_name);
+	struct winbindd_domain *domain;
 	NTSTATUS nt_status = NT_STATUS_UNSUCCESSFUL;
+
+	domain = find_domain_from_name_noinit(dom_name);
+	if (domain == NULL) {
+		DEBUG(0, ("Failed to find domain '%s'. "
+			  "Check connection to trusted domains!\n",
+			  dom_name));
+		return false;
+	}
 
 	nt_status = normalize_name_map(mem_ctx, domain, gr_name,
 				       &mapped_name);
@@ -60,8 +68,8 @@ bool fill_grent(TALLOC_CTX *mem_ctx, struct winbindd_gr *gr,
 
 	/* Group name and password */
 
-	safe_strcpy(gr->gr_name, full_group_name, sizeof(gr->gr_name) - 1);
-	safe_strcpy(gr->gr_passwd, "x", sizeof(gr->gr_passwd) - 1);
+	strlcpy(gr->gr_name, full_group_name, sizeof(gr->gr_name));
+	strlcpy(gr->gr_passwd, "x", sizeof(gr->gr_passwd));
 
 	return True;
 }

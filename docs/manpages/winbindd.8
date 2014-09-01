@@ -1,13 +1,22 @@
 '\" t
 .\"     Title: winbindd
 .\"    Author: [see the "AUTHOR" section]
-.\" Generator: DocBook XSL Stylesheets v1.75.2 <http://docbook.sf.net/>
-.\"      Date: 06/22/2012
+.\" Generator: DocBook XSL Stylesheets v1.78.1 <http://docbook.sf.net/>
+.\"      Date: 07/31/2014
 .\"    Manual: System Administration tools
-.\"    Source: Samba 3.6
+.\"    Source: Samba 4.0
 .\"  Language: English
 .\"
-.TH "WINBINDD" "8" "06/22/2012" "Samba 3\&.6" "System Administration tools"
+.TH "WINBINDD" "8" "07/31/2014" "Samba 4\&.0" "System Administration tools"
+.\" -----------------------------------------------------------------
+.\" * Define some portability stuff
+.\" -----------------------------------------------------------------
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.\" http://bugs.debian.org/507673
+.\" http://lists.gnu.org/archive/html/groff/2009-02/msg00013.html
+.\" ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+.ie \n(.g .ds Aq \(aq
+.el       .ds Aq '
 .\" -----------------------------------------------------------------
 .\" * set default formatting
 .\" -----------------------------------------------------------------
@@ -22,7 +31,7 @@
 winbindd \- Name Service Switch daemon for resolving names from NT servers
 .SH "SYNOPSIS"
 .HP \w'\ 'u
-winbindd [\-D] [\-F] [\-S] [\-i] [\-Y] [\-d\ <debug\ level>] [\-s\ <smb\ config\ file>] [\-n]
+winbindd [\-D|\-\-daemon] [\-F|\-\-foreground] [\-S|\-\-stdout] [\-i|\-\-interactive] [\-d\ <debug\ level>] [\-s\ <smb\ config\ file>] [\-n|\-\-no\-caching] [\-\-no\-process\-group]
 .SH "DESCRIPTION"
 .PP
 This program is part of the
@@ -41,7 +50,7 @@ and the
 pam_winbind\&.so
 PAM module, by managing connections to domain controllers\&. In this configuration the
 \m[blue]\fBidmap config * : range\fR\m[]
-parameter is not required\&. (This is known as `netlogon proxy only mode\'\&.)
+parameter is not required\&. (This is known as `netlogon proxy only mode\*(Aq\&.)
 .PP
 The Name Service Switch allows user and system information to be obtained from different databases services such as NIS or DNS\&. The exact behaviour can be configured through the
 /etc/nsswitch\&.conf
@@ -49,7 +58,7 @@ file\&. Users and groups are allocated as they are resolved to a range of user a
 .PP
 The service provided by
 winbindd
-is called `winbind\' and can be used to resolve user and group information from a Windows NT server\&. The service can also provide authentication services via an associated PAM module\&.
+is called `winbind\*(Aq and can be used to resolve user and group information from a Windows NT server\&. The service can also provide authentication services via an associated PAM module\&.
 .PP
 The
 pam_winbind
@@ -134,14 +143,14 @@ hosts:		files wins
 .\}
 .SH "OPTIONS"
 .PP
-\-D
+\-D|\-\-daemon
 .RS 4
 If specified, this parameter causes the server to operate as a daemon\&. That is, it detaches itself and runs in the background on the appropriate port\&. This switch is assumed if
 winbindd
 is executed on the command line of a shell\&.
 .RE
 .PP
-\-F
+\-F|\-\-foreground
 .RS 4
 If specified, this parameter causes the main
 winbindd
@@ -151,12 +160,12 @@ under process supervisors such as
 supervise
 and
 svscan
-from Daniel J\&. Bernstein\'s
+from Daniel J\&. Bernstein\*(Aqs
 daemontools
 package, or the AIX process monitor\&.
 .RE
 .PP
-\-S
+\-S|\-\-stdout
 .RS 4
 If specified, this parameter causes
 winbindd
@@ -173,7 +182,7 @@ The higher this value, the more detail will be logged to the log files about the
 Levels above 1 will generate considerable amounts of log data, and should only be used when investigating a problem\&. Levels above 3 are designed for use only by developers and generate HUGE amounts of log data, most of which is extremely cryptic\&.
 .sp
 Note that specifying this parameter here will override the
-\m[blue]\fB\%smb.conf.5.html#\fR\m[]
+\m[blue]\fBlog level\fR\m[]
 parameter in the
 smb\&.conf
 file\&.
@@ -184,7 +193,7 @@ file\&.
 Prints the program version number\&.
 .RE
 .PP
-\-s|\-\-configfile <configuration file>
+\-s|\-\-configfile=<configuration file>
 .RS 4
 The file specified contains the configuration details required by the server\&. The information in this file includes server\-specific information such as what printcap file to use, as well as descriptions of all the services that the server is to provide\&. See
 smb\&.conf
@@ -198,12 +207,24 @@ Base directory name for log/debug files\&. The extension
 will be appended (e\&.g\&. log\&.smbclient, log\&.smbd, etc\&.\&.\&.)\&. The log file is never removed by the client\&.
 .RE
 .PP
-\-h|\-\-help
+\-\-option=<name>=<value>
+.RS 4
+Set the
+\fBsmb.conf\fR(5)
+option "<name>" to value "<value>" from the command line\&. This overrides compiled\-in defaults and options read from the configuration file\&.
+.RE
+.PP
+\-?|\-\-help
 .RS 4
 Print a summary of command line options\&.
 .RE
 .PP
-\-i
+\-\-usage
+.RS 4
+Display brief usage message\&.
+.RE
+.PP
+\-i|\-\-interactive
 .RS 4
 Tells
 winbindd
@@ -216,14 +237,14 @@ also logs to standard output, as if the
 parameter had been given\&.
 .RE
 .PP
-\-n
+\-n|\-\-no\-caching
 .RS 4
-Disable caching\&. This means winbindd will always have to wait for a response from the domain controller before it can respond to a client and this thus makes things slower\&. The results will however be more accurate, since results from the cache might not be up\-to\-date\&. This might also temporarily hang winbindd if the DC doesn\'t respond\&.
+Disable some caching\&. This means winbindd will often have to wait for a response from the domain controller before it can respond to a client and this thus makes things slower\&. The results will however be more accurate, since results from the cache might not be up\-to\-date\&. This might also temporarily hang winbindd if the DC doesn\*(Aqt respond\&. This does not disable the samlogon cache, which is required for group membership tracking in trusted environments\&.
 .RE
 .PP
-\-Y
+\-\-no\-process\-group
 .RS 4
-Single daemon mode\&. This means winbindd will run as a single process (the mode of operation in Samba 2\&.2)\&. Winbindd\'s default behavior is to launch a child process that is responsible for updating expired cache entries\&.
+Do not create a new process group for winbindd\&.
 .RE
 .SH "NAME AND ID RESOLUTION"
 .PP
@@ -250,7 +271,6 @@ file\&. All parameters should be specified in the [global] section of smb\&.conf
 .sp -1
 .IP \(bu 2.3
 .\}
-
 \m[blue]\fBwinbind separator\fR\m[]
 .RE
 .sp
@@ -262,7 +282,6 @@ file\&. All parameters should be specified in the [global] section of smb\&.conf
 .sp -1
 .IP \(bu 2.3
 .\}
-
 \m[blue]\fBidmap config * : range\fR\m[]
 .RE
 .sp
@@ -274,7 +293,6 @@ file\&. All parameters should be specified in the [global] section of smb\&.conf
 .sp -1
 .IP \(bu 2.3
 .\}
-
 \m[blue]\fBidmap config * : backend\fR\m[]
 .RE
 .sp
@@ -286,7 +304,6 @@ file\&. All parameters should be specified in the [global] section of smb\&.conf
 .sp -1
 .IP \(bu 2.3
 .\}
-
 \m[blue]\fBwinbind cache time\fR\m[]
 .RE
 .sp
@@ -298,7 +315,6 @@ file\&. All parameters should be specified in the [global] section of smb\&.conf
 .sp -1
 .IP \(bu 2.3
 .\}
-
 \m[blue]\fBwinbind enum users\fR\m[]
 .RE
 .sp
@@ -310,7 +326,6 @@ file\&. All parameters should be specified in the [global] section of smb\&.conf
 .sp -1
 .IP \(bu 2.3
 .\}
-
 \m[blue]\fBwinbind enum groups\fR\m[]
 .RE
 .sp
@@ -322,7 +337,6 @@ file\&. All parameters should be specified in the [global] section of smb\&.conf
 .sp -1
 .IP \(bu 2.3
 .\}
-
 \m[blue]\fBtemplate homedir\fR\m[]
 .RE
 .sp
@@ -334,7 +348,6 @@ file\&. All parameters should be specified in the [global] section of smb\&.conf
 .sp -1
 .IP \(bu 2.3
 .\}
-
 \m[blue]\fBtemplate shell\fR\m[]
 .RE
 .sp
@@ -346,7 +359,6 @@ file\&. All parameters should be specified in the [global] section of smb\&.conf
 .sp -1
 .IP \(bu 2.3
 .\}
-
 \m[blue]\fBwinbind use default domain\fR\m[]
 .RE
 .sp
@@ -358,7 +370,6 @@ file\&. All parameters should be specified in the [global] section of smb\&.conf
 .sp -1
 .IP \(bu 2.3
 .\}
-
 \m[blue]\fBwinbind: rpc only\fR\m[]
 Setting this parameter forces winbindd to use RPC instead of LDAP to retrieve information from Domain Controllers\&.
 .RE
@@ -495,7 +506,7 @@ winbindd, then in general the user and groups ids allocated by winbindd will not
 \m[blue]\fBidmap config * : backend\fR\m[]
 is configured\&.
 .PP
-If the the Windows NT SID to UNIX user and group id mapping file is damaged or destroyed then the mappings will be lost\&.
+If the Windows NT SID to UNIX user and group id mapping file is damaged or destroyed then the mappings will be lost\&.
 .SH "SIGNALS"
 .PP
 The following signals can be used to manipulate the
@@ -537,11 +548,11 @@ file are owned by root\&.
 .PP
 $LOCKDIR/winbindd_privileged/pipe
 .RS 4
-The UNIX pipe over which \'privileged\' clients communicate with the
+The UNIX pipe over which \*(Aqprivileged\*(Aq clients communicate with the
 winbindd
 program\&. For security reasons, access to some winbindd functions \- like those needed by the
 ntlm_auth
-utility \- is restricted\&. By default, only users in the \'root\' group will get this access, however the administrator may change the group permissions on $LOCKDIR/winbindd_privileged to allow programs like \'squid\' to use ntlm_auth\&. Note that the winbind client will only attempt to connect to the winbindd daemon if both the
+utility \- is restricted\&. By default, only users in the \*(Aqroot\*(Aq group will get this access, however the administrator may change the group permissions on $LOCKDIR/winbindd_privileged to allow programs like \*(Aqsquid\*(Aq to use ntlm_auth\&. Note that the winbind client will only attempt to connect to the winbindd daemon if both the
 $LOCKDIR/winbindd_privileged
 directory and
 $LOCKDIR/winbindd_privileged/pipe

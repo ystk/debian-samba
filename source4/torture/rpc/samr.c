@@ -4,6 +4,7 @@
 
    Copyright (C) Andrew Tridgell 2003
    Copyright (C) Andrew Bartlett <abartlet@samba.org> 2003
+   Copyright (C) Jelmer Vernooij 2005-2007
    Copyright (C) Guenther Deschner 2008-2010
 
    This program is free software; you can redistribute it and/or modify
@@ -24,6 +25,7 @@
 #include "torture/torture.h"
 #include <tevent.h>
 #include "system/time.h"
+#include "system/network.h"
 #include "librpc/gen_ndr/lsa.h"
 #include "librpc/gen_ndr/ndr_netlogon.h"
 #include "librpc/gen_ndr/ndr_netlogon_c.h"
@@ -35,10 +37,9 @@
 #include "torture/rpc/torture_rpc.h"
 #include "param/param.h"
 #include "auth/gensec/gensec.h"
+#include "auth/gensec/schannel.h"
 #include "auth/gensec/gensec_proto.h"
 #include "../libcli/auth/schannel.h"
-
-#include <unistd.h>
 
 #define TEST_ACCOUNT_NAME "samrtorturetest"
 #define TEST_ACCOUNT_NAME_PWD "samrpwdlastset"
@@ -664,6 +665,9 @@ static bool test_SetUserPass(struct dcerpc_pipe *p, struct torture_context *tctx
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_SetUserInfo_r(b, tctx, &s),
 		"SetUserInfo failed");
+	torture_comment(tctx, "(%s:%s) new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			newpass, nt_errstr(s.out.result));
 	if (!NT_STATUS_IS_OK(s.out.result)) {
 		torture_warning(tctx, "SetUserInfo level %u failed - %s\n",
 		       s.in.level, nt_errstr(s.out.result));
@@ -723,6 +727,9 @@ static bool test_SetUserPass_23(struct dcerpc_pipe *p, struct torture_context *t
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_SetUserInfo_r(b, tctx, &s),
 		"SetUserInfo failed");
+	torture_comment(tctx, "(%s:%s) new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			newpass, nt_errstr(s.out.result));
 	if (!NT_STATUS_IS_OK(s.out.result)) {
 		torture_warning(tctx, "SetUserInfo level %u failed - %s\n",
 		       s.in.level, nt_errstr(s.out.result));
@@ -748,6 +755,9 @@ static bool test_SetUserPass_23(struct dcerpc_pipe *p, struct torture_context *t
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_SetUserInfo_r(b, tctx, &s),
 		"SetUserInfo failed");
+	torture_comment(tctx, "(%s:%s) new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			newpass, nt_errstr(s.out.result));
 	if (!NT_STATUS_EQUAL(s.out.result, NT_STATUS_WRONG_PASSWORD)) {
 		torture_warning(tctx, "SetUserInfo level %u should have failed with WRONG_PASSWORD- %s\n",
 		       s.in.level, nt_errstr(s.out.result));
@@ -771,7 +781,7 @@ static bool test_SetUserPassEx(struct dcerpc_pipe *p, struct torture_context *tc
 	uint8_t confounder[16];
 	char *newpass;
 	struct dcerpc_binding_handle *b = p->binding_handle;
-	struct MD5Context ctx;
+	MD5_CTX ctx;
 	struct samr_GetUserPwInfo pwp;
 	struct samr_PwInfo info;
 	int policy_min_pw_len = 0;
@@ -817,6 +827,9 @@ static bool test_SetUserPassEx(struct dcerpc_pipe *p, struct torture_context *tc
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_SetUserInfo_r(b, tctx, &s),
 		"SetUserInfo failed");
+	torture_comment(tctx, "(%s:%s) new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			newpass, nt_errstr(s.out.result));
 	if (!NT_STATUS_IS_OK(s.out.result)) {
 		torture_warning(tctx, "SetUserInfo level %u failed - %s\n",
 		       s.in.level, nt_errstr(s.out.result));
@@ -835,6 +848,9 @@ static bool test_SetUserPassEx(struct dcerpc_pipe *p, struct torture_context *tc
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_SetUserInfo_r(b, tctx, &s),
 		"SetUserInfo failed");
+	torture_comment(tctx, "(%s:%s) new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			newpass, nt_errstr(s.out.result));
 	if (!NT_STATUS_EQUAL(s.out.result, NT_STATUS_WRONG_PASSWORD)) {
 		torture_warning(tctx, "SetUserInfo level %u should have failed with WRONG_PASSWORD: %s\n",
 		       s.in.level, nt_errstr(s.out.result));
@@ -856,7 +872,7 @@ static bool test_SetUserPass_25(struct dcerpc_pipe *p, struct torture_context *t
 	bool ret = true;
 	DATA_BLOB session_key;
 	DATA_BLOB confounded_session_key = data_blob_talloc(tctx, NULL, 16);
-	struct MD5Context ctx;
+	MD5_CTX ctx;
 	uint8_t confounder[16];
 	char *newpass;
 	struct dcerpc_binding_handle *b = p->binding_handle;
@@ -904,6 +920,9 @@ static bool test_SetUserPass_25(struct dcerpc_pipe *p, struct torture_context *t
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_SetUserInfo_r(b, tctx, &s),
 		"SetUserInfo failed");
+	torture_comment(tctx, "(%s:%s) new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			newpass, nt_errstr(s.out.result));
 	if (!NT_STATUS_IS_OK(s.out.result)) {
 		torture_warning(tctx, "SetUserInfo level %u failed - %s\n",
 		       s.in.level, nt_errstr(s.out.result));
@@ -922,6 +941,9 @@ static bool test_SetUserPass_25(struct dcerpc_pipe *p, struct torture_context *t
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_SetUserInfo_r(b, tctx, &s),
 		"SetUserInfo failed");
+	torture_comment(tctx, "(%s:%s) new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			newpass, nt_errstr(s.out.result));
 	if (!NT_STATUS_EQUAL(s.out.result, NT_STATUS_WRONG_PASSWORD)) {
 		torture_warning(tctx, "SetUserInfo level %u should have failed with WRONG_PASSWORD- %s\n",
 		       s.in.level, nt_errstr(s.out.result));
@@ -1140,7 +1162,7 @@ static bool test_SetUserPass_level_ex(struct dcerpc_pipe *p,
 	bool ret = true;
 	DATA_BLOB session_key;
 	DATA_BLOB confounded_session_key = data_blob_talloc(tctx, NULL, 16);
-	struct MD5Context ctx;
+	MD5_CTX ctx;
 	uint8_t confounder[16];
 	char *newpass;
 	struct dcerpc_binding_handle *b = p->binding_handle;
@@ -1311,10 +1333,16 @@ static bool test_SetUserPass_level_ex(struct dcerpc_pipe *p,
 	if (use_setinfo2) {
 		torture_assert_ntstatus_ok(tctx, dcerpc_samr_SetUserInfo2_r(b, tctx, &s2),
 			"SetUserInfo2 failed");
-		status = s2.out.result;
+		torture_comment(tctx, "(%s:%s) new_password[%s] status[%s]\n",
+				__location__, __FUNCTION__,
+				newpass, nt_errstr(s2.out.result));
+			status = s2.out.result;
 	} else {
 		torture_assert_ntstatus_ok(tctx, dcerpc_samr_SetUserInfo_r(b, tctx, &s),
 			"SetUserInfo failed");
+		torture_comment(tctx, "(%s:%s) new_password[%s] status[%s]\n",
+				__location__, __FUNCTION__,
+				newpass, nt_errstr(s.out.result));
 		status = s.out.result;
 	}
 
@@ -1728,8 +1756,19 @@ static bool test_ChangePasswordUser(struct dcerpc_binding_handle *b,
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_ChangePasswordUser_r(b, tctx, &r),
 		"ChangePasswordUser failed");
-	torture_assert_ntstatus_equal(tctx, r.out.result, NT_STATUS_WRONG_PASSWORD,
-		"ChangePasswordUser failed: expected NT_STATUS_WRONG_PASSWORD because we broke the LM hash");
+	torture_comment(tctx, "(%s:%s) old_password[%s] new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			oldpass, newpass, nt_errstr(r.out.result));
+	
+	/* Do not proceed if this call has been removed */
+	if (NT_STATUS_EQUAL(r.out.result, NT_STATUS_NOT_IMPLEMENTED)) {
+		return true;
+	}
+
+	if (!NT_STATUS_EQUAL(r.out.result, NT_STATUS_PASSWORD_RESTRICTION)) {
+		torture_assert_ntstatus_equal(tctx, r.out.result, NT_STATUS_WRONG_PASSWORD,
+			"ChangePasswordUser failed: expected NT_STATUS_WRONG_PASSWORD because we broke the LM hash");
+	}
 
 	/* Unbreak the LM hash */
 	hash1.hash[0]--;
@@ -1750,8 +1789,13 @@ static bool test_ChangePasswordUser(struct dcerpc_binding_handle *b,
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_ChangePasswordUser_r(b, tctx, &r),
 		"ChangePasswordUser failed");
-	torture_assert_ntstatus_equal(tctx, r.out.result, NT_STATUS_WRONG_PASSWORD,
-		"expected NT_STATUS_WRONG_PASSWORD because we broke the NT hash");
+	torture_comment(tctx, "(%s:%s) old_password[%s] new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			oldpass, newpass, nt_errstr(r.out.result));
+	if (!NT_STATUS_EQUAL(r.out.result, NT_STATUS_PASSWORD_RESTRICTION)) {
+		torture_assert_ntstatus_equal(tctx, r.out.result, NT_STATUS_WRONG_PASSWORD,
+			"expected NT_STATUS_WRONG_PASSWORD because we broke the NT hash");
+	}
 
 	/* Unbreak the NT hash */
 	hash3.hash[0]--;
@@ -1772,8 +1816,13 @@ static bool test_ChangePasswordUser(struct dcerpc_binding_handle *b,
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_ChangePasswordUser_r(b, tctx, &r),
 		"ChangePasswordUser failed");
-	if (!NT_STATUS_EQUAL(r.out.result, NT_STATUS_WRONG_PASSWORD)) {
-		torture_warning(tctx, "ChangePasswordUser failed: expected NT_STATUS_WRONG_PASSWORD because we broke the LM cross-hash, got %s\n", nt_errstr(r.out.result));
+	torture_comment(tctx, "(%s:%s) old_password[%s] new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			oldpass, newpass, nt_errstr(r.out.result));
+	if (!NT_STATUS_EQUAL(r.out.result, NT_STATUS_WRONG_PASSWORD) &&
+	    !NT_STATUS_EQUAL(r.out.result, NT_STATUS_PASSWORD_RESTRICTION))
+	{
+		torture_warning(tctx, "ChangePasswordUser failed: expected NT_STATUS_WRONG_PASSWORD or NT_STATUS_PASSWORD_RESTRICTION because we broke the LM cross-hash, got %s\n", nt_errstr(r.out.result));
 		ret = false;
 	}
 
@@ -1796,8 +1845,13 @@ static bool test_ChangePasswordUser(struct dcerpc_binding_handle *b,
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_ChangePasswordUser_r(b, tctx, &r),
 		"ChangePasswordUser failed");
-	if (!NT_STATUS_EQUAL(r.out.result, NT_STATUS_WRONG_PASSWORD)) {
-		torture_warning(tctx, "ChangePasswordUser failed: expected NT_STATUS_WRONG_PASSWORD because we broke the NT cross-hash, got %s\n", nt_errstr(r.out.result));
+	torture_comment(tctx, "(%s:%s) old_password[%s] new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			oldpass, newpass, nt_errstr(r.out.result));
+	if (!NT_STATUS_EQUAL(r.out.result, NT_STATUS_WRONG_PASSWORD) &&
+	    !NT_STATUS_EQUAL(r.out.result, NT_STATUS_PASSWORD_RESTRICTION))
+	{
+		torture_warning(tctx, "ChangePasswordUser failed: expected NT_STATUS_WRONG_PASSWORD or NT_STATUS_PASSWORD_RESTRICTION because we broke the NT cross-hash, got %s\n", nt_errstr(r.out.result));
 		ret = false;
 	}
 
@@ -1827,6 +1881,9 @@ static bool test_ChangePasswordUser(struct dcerpc_binding_handle *b,
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_ChangePasswordUser_r(b, tctx, &r),
 		"ChangePasswordUser failed");
+	torture_comment(tctx, "(%s:%s) old_password[%s] new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			oldpass, newpass, nt_errstr(r.out.result));
 	if (NT_STATUS_IS_OK(r.out.result)) {
 		changed = true;
 		*password = newpass;
@@ -1866,6 +1923,9 @@ static bool test_ChangePasswordUser(struct dcerpc_binding_handle *b,
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_ChangePasswordUser_r(b, tctx, &r),
 		"ChangePasswordUser failed");
+	torture_comment(tctx, "(%s:%s) old_password[%s] new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			oldpass, newpass, nt_errstr(r.out.result));
 	if (NT_STATUS_IS_OK(r.out.result)) {
 		changed = true;
 		*password = newpass;
@@ -1905,6 +1965,9 @@ static bool test_ChangePasswordUser(struct dcerpc_binding_handle *b,
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_ChangePasswordUser_r(b, tctx, &r),
 		"ChangePasswordUser failed");
+	torture_comment(tctx, "(%s:%s) old_password[%s] new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			oldpass, newpass, nt_errstr(r.out.result));
 	if (NT_STATUS_EQUAL(r.out.result, NT_STATUS_PASSWORD_RESTRICTION)) {
 		torture_comment(tctx, "ChangePasswordUser returned: %s perhaps min password age? (not fatal)\n", nt_errstr(r.out.result));
 	} else 	if (!NT_STATUS_IS_OK(r.out.result)) {
@@ -1930,6 +1993,9 @@ static bool test_ChangePasswordUser(struct dcerpc_binding_handle *b,
 	if (changed) {
 		torture_assert_ntstatus_ok(tctx, dcerpc_samr_ChangePasswordUser_r(b, tctx, &r),
 			"ChangePasswordUser failed");
+		torture_comment(tctx, "(%s:%s) old_password[%s] new_password[%s] status[%s]\n",
+				__location__, __FUNCTION__,
+				oldpass, newpass, nt_errstr(r.out.result));
 		if (NT_STATUS_EQUAL(r.out.result, NT_STATUS_PASSWORD_RESTRICTION)) {
 			torture_comment(tctx, "ChangePasswordUser returned: %s perhaps min password age? (not fatal)\n", nt_errstr(r.out.result));
 		} else if (!NT_STATUS_EQUAL(r.out.result, NT_STATUS_WRONG_PASSWORD)) {
@@ -2007,6 +2073,9 @@ static bool test_OemChangePasswordUser2(struct dcerpc_pipe *p,
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_OemChangePasswordUser2_r(b, tctx, &r),
 		"OemChangePasswordUser2 failed");
+	torture_comment(tctx, "(%s:%s) old_password[%s] new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			oldpass, newpass, nt_errstr(r.out.result));
 
 	if (!NT_STATUS_EQUAL(r.out.result, NT_STATUS_PASSWORD_RESTRICTION)
 	    && !NT_STATUS_EQUAL(r.out.result, NT_STATUS_WRONG_PASSWORD)) {
@@ -2030,6 +2099,9 @@ static bool test_OemChangePasswordUser2(struct dcerpc_pipe *p,
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_OemChangePasswordUser2_r(b, tctx, &r),
 		"OemChangePasswordUser2 failed");
+	torture_comment(tctx, "(%s:%s) old_password[%s] new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			oldpass, newpass, nt_errstr(r.out.result));
 
 	if (!NT_STATUS_EQUAL(r.out.result, NT_STATUS_PASSWORD_RESTRICTION)
 	    && !NT_STATUS_EQUAL(r.out.result, NT_STATUS_WRONG_PASSWORD)) {
@@ -2048,6 +2120,9 @@ static bool test_OemChangePasswordUser2(struct dcerpc_pipe *p,
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_OemChangePasswordUser2_r(b, tctx, &r),
 		"OemChangePasswordUser2 failed");
+	torture_comment(tctx, "(%s:%s) old_password[%s] new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			oldpass, newpass, nt_errstr(r.out.result));
 
 	if (!NT_STATUS_EQUAL(r.out.result, NT_STATUS_PASSWORD_RESTRICTION)
 	    && !NT_STATUS_EQUAL(r.out.result, NT_STATUS_INVALID_PARAMETER)) {
@@ -2062,6 +2137,9 @@ static bool test_OemChangePasswordUser2(struct dcerpc_pipe *p,
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_OemChangePasswordUser2_r(b, tctx, &r),
 		"OemChangePasswordUser2 failed");
+	torture_comment(tctx, "(%s:%s) old_password[%s] new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			oldpass, newpass, nt_errstr(r.out.result));
 
 	if (!NT_STATUS_EQUAL(r.out.result, NT_STATUS_INVALID_PARAMETER)) {
 		torture_warning(tctx, "OemChangePasswordUser2 failed, should have returned INVALID_PARAMETER for no supplied validation hash and invalid user - %s\n",
@@ -2077,6 +2155,9 @@ static bool test_OemChangePasswordUser2(struct dcerpc_pipe *p,
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_OemChangePasswordUser2_r(b, tctx, &r),
 		"OemChangePasswordUser2 failed");
+	torture_comment(tctx, "(%s:%s) old_password[%s] new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			oldpass, newpass, nt_errstr(r.out.result));
 
 	if (!NT_STATUS_EQUAL(r.out.result, NT_STATUS_WRONG_PASSWORD)) {
 		torture_warning(tctx, "OemChangePasswordUser2 failed, should have returned WRONG_PASSWORD for invalid user - %s\n",
@@ -2092,6 +2173,9 @@ static bool test_OemChangePasswordUser2(struct dcerpc_pipe *p,
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_OemChangePasswordUser2_r(b, tctx, &r),
 		"OemChangePasswordUser2 failed");
+	torture_comment(tctx, "(%s:%s) old_password[%s] new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			oldpass, newpass, nt_errstr(r.out.result));
 
 	if (!NT_STATUS_EQUAL(r.out.result, NT_STATUS_INVALID_PARAMETER)) {
 		torture_warning(tctx, "OemChangePasswordUser2 failed, should have returned INVALID_PARAMETER for no supplied password and invalid user - %s\n",
@@ -2113,6 +2197,9 @@ static bool test_OemChangePasswordUser2(struct dcerpc_pipe *p,
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_OemChangePasswordUser2_r(b, tctx, &r),
 		"OemChangePasswordUser2 failed");
+	torture_comment(tctx, "(%s:%s) old_password[%s] new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			oldpass, newpass, nt_errstr(r.out.result));
 
 	if (NT_STATUS_EQUAL(r.out.result, NT_STATUS_PASSWORD_RESTRICTION)) {
 		torture_comment(tctx, "OemChangePasswordUser2 returned: %s perhaps min password age? (not fatal)\n", nt_errstr(r.out.result));
@@ -2195,6 +2282,9 @@ static bool test_ChangePasswordUser2(struct dcerpc_pipe *p, struct torture_conte
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_ChangePasswordUser2_r(b, tctx, &r),
 		"ChangePasswordUser2 failed");
+	torture_comment(tctx, "(%s:%s) old_password[%s] new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			oldpass, newpass, nt_errstr(r.out.result));
 
 	if (allow_password_restriction && NT_STATUS_EQUAL(r.out.result, NT_STATUS_PASSWORD_RESTRICTION)) {
 		torture_comment(tctx, "ChangePasswordUser2 returned: %s perhaps min password age? (not fatal)\n", nt_errstr(r.out.result));
@@ -2281,6 +2371,9 @@ bool test_ChangePasswordUser3(struct dcerpc_pipe *p, struct torture_context *tct
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_ChangePasswordUser3_r(b, tctx, &r),
 		"ChangePasswordUser3 failed");
+	torture_comment(tctx, "(%s:%s) old_password[%s] new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			oldpass, newpass, nt_errstr(r.out.result));
 	if (!NT_STATUS_EQUAL(r.out.result, NT_STATUS_PASSWORD_RESTRICTION) &&
 	    (!NT_STATUS_EQUAL(r.out.result, NT_STATUS_WRONG_PASSWORD))) {
 		torture_warning(tctx, "ChangePasswordUser3 failed, should have returned WRONG_PASSWORD (or at least 'PASSWORD_RESTRICTON') for invalid password verifier - %s\n",
@@ -2313,6 +2406,9 @@ bool test_ChangePasswordUser3(struct dcerpc_pipe *p, struct torture_context *tct
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_ChangePasswordUser3_r(b, tctx, &r),
 		"ChangePasswordUser3 failed");
+	torture_comment(tctx, "(%s:%s) old_password[%s] new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			oldpass, newpass, nt_errstr(r.out.result));
 	if (!NT_STATUS_EQUAL(r.out.result, NT_STATUS_PASSWORD_RESTRICTION) &&
 	    (!NT_STATUS_EQUAL(r.out.result, NT_STATUS_WRONG_PASSWORD))) {
 		torture_warning(tctx, "ChangePasswordUser3 failed, should have returned WRONG_PASSWORD (or at least 'PASSWORD_RESTRICTON') for invalidly encrpted password - %s\n",
@@ -2326,6 +2422,9 @@ bool test_ChangePasswordUser3(struct dcerpc_pipe *p, struct torture_context *tct
 	r.in.account = &account_bad;
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_ChangePasswordUser3_r(b, tctx, &r),
 		"ChangePasswordUser3 failed");
+	torture_comment(tctx, "(%s:%s) old_password[%s] new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			oldpass, newpass, nt_errstr(r.out.result));
 	if (!NT_STATUS_EQUAL(r.out.result, NT_STATUS_WRONG_PASSWORD)) {
 		torture_warning(tctx, "ChangePasswordUser3 failed, should have returned WRONG_PASSWORD for invalid username - %s\n",
 			nt_errstr(r.out.result));
@@ -2361,6 +2460,18 @@ bool test_ChangePasswordUser3(struct dcerpc_pipe *p, struct torture_context *tct
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_ChangePasswordUser3_r(b, tctx, &r),
 		"ChangePasswordUser3 failed");
+	torture_comment(tctx, "(%s:%s) old_password[%s] new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			oldpass, newpass, nt_errstr(r.out.result));
+
+	torture_comment(tctx, "(%s): dominfo[%s], reject[%s], handle_reject_reason[%s], "
+			"last_password_change[%s], dominfo->min_password_age[%lld]\n",
+			__location__,
+			(dominfo == NULL)? "NULL" : "present",
+			reject ? "true" : "false",
+			handle_reject_reason ? "true" : "false",
+			null_nttime(last_password_change) ? "null" : "not null",
+			dominfo ? (long long)dominfo->min_password_age : (long long)0);
 
 	if (NT_STATUS_EQUAL(r.out.result, NT_STATUS_PASSWORD_RESTRICTION)
 	    && dominfo
@@ -2385,8 +2496,8 @@ bool test_ChangePasswordUser3(struct dcerpc_pipe *p, struct torture_context *tct
 
 		Guenther */
 
-		if ((dominfo->min_password_age > 0) && !null_nttime(last_password_change) &&
-			   (last_password_change + dominfo->min_password_age > t)) {
+		if ((dominfo->min_password_age < 0) && !null_nttime(last_password_change) &&
+			   (last_password_change - dominfo->min_password_age > t)) {
 
 			if (reject->extendedFailureReason != SAM_PWD_CHANGE_NO_ERROR) {
 				torture_warning(tctx, "expected SAM_PWD_CHANGE_NO_ERROR (%d), got %d\n",
@@ -2458,7 +2569,7 @@ bool test_ChangePasswordRandomBytes(struct dcerpc_pipe *p, struct torture_contex
 	DATA_BLOB session_key;
 	DATA_BLOB confounded_session_key = data_blob_talloc(tctx, NULL, 16);
 	uint8_t confounder[16];
-	struct MD5Context ctx;
+	MD5_CTX ctx;
 
 	bool ret = true;
 	struct lsa_String server, account;
@@ -2513,6 +2624,9 @@ bool test_ChangePasswordRandomBytes(struct dcerpc_pipe *p, struct torture_contex
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_SetUserInfo_r(b, tctx, &s),
 		"SetUserInfo failed");
+	torture_comment(tctx, "(%s:%s) old_password[%s] new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			oldpass, "RANDOM", nt_errstr(s.out.result));
 	if (!NT_STATUS_IS_OK(s.out.result)) {
 		torture_warning(tctx, "SetUserInfo level %u failed - %s\n",
 		       s.in.level, nt_errstr(s.out.result));
@@ -2546,6 +2660,9 @@ bool test_ChangePasswordRandomBytes(struct dcerpc_pipe *p, struct torture_contex
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_ChangePasswordUser3_r(b, tctx, &r),
 		"ChangePasswordUser3 failed");
+	torture_comment(tctx, "(%s:%s) old_password[%s] new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			oldpass, "RANDOM", nt_errstr(r.out.result));
 
 	if (NT_STATUS_EQUAL(r.out.result, NT_STATUS_PASSWORD_RESTRICTION)) {
 		if (reject && reject->extendedFailureReason != SAM_PWD_CHANGE_NO_ERROR) {
@@ -2585,6 +2702,9 @@ bool test_ChangePasswordRandomBytes(struct dcerpc_pipe *p, struct torture_contex
 
 	torture_assert_ntstatus_ok(tctx, dcerpc_samr_ChangePasswordUser3_r(b, tctx, &r),
 		"ChangePasswordUser3 failed");
+	torture_comment(tctx, "(%s:%s) old_password[%s] new_password[%s] status[%s]\n",
+			__location__, __FUNCTION__,
+			oldpass, newpass, nt_errstr(r.out.result));
 
 	if (NT_STATUS_EQUAL(r.out.result, NT_STATUS_PASSWORD_RESTRICTION)) {
 		if (reject && reject->extendedFailureReason != SAM_PWD_CHANGE_NO_ERROR) {
@@ -2887,7 +3007,10 @@ static bool test_SamLogon(struct torture_context *tctx,
 		}
 		E_md4hash(cli_credentials_get_password(test_credentials), pinfo.ntpassword.hash);
 
-		if (creds->negotiate_flags & NETLOGON_NEG_ARCFOUR) {
+		if (creds->negotiate_flags & NETLOGON_NEG_SUPPORTS_AES) {
+			netlogon_creds_aes_encrypt(creds, pinfo.lmpassword.hash, 16);
+			netlogon_creds_aes_encrypt(creds, pinfo.ntpassword.hash, 16);
+		} else if (creds->negotiate_flags & NETLOGON_NEG_ARCFOUR) {
 			netlogon_creds_arcfour_crypt(creds, pinfo.lmpassword.hash, 16);
 			netlogon_creds_arcfour_crypt(creds, pinfo.ntpassword.hash, 16);
 		} else {
@@ -3071,7 +3194,7 @@ static bool setup_schannel_netlogon_pipe(struct torture_context *tctx,
 	 * with INTERNAL_ERROR */
 
 	b->flags &= ~DCERPC_AUTH_OPTIONS;
-	b->flags |= DCERPC_SCHANNEL | DCERPC_SIGN | DCERPC_SCHANNEL_128;
+	b->flags |= DCERPC_SCHANNEL | DCERPC_SIGN | DCERPC_SCHANNEL_AUTO;
 
 	torture_assert_ntstatus_ok(tctx,
 		dcerpc_pipe_connect_b(tctx, p, b, &ndr_table_netlogon,
@@ -5536,7 +5659,7 @@ static bool test_CreateUser2(struct dcerpc_pipe *p, struct torture_context *tctx
 				ret = false;
 			}
 
-			if (!policy_handle_empty(&user_handle)) {
+			if (!ndr_policy_handle_empty(&user_handle)) {
 				torture_comment(tctx, "Testing DeleteUser (createuser2 test)\n");
 
 				d.in.user_handle = &user_handle;
@@ -7483,7 +7606,7 @@ static bool test_ManyObjects(struct dcerpc_pipe *p,
 		default:
 			return false;
 		}
-		if (!policy_handle_empty(&handles[i])) {
+		if (!ndr_policy_handle_empty(&handles[i])) {
 			num_created++;
 		}
 	}
@@ -7534,7 +7657,7 @@ static bool test_ManyObjects(struct dcerpc_pipe *p,
 
 	for (i=0; i < num_total; i++) {
 
-		if (policy_handle_empty(&handles[i])) {
+		if (ndr_policy_handle_empty(&handles[i])) {
 			continue;
 		}
 
@@ -7694,17 +7817,17 @@ static bool test_OpenDomain(struct dcerpc_pipe *p, struct torture_context *tctx,
 		break;
 	}
 
-	if (!policy_handle_empty(&user_handle) &&
+	if (!ndr_policy_handle_empty(&user_handle) &&
 	    !test_DeleteUser(b, tctx, &user_handle)) {
 		ret = false;
 	}
 
-	if (!policy_handle_empty(&alias_handle) &&
+	if (!ndr_policy_handle_empty(&alias_handle) &&
 	    !test_DeleteAlias(b, tctx, &alias_handle)) {
 		ret = false;
 	}
 
-	if (!policy_handle_empty(&group_handle) &&
+	if (!ndr_policy_handle_empty(&group_handle) &&
 	    !test_DeleteDomainGroup(b, tctx, &group_handle)) {
 		ret = false;
 	}
@@ -7827,7 +7950,7 @@ static bool test_Connect(struct dcerpc_binding_handle *b,
 
 	torture_comment(tctx, "Testing samr_Connect\n");
 
-	r.in.system_name = 0;
+	r.in.system_name = NULL;
 	r.in.access_mask = SEC_FLAG_MAXIMUM_ALLOWED;
 	r.out.connect_handle = &h;
 
@@ -7930,8 +8053,8 @@ static bool test_Connect(struct dcerpc_binding_handle *b,
 }
 
 
-static bool test_samr_ValidatePassword(struct dcerpc_pipe *p,
-				       struct torture_context *tctx)
+static bool test_samr_ValidatePassword(struct torture_context *tctx,
+				       struct dcerpc_pipe *p)
 {
 	struct samr_ValidatePassword r;
 	union samr_ValidatePasswordReq req;
@@ -7943,13 +8066,17 @@ static bool test_samr_ValidatePassword(struct dcerpc_pipe *p,
 
 	torture_comment(tctx, "Testing samr_ValidatePassword\n");
 
+	if (p->conn->transport.transport != NCACN_IP_TCP) {
+		torture_comment(tctx, "samr_ValidatePassword only should succeed over NCACN_IP_TCP!\n");
+	}
+
 	ZERO_STRUCT(r);
 	r.in.level = NetValidatePasswordReset;
 	r.in.req = &req;
 	r.out.rep = &repp;
 
 	ZERO_STRUCT(req);
-	req.req3.account.string = "non-existant-account-aklsdji";
+	req.req3.account.string = "non-existent-account-aklsdji";
 
 	for (i=0; passwords[i]; i++) {
 		req.req3.password.string = passwords[i];
@@ -8065,8 +8192,6 @@ bool torture_rpc_samr_passwords(struct torture_context *torture)
 	ret &= test_EnumDomains(p, torture, ctx);
 
 	ret &= test_samr_handle_Close(b, torture, &ctx->handle);
-
-	ret &= test_samr_ValidatePassword(p, torture);
 
 	return ret;
 }
@@ -8362,4 +8487,15 @@ struct torture_suite *torture_rpc_samr_passwords_lockout(TALLOC_CTX *mem_ctx)
 	return suite;
 }
 
+struct torture_suite *torture_rpc_samr_passwords_validate(TALLOC_CTX *mem_ctx)
+{
+	struct torture_suite *suite = torture_suite_create(mem_ctx, "samr.passwords.validate");
+	struct torture_rpc_tcase *tcase;
 
+	tcase = torture_suite_add_rpc_iface_tcase(suite, "samr",
+						  &ndr_table_samr);
+	torture_rpc_tcase_add_test(tcase, "validate",
+				   test_samr_ValidatePassword);
+
+	return suite;
+}

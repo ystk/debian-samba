@@ -42,6 +42,7 @@ static void continue_groupadd_created(struct tevent_req *subreq);
 
 
 struct composite_context* libnet_rpc_groupadd_send(struct dcerpc_pipe *p,
+						   TALLOC_CTX *mem_ctx,
 						   struct libnet_rpc_groupadd *io,
 						   void (*monitor)(struct monitor_msg*))
 {
@@ -51,7 +52,7 @@ struct composite_context* libnet_rpc_groupadd_send(struct dcerpc_pipe *p,
 
 	if (!p || !io) return NULL;
 
-	c = composite_create(p, dcerpc_event_context(p));
+	c = composite_create(mem_ctx, dcerpc_event_context(p));
 	if (c == NULL) return NULL;
 
 	s = talloc_zero(c, struct groupadd_state);
@@ -93,10 +94,12 @@ NTSTATUS libnet_rpc_groupadd_recv(struct composite_context *c, TALLOC_CTX *mem_c
 	struct groupadd_state *s;
 	
 	status = composite_wait(c);
-	if (NT_STATUS_IS_OK(status)) {
-		s = talloc_get_type(c, struct groupadd_state);
+	if (NT_STATUS_IS_OK(status) && io) {
+		s = talloc_get_type(c->private_data, struct groupadd_state);
+		io->out.group_handle = s->group_handle;
 	}
 
+	talloc_free(c);
 	return status;
 }
 
@@ -114,8 +117,11 @@ static void continue_groupadd_created(struct tevent_req *subreq)
 	if (!composite_is_ok(c)) return;
 
 	c->status = s->creategroup.out.result;
-	if (!composite_is_ok(c)) return;
-	
+	if (!NT_STATUS_IS_OK(c->status)) {
+		composite_error(c, c->status);
+		return;
+	}
+
 	composite_done(c);
 }
 
@@ -125,7 +131,7 @@ NTSTATUS libnet_rpc_groupadd(struct dcerpc_pipe *p, TALLOC_CTX *mem_ctx,
 {
 	struct composite_context *c;
 
-	c = libnet_rpc_groupadd_send(p, io, NULL);
+	c = libnet_rpc_groupadd_send(p, mem_ctx, io, NULL);
 	return libnet_rpc_groupadd_recv(c, mem_ctx, io);
 }
 
@@ -149,6 +155,7 @@ static void continue_groupdel_deleted(struct tevent_req *subreq);
 
 
 struct composite_context* libnet_rpc_groupdel_send(struct dcerpc_pipe *p,
+						   TALLOC_CTX *mem_ctx,
 						   struct libnet_rpc_groupdel *io,
 						   void (*monitor)(struct monitor_msg*))
 {
@@ -157,7 +164,7 @@ struct composite_context* libnet_rpc_groupdel_send(struct dcerpc_pipe *p,
 	struct tevent_req *subreq;
 
 	/* composite context allocation and setup */
-	c = composite_create(p, dcerpc_event_context(p));
+	c = composite_create(mem_ctx, dcerpc_event_context(p));
 	if (c == NULL) return NULL;
 
 	s = talloc_zero(c, struct groupdel_state);
@@ -212,13 +219,13 @@ static void continue_groupdel_name_found(struct tevent_req *subreq)
 
 	/* what to do when there's no group account to delete
 	   and what if there's more than one rid resolved */
-	if (!s->lookupname.out.rids->count) {
-		c->status = NT_STATUS_NO_SUCH_GROUP;
+	if (s->lookupname.out.rids->count != s->lookupname.in.num_names) {
+		c->status = NT_STATUS_INVALID_NETWORK_RESPONSE;
 		composite_error(c, c->status);
 		return;
-
-	} else if (!s->lookupname.out.rids->count > 1) {
-		c->status = NT_STATUS_INVALID_ACCOUNT_NAME;
+	}
+	if (s->lookupname.out.types->count != s->lookupname.in.num_names) {
+		c->status = NT_STATUS_INVALID_NETWORK_RESPONSE;
 		composite_error(c, c->status);
 		return;
 	}
@@ -319,6 +326,6 @@ NTSTATUS libnet_rpc_groupdel(struct dcerpc_pipe *p, TALLOC_CTX *mem_ctx,
 {
 	struct composite_context *c;
 
-	c = libnet_rpc_groupdel_send(p, io, NULL);
+	c = libnet_rpc_groupdel_send(p, mem_ctx, io, NULL);
 	return libnet_rpc_groupdel_recv(c, mem_ctx, io);
 }

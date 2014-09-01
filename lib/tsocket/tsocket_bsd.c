@@ -60,6 +60,12 @@ static int tsocket_bsd_error_from_errno(int ret,
 		return sys_errno;
 	}
 
+	/* ENOMEM is retryable on Solaris/illumos, and possibly other systems. */
+	if (sys_errno == ENOMEM) {
+		*retry = true;
+		return sys_errno;
+	}
+
 #ifdef EWOULDBLOCK
 	if (sys_errno == EWOULDBLOCK) {
 		*retry = true;
@@ -203,7 +209,7 @@ struct tsocket_address_bsd {
 };
 
 int _tsocket_address_bsd_from_sockaddr(TALLOC_CTX *mem_ctx,
-				       struct sockaddr *sa,
+				       const struct sockaddr *sa,
 				       size_t sa_socklen,
 				       struct tsocket_address **_addr,
 				       const char *location)
@@ -383,7 +389,7 @@ int _tsocket_address_inet_from_strings(TALLOC_CTX *mem_ctx,
 		return -1;
 	}
 
-	snprintf(port_str, sizeof(port_str) - 1, "%u", port);
+	snprintf(port_str, sizeof(port_str), "%u", port);
 
 	ret = getaddrinfo(addr, port_str, &hints, &result);
 	if (ret != 0) {
@@ -654,12 +660,32 @@ struct tdgram_bsd {
 
 	void *event_ptr;
 	struct tevent_fd *fde;
+	bool optimize_recvfrom;
 
 	void *readable_private;
 	void (*readable_handler)(void *private_data);
 	void *writeable_private;
 	void (*writeable_handler)(void *private_data);
 };
+
+bool tdgram_bsd_optimize_recvfrom(struct tdgram_context *dgram,
+				  bool on)
+{
+	struct tdgram_bsd *bsds =
+		talloc_get_type(_tdgram_context_data(dgram),
+		struct tdgram_bsd);
+	bool old;
+
+	if (bsds == NULL) {
+		/* not a bsd socket */
+		return false;
+	}
+
+	old = bsds->optimize_recvfrom;
+	bsds->optimize_recvfrom = on;
+
+	return old;
+}
 
 static void tdgram_bsd_fde_handler(struct tevent_context *ev,
 				   struct tevent_fd *fde,
@@ -792,7 +818,7 @@ static int tdgram_bsd_set_writeable_handler(struct tdgram_bsd *bsds,
 
 struct tdgram_bsd_recvfrom_state {
 	struct tdgram_context *dgram;
-
+	bool first_try;
 	uint8_t *buf;
 	size_t len;
 	struct tsocket_address *src;
@@ -826,6 +852,7 @@ static struct tevent_req *tdgram_bsd_recvfrom_send(TALLOC_CTX *mem_ctx,
 	}
 
 	state->dgram	= dgram;
+	state->first_try= true;
 	state->buf	= NULL;
 	state->len	= 0;
 	state->src	= NULL;
@@ -837,14 +864,25 @@ static struct tevent_req *tdgram_bsd_recvfrom_send(TALLOC_CTX *mem_ctx,
 		goto post;
 	}
 
+
 	/*
 	 * this is a fast path, not waiting for the
 	 * socket to become explicit readable gains
 	 * about 10%-20% performance in benchmark tests.
 	 */
-	tdgram_bsd_recvfrom_handler(req);
-	if (!tevent_req_is_in_progress(req)) {
-		goto post;
+	if (bsds->optimize_recvfrom) {
+		/*
+		 * We only do the optimization on
+		 * recvfrom if the caller asked for it.
+		 *
+		 * This is needed because in most cases
+		 * we preferr to flush send buffers before
+		 * receiving incoming requests.
+		 */
+		tdgram_bsd_recvfrom_handler(req);
+		if (!tevent_req_is_in_progress(req)) {
+			goto post;
+		}
 	}
 
 	ret = tdgram_bsd_set_readable_handler(bsds, ev,
@@ -876,10 +914,13 @@ static void tdgram_bsd_recvfrom_handler(void *private_data)
 	bool retry;
 
 	ret = tsocket_bsd_pending(bsds->fd);
-	if (ret == 0) {
+	if (state->first_try && ret == 0) {
+		state->first_try = false;
 		/* retry later */
 		return;
 	}
+	state->first_try = false;
+
 	err = tsocket_bsd_error_from_errno(ret, errno, &retry);
 	if (retry) {
 		/* retry later */
@@ -889,6 +930,7 @@ static void tdgram_bsd_recvfrom_handler(void *private_data)
 		return;
 	}
 
+	/* note that 'ret' can be 0 here */
 	state->buf = talloc_array(state, uint8_t, ret);
 	if (tevent_req_nomem(state->buf, req)) {
 		return;
@@ -1066,6 +1108,32 @@ static void tdgram_bsd_sendto_handler(void *private_data)
 		/* retry later */
 		return;
 	}
+
+	if (err == EMSGSIZE) {
+		/* round up in 1K increments */
+		int bufsize = ((state->len + 1023) & (~1023));
+
+		ret = setsockopt(bsds->fd, SOL_SOCKET, SO_SNDBUF, &bufsize,
+				 sizeof(bufsize));
+		if (ret == 0) {
+			/*
+			 * We do the rety here, rather then via the
+			 * handler, as we only want to retry once for
+			 * this condition, so if there is a mismatch
+			 * between what setsockopt() accepts and what can
+			 * actually be sent, we do not end up in a
+			 * loop.
+			 */
+
+			ret = sendto(bsds->fd, state->buf, state->len,
+				     0, sa, sa_socklen);
+			err = tsocket_bsd_error_from_errno(ret, errno, &retry);
+			if (retry) { /* retry later */
+				return;
+			}
+		}
+	}
+
 	if (tevent_req_error(req, err)) {
 		return;
 	}
@@ -1400,12 +1468,32 @@ struct tstream_bsd {
 
 	void *event_ptr;
 	struct tevent_fd *fde;
+	bool optimize_readv;
 
 	void *readable_private;
 	void (*readable_handler)(void *private_data);
 	void *writeable_private;
 	void (*writeable_handler)(void *private_data);
 };
+
+bool tstream_bsd_optimize_readv(struct tstream_context *stream,
+				bool on)
+{
+	struct tstream_bsd *bsds =
+		talloc_get_type(_tstream_context_data(stream),
+		struct tstream_bsd);
+	bool old;
+
+	if (bsds == NULL) {
+		/* not a bsd socket */
+		return false;
+	}
+
+	old = bsds->optimize_readv;
+	bsds->optimize_readv = on;
+
+	return old;
+}
 
 static void tstream_bsd_fde_handler(struct tevent_context *ev,
 				    struct tevent_fd *fde,
@@ -1619,9 +1707,19 @@ static struct tevent_req *tstream_bsd_readv_send(TALLOC_CTX *mem_ctx,
 	 * socket to become explicit readable gains
 	 * about 10%-20% performance in benchmark tests.
 	 */
-	tstream_bsd_readv_handler(req);
-	if (!tevent_req_is_in_progress(req)) {
-		goto post;
+	if (bsds->optimize_readv) {
+		/*
+		 * We only do the optimization on
+		 * readv if the caller asked for it.
+		 *
+		 * This is needed because in most cases
+		 * we preferr to flush send buffers before
+		 * receiving incoming requests.
+		 */
+		tstream_bsd_readv_handler(req);
+		if (!tevent_req_is_in_progress(req)) {
+			goto post;
+		}
 	}
 
 	ret = tstream_bsd_set_readable_handler(bsds, ev,
