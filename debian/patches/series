@@ -15,3 +15,9 @@ add-so-version-to-private-libraries
 do-not-install-smbclient4-and-nmbclient4
 xsltproc_dont_build_smb.conf.5.patch
 samba_bug_11077_torturetest.patch
+cve_2015_5252.diff
+cve_2015_5296.diff
+cve_2015_5299.diff
+cve_2015_7540.diff
+cve_2015_8467.diff
+cve_2015_3223_5330.diff

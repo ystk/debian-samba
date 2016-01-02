@@ -1,3 +1,24 @@
+samba (2:4.1.17+dfsg-2+deb8u1) jessie-security; urgency=high
+
+  * Add patch cve_2015_5252.diff, fixes:
+   - CVE-2015-5252: Insufficient symlink verification in smbd
+  * Add patch cve_2015_5296.diff, fixes:
+   - CVE-2015-5296: Samba client requesting encryption vulnerable
+                    downgrade attack
+  * Add patch cve_2015_5299.diff, fixes:
+   - CVE-2015-5299: Missing access control check in shadow copy code
+  * Add patch cve_2015_7540.diff, fixes:
+   - CVE-2015-7540: Remote DoS in Samba (AD) LDAP server
+  * Add patch cve_2015_8467.diff, fixes:
+   - CVE-2015-8467: Denial of service attack against Windows Active Directory
+                    server
+  * Add patch cve_2015_3223_5330.diff, fixes:
+   - CVE-2015-3223: Denial of service in Samba Active Directory server
+   - CVE-2015-5330: Remote memory read in Samba LDAP server
+  * Bump build dependency for ldb to >= 2:1.1.17-2+deb8u1~.
+
+ -- Jelmer Vernooij <jelmer@debian.org>  Wed, 16 Dec 2015 01:59:37 +0000
+
 samba (2:4.1.17+dfsg-2) unstable; urgency=medium
 
   [ Andreas Beckmann ]
