@@ -1,3 +1,15 @@
+samba (2:3.5.6~dfsg-3squeeze13) squeeze-lts; urgency=high
+
+  * Non-maintainer upload by the Squeeze LTS Team
+  * Fix CVE-2015-5252: s3: smbd: Fix symlink verification (file access outside
+    the share).
+  * Fix CVE-2015-5296: s3:libsmb: force signing when requiring encryption in
+    do_connect(). Add notice in debian/NEWS.
+  * Fix CVE-2015-5299: s3-shadow-copy2: fix missing access check on
+    snapdir.
+
+ -- Santiago Ruano Rincón <santiagorr@riseup.net>  Sat, 02 Jan 2016 16:02:50 +0100
+
 samba (2:3.5.6~dfsg-3squeeze12) squeeze-lts; urgency=high
 
   * Security update

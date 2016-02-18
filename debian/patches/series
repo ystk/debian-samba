@@ -38,3 +38,6 @@ security-CVE-2013-0214.patch
 security-CVE-2013-4124.patch
 security-CVE-2013-4408.patch
 security-CVE-2015-0240.patch
+CVE-2015-5252-v3-6-bso11395.patch
+CVE-2015-5296-v3-6-bso11536.patch
+CVE-2015-5299-v3-6-bso11529.patch
