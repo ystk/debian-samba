@@ -21,3 +21,7 @@ cve_2015_5299.diff
 cve_2015_7540.diff
 cve_2015_8467.diff
 cve_2015_3223_5330.diff
+vfs_stat_smb_basename.diff
+cve_2015_7560.diff
+cve_2016_0771.diff
+root-share-path.patch

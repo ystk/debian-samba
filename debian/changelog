@@ -1,3 +1,16 @@
+samba (2:4.1.17+dfsg-2+deb8u2) jessie-security; urgency=high
+
+  * Add vfs_stat_smb_basename.diff; adds function required by
+    cve_2015_7560.diff.
+  * Add patch cve_2015_7560.diff, fixes:
+   - CVE-2015-7560: Incorrect ACL get/set allowed on symlink path.
+  * Add patch cve_2016_0771.diff, fixes:
+   - CVE-2016-0771: Out-of-bounds read in internal DNS server.
+  * Add patch root-share-path.patch, to fix regression sharing root
+    directory introduced by fix for CVE-2015-5252. Closes: #812429
+
+ -- Jelmer Vernooij <jelmer@debian.org>  Sun, 06 Mar 2016 22:20:45 +0000
+
 samba (2:4.1.17+dfsg-2+deb8u1) jessie-security; urgency=high
 
   * Add patch cve_2015_5252.diff, fixes:
