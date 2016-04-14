@@ -24,6 +24,7 @@
 #include "../lib/addns/dnsquery.h"
 #include "../libcli/netlogon/netlogon.h"
 #include "lib/async_req/async_sock.h"
+#include "lib/tsocket/tsocket.h"
 #include "libsmb/nmblib.h"
 #include "../libcli/nbt/libnbt.h"
 
@@ -165,7 +166,7 @@ bool saf_delete( const char *domain )
 /****************************************************************************
 ****************************************************************************/
 
-char *saf_fetch( const char *domain )
+char *saf_fetch(TALLOC_CTX *mem_ctx, const char *domain )
 {
 	char *server = NULL;
 	time_t timeout;
@@ -183,7 +184,7 @@ char *saf_fetch( const char *domain )
 		return NULL;
 	}
 
-	ret = gencache_get( key, &server, &timeout );
+	ret = gencache_get( key, mem_ctx, &server, &timeout );
 
 	TALLOC_FREE( key );
 
@@ -199,7 +200,7 @@ char *saf_fetch( const char *domain )
 		return NULL;
 	}
 
-	ret = gencache_get( key, &server, &timeout );
+	ret = gencache_get( key, mem_ctx, &server, &timeout );
 
 	TALLOC_FREE( key );
 
@@ -240,9 +241,9 @@ static struct in_addr my_socket_addr_v4(void)
 
 static int generate_trn_id(void)
 {
-	uint16 id;
+	uint16_t id;
 
-	generate_random_buffer((uint8 *)&id, sizeof(id));
+	generate_random_buffer((uint8_t *)&id, sizeof(id));
 
 	return id % (unsigned)0x7FFF;
 }
@@ -294,11 +295,10 @@ struct sock_packet_read_state {
 	struct nb_packet_reader *reader;
 	struct tevent_req *reader_req;
 
-	int sock;
+	struct tdgram_context *sock;
 	struct tevent_req *socket_req;
-	uint8_t buf[1024];
-	struct sockaddr_storage addr;
-	socklen_t addr_len;
+	uint8_t *buf;
+	struct tsocket_address *addr;
 
 	bool (*validator)(struct packet_struct *p,
 			  void *private_data);
@@ -314,7 +314,7 @@ static void sock_packet_read_got_socket(struct tevent_req *subreq);
 static struct tevent_req *sock_packet_read_send(
 	TALLOC_CTX *mem_ctx,
 	struct tevent_context *ev,
-	int sock, /* dgram socket */
+	struct tdgram_context *sock,
 	struct nb_packet_reader *reader,
 	enum packet_type type,
 	int trn_id,
@@ -347,10 +347,7 @@ static struct tevent_req *sock_packet_read_send(
 			state->reader_req, sock_packet_read_got_packet, req);
 	}
 
-	state->addr_len = sizeof(state->addr);
-	state->socket_req = recvfrom_send(state, ev, sock,
-					  state->buf, sizeof(state->buf), 0,
-					  &state->addr, &state->addr_len);
+	state->socket_req = tdgram_recvfrom_send(state, ev, state->sock);
 	if (tevent_req_nomem(state->socket_req, req)) {
 		return tevent_req_post(req, ev);
 	}
@@ -422,11 +419,17 @@ static void sock_packet_read_got_socket(struct tevent_req *subreq)
 		subreq, struct tevent_req);
 	struct sock_packet_read_state *state = tevent_req_data(
 		req, struct sock_packet_read_state);
-	struct sockaddr_in *in_addr;
+	union {
+		struct sockaddr sa;
+		struct sockaddr_in sin;
+	} addr;
+	ssize_t ret;
 	ssize_t received;
 	int err;
+	bool ok;
 
-	received = recvfrom_recv(subreq, &err);
+	received = tdgram_recvfrom_recv(subreq, &err, state,
+					&state->buf, &state->addr);
 
 	TALLOC_FREE(state->socket_req);
 
@@ -443,13 +446,20 @@ static void sock_packet_read_got_socket(struct tevent_req *subreq)
 		tevent_req_nterror(req, map_nt_error_from_unix(err));
 		return;
 	}
-	if (state->addr.ss_family != AF_INET) {
+	ok = tsocket_address_is_inet(state->addr, "ipv4");
+	if (!ok) {
 		goto retry;
 	}
-	in_addr = (struct sockaddr_in *)(void *)&state->addr;
+	ret = tsocket_address_bsd_sockaddr(state->addr,
+					   &addr.sa,
+					   sizeof(addr.sin));
+	if (ret == -1) {
+		tevent_req_nterror(req, map_nt_error_from_unix(errno));
+		return;
+	}
 
 	state->packet = parse_packet((char *)state->buf, received, state->type,
-				     in_addr->sin_addr, in_addr->sin_port);
+				     addr.sin.sin_addr, addr.sin.sin_port);
 	if (state->packet == NULL) {
 		DEBUG(10, ("parse_packet failed\n"));
 		goto retry;
@@ -475,9 +485,10 @@ retry:
 		free_packet(state->packet);
 		state->packet = NULL;
 	}
-	state->socket_req = recvfrom_send(state, state->ev, state->sock,
-					  state->buf, sizeof(state->buf), 0,
-					  &state->addr, &state->addr_len);
+	TALLOC_FREE(state->buf);
+	TALLOC_FREE(state->addr);
+
+	state->socket_req = tdgram_recvfrom_send(state, state->ev, state->sock);
 	if (tevent_req_nomem(state->socket_req, req)) {
 		return;
 	}
@@ -502,10 +513,11 @@ static NTSTATUS sock_packet_read_recv(struct tevent_req *req,
 
 struct nb_trans_state {
 	struct tevent_context *ev;
-	int sock;
+	struct tdgram_context *sock;
 	struct nb_packet_reader *reader;
 
-	const struct sockaddr_storage *dst_addr;
+	struct tsocket_address *src_addr;
+	struct tsocket_address *dst_addr;
 	uint8_t *buf;
 	size_t buflen;
 	enum packet_type type;
@@ -527,8 +539,8 @@ static void nb_trans_send_next(struct tevent_req *subreq);
 static struct tevent_req *nb_trans_send(
 	TALLOC_CTX *mem_ctx,
 	struct tevent_context *ev,
-	const struct sockaddr_storage *my_addr,
-	const struct sockaddr_storage *dst_addr,
+	const struct sockaddr_storage *_my_addr,
+	const struct sockaddr_storage *_dst_addr,
 	bool bcast,
 	uint8_t *buf, size_t buflen,
 	enum packet_type type, int trn_id,
@@ -536,8 +548,15 @@ static struct tevent_req *nb_trans_send(
 			  void *private_data),
 	void *private_data)
 {
+	const struct sockaddr *my_addr =
+		discard_const_p(const struct sockaddr, _my_addr);
+	size_t my_addr_len = sizeof(*_my_addr);
+	const struct sockaddr *dst_addr =
+		discard_const_p(const struct sockaddr, _dst_addr);
+	size_t dst_addr_len = sizeof(*_dst_addr);
 	struct tevent_req *req, *subreq;
 	struct nb_trans_state *state;
+	int ret;
 
 	req = tevent_req_create(mem_ctx, &state, struct nb_trans_state);
 	if (req == NULL) {
@@ -545,7 +564,6 @@ static struct tevent_req *nb_trans_send(
 	}
 	talloc_set_destructor(state, nb_trans_state_destructor);
 	state->ev = ev;
-	state->dst_addr = dst_addr;
 	state->buf = buf;
 	state->buflen = buflen;
 	state->type = type;
@@ -553,15 +571,27 @@ static struct tevent_req *nb_trans_send(
 	state->validator = validator;
 	state->private_data = private_data;
 
-	state->sock = open_socket_in(SOCK_DGRAM, 0, 3, my_addr, True);
-	if (state->sock == -1) {
+	ret = tsocket_address_bsd_from_sockaddr(state,
+						my_addr, my_addr_len,
+						&state->src_addr);
+	if (ret == -1) {
 		tevent_req_nterror(req, map_nt_error_from_unix(errno));
-		DEBUG(10, ("open_socket_in failed: %s\n", strerror(errno)));
 		return tevent_req_post(req, ev);
 	}
 
-	if (bcast) {
-		set_socket_options(state->sock,"SO_BROADCAST");
+	ret = tsocket_address_bsd_from_sockaddr(state,
+						dst_addr, dst_addr_len,
+						&state->dst_addr);
+	if (ret == -1) {
+		tevent_req_nterror(req, map_nt_error_from_unix(errno));
+		return tevent_req_post(req, ev);
+	}
+
+	ret = tdgram_inet_udp_broadcast_socket(state->src_addr, state,
+					       &state->sock);
+	if (ret == -1) {
+		tevent_req_nterror(req, map_nt_error_from_unix(errno));
+		return tevent_req_post(req, ev);
 	}
 
 	subreq = nb_packet_reader_send(state, ev, type, state->trn_id, NULL);
@@ -574,10 +604,6 @@ static struct tevent_req *nb_trans_send(
 
 static int nb_trans_state_destructor(struct nb_trans_state *s)
 {
-	if (s->sock != -1) {
-		close(s->sock);
-		s->sock = -1;
-	}
 	if (s->packet != NULL) {
 		free_packet(s->packet);
 		s->packet = NULL;
@@ -610,8 +636,10 @@ static void nb_trans_got_reader(struct tevent_req *subreq)
 	}
 	tevent_req_set_callback(subreq, nb_trans_done, req);
 
-	subreq = sendto_send(state, state->ev, state->sock,
-			     state->buf, state->buflen, 0, state->dst_addr);
+	subreq = tdgram_sendto_send(state, state->ev,
+				    state->sock,
+				    state->buf, state->buflen,
+				    state->dst_addr);
 	if (tevent_req_nomem(subreq, req)) {
 		return;
 	}
@@ -627,7 +655,7 @@ static void nb_trans_sent(struct tevent_req *subreq)
 	ssize_t sent;
 	int err;
 
-	sent = sendto_recv(subreq, &err);
+	sent = tdgram_sendto_recv(subreq, &err);
 	TALLOC_FREE(subreq);
 	if (sent == -1) {
 		DEBUG(10, ("sendto failed: %s\n", strerror(err)));
@@ -656,8 +684,10 @@ static void nb_trans_send_next(struct tevent_req *subreq)
 		tevent_req_nterror(req, NT_STATUS_INTERNAL_ERROR);
 		return;
 	}
-	subreq = sendto_send(state, state->ev, state->sock,
-			     state->buf, state->buflen, 0, state->dst_addr);
+	subreq = tdgram_sendto_send(state, state->ev,
+				    state->sock,
+				    state->buf, state->buflen,
+				    state->dst_addr);
 	if (tevent_req_nomem(subreq, req)) {
 		return;
 	}
@@ -2799,7 +2829,7 @@ bool resolve_name(const char *name,
 		return interpret_string_addr(return_ss, name, AI_NUMERICHOST);
 	}
 
-	sitename = sitename_fetch(lp_realm()); /* wild guess */
+	sitename = sitename_fetch(talloc_tos(), lp_realm()); /* wild guess */
 
 	status = internal_resolve_name(name, name_type, sitename,
 				       &ss_list, &count,
@@ -2814,7 +2844,7 @@ bool resolve_name(const char *name,
 						(ss_list[i].ss.ss_family == AF_INET)) {
 					*return_ss = ss_list[i].ss;
 					SAFE_FREE(ss_list);
-					SAFE_FREE(sitename);
+					TALLOC_FREE(sitename);
 					return True;
 				}
 			}
@@ -2826,14 +2856,14 @@ bool resolve_name(const char *name,
 			    !is_broadcast_addr((struct sockaddr *)(void *)&ss_list[i].ss)) {
 				*return_ss = ss_list[i].ss;
 				SAFE_FREE(ss_list);
-				SAFE_FREE(sitename);
+				TALLOC_FREE(sitename);
 				return True;
 			}
 		}
 	}
 
 	SAFE_FREE(ss_list);
-	SAFE_FREE(sitename);
+	TALLOC_FREE(sitename);
 	return False;
 }
 
@@ -2873,12 +2903,12 @@ NTSTATUS resolve_name_list(TALLOC_CTX *ctx,
 		return NT_STATUS_OK;
 	}
 
-	sitename = sitename_fetch(lp_realm()); /* wild guess */
+	sitename = sitename_fetch(ctx, lp_realm()); /* wild guess */
 
 	status = internal_resolve_name(name, name_type, sitename,
 						  &ss_list, &count,
 						  lp_name_resolve_order());
-	SAFE_FREE(sitename);
+	TALLOC_FREE(sitename);
 
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
@@ -2976,6 +3006,7 @@ bool get_pdc_ip(const char *domain, struct sockaddr_storage *pss)
 					       &count,
 					       lp_name_resolve_order());
 		if (!NT_STATUS_IS_OK(status)) {
+			SAFE_FREE(ip_list);
 			return false;
 		}
 	}
@@ -3073,18 +3104,18 @@ static NTSTATUS get_dc_list(const char *domain,
 	/* fetch the server we have affinity for.  Add the
 	   'password server' list to a search for our domain controllers */
 
-	saf_servername = saf_fetch( domain);
+	saf_servername = saf_fetch(ctx, domain);
 
 	if (strequal(domain, lp_workgroup()) || strequal(domain, lp_realm())) {
 		pserver = talloc_asprintf(ctx, "%s, %s",
 			saf_servername ? saf_servername : "",
-			lp_passwordserver());
+			lp_password_server());
 	} else {
 		pserver = talloc_asprintf(ctx, "%s, *",
 			saf_servername ? saf_servername : "");
 	}
 
-	SAFE_FREE(saf_servername);
+	TALLOC_FREE(saf_servername);
 	if (!pserver) {
 		status = NT_STATUS_NO_MEMORY;
 		goto out;

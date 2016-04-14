@@ -1,36 +1,88 @@
-samba (2:4.1.17+dfsg-2+deb8u2) jessie-security; urgency=high
+samba (2:4.2.10+dfsg-0+deb8u2) jessie-security; urgency=high
 
-  * Add vfs_stat_smb_basename.diff; adds function required by
-    cve_2015_7560.diff.
-  * Add patch cve_2015_7560.diff, fixes:
-   - CVE-2015-7560: Incorrect ACL get/set allowed on symlink path.
-  * Add patch cve_2016_0771.diff, fixes:
-   - CVE-2016-0771: Out-of-bounds read in internal DNS server.
-  * Add patch root-share-path.patch, to fix regression sharing root
-    directory introduced by fix for CVE-2015-5252. Closes: #812429
+  * Non-maintainer upload by the Security Team.
+  * Move libraries back to samba-libs
+    libsmbd-base.so.0, process_model/*.so and libprocess-model.so.0
+    libraries back to the samba-libs binary package. (Closes: #820947)
 
- -- Jelmer Vernooij <jelmer@debian.org>  Sun, 06 Mar 2016 22:20:45 +0000
+ -- Salvatore Bonaccorso <carnil@debian.org>  Thu, 14 Apr 2016 06:56:06 +0200
 
-samba (2:4.1.17+dfsg-2+deb8u1) jessie-security; urgency=high
+samba (2:4.2.10+dfsg-0+deb8u1) jessie-security; urgency=high
 
-  * Add patch cve_2015_5252.diff, fixes:
-   - CVE-2015-5252: Insufficient symlink verification in smbd
-  * Add patch cve_2015_5296.diff, fixes:
-   - CVE-2015-5296: Samba client requesting encryption vulnerable
-                    downgrade attack
-  * Add patch cve_2015_5299.diff, fixes:
-   - CVE-2015-5299: Missing access control check in shadow copy code
-  * Add patch cve_2015_7540.diff, fixes:
-   - CVE-2015-7540: Remote DoS in Samba (AD) LDAP server
-  * Add patch cve_2015_8467.diff, fixes:
-   - CVE-2015-8467: Denial of service attack against Windows Active Directory
-                    server
-  * Add patch cve_2015_3223_5330.diff, fixes:
-   - CVE-2015-3223: Denial of service in Samba Active Directory server
-   - CVE-2015-5330: Remote memory read in Samba LDAP server
-  * Bump build dependency for ldb to >= 2:1.1.17-2+deb8u1~.
+  [ Jelmer Vernooij ]
+  * New upstream release.
+   + Drop patch Fix-CTDB-build-with-PMDA.patch: applied upstream.
+  * Re-enable cluster support.
+  * Add patch no_wrapper: avoid dependencies on
+    {nss,uid,socket}_wrapper.
 
- -- Jelmer Vernooij <jelmer@debian.org>  Wed, 16 Dec 2015 01:59:37 +0000
+  [ Mathieu Parent ]
+  * Fix CTDB behavior since CVE-2015-8543 (Closes: #813406)
+  * Don't build ctdb twice:
+    - Shorten build time
+    - Fix ctdb log path from /var/log/log.ctdb to /var/log/ctdb/log.ctdb
+    - Remove unused /usr/lib/*/ctdb/*.so files
+
+  [ Andrew Bartlett ]
+  * New upstream release
+   + Fixes:
+    - CVE-2015-5370 (Multiple errors in DCE-RPC code)
+    - CVE-2016-2110 (Man in the middle attacks possible with NTLMSSP)
+    - CVE-2016-2111 (NETLOGON Spoofing Vulnerability)
+    - CVE-2016-2112 (LDAP client and server don't enforce integrity)
+    - CVE-2016-2113 (Missing TLS certificate validation)
+    - CVE-2016-2114 ("server signing = mandatory" not enforced)
+    - CVE-2016-2115 (SMB IPC traffic is not integrity protected)
+    - CVE-2016-2118 (SAMR and LSA man in the middle attacks possible)
+  * Backport BackupKey patches from Samba 4.3.0 to avoid regressions
+  * Additional regression fix for 'net ads join' to a Windows 2003 domain by metze
+  * Revert the change to made libsamba-debug a library, allowing openchange
+    to link to Samba 4.2
+  * Add Breaks against openchangeproxy that uses an API and ABI that has changed
+
+  [ Marc Deslauriers ]
+  * Fix double-free in pam_smbpass
+
+ -- Andrew Bartlett <abartlet+debian@catalyst.net.nz>  Tue, 12 Apr 2016 16:18:57 +1200
+
+samba (2:4.2.1+dfsg-1) experimental; urgency=medium
+
+  [ Jelmer Vernooij ]
+  * New upstream release.
+   + Drop patch do-not-install-smbclient4-and-nmbclient4: applied upstream.
+   + Drop patch
+     bug_598313_upstream_7499-nss_wins-dont-clobber-daemons-logs.patch:
+     present upstream.
+   + Refresh patch 26_heimdal_compat.26_heimdal_compat.
+   + Add build-dependency on libarchive-dev.
+  * Drop samba_bug_11077_torturetest.patch: applied upstream.
+  * Drop dependency on ctdb - now bundled with Samba.
+  * Use bundled Heimdal as the system Heimdal doesn't contain the
+    changes required for Samba.
+  * Add patch heimdal-rfc3454.txt: patch in truncated rfc3454.txt for
+    building bundled heimdal.
+  * Drop patches 25_heimdal_api_changes and 26_heimdal_compat.
+  * Disable cluster support; it breaks the build.
+  * Add patch no_wrapper: avoid dependencies on
+    {nss,uid,socket}_wrapper.
+  * Move some libraries around.
+  * Move ownership of var/lib/samba and var/lib/samba/private to samba-
+    common, remove obsolete samba4.dirs. Closes: #793866
+  * Remove ctdb-tests and ctdb-pcp-pmda packages as they contain problems
+    and unclear what they are useful for, now ctdb now longer provides
+    an external API.
+
+  [ Mathieu Parent ]
+  * Merge ctdb source package
+    - initial merge
+    - libctdb-dev has been dropped
+    - ctdb-dbg renamed to ctdb-tests, debug files moved to samba-dbg
+    - ctdb-tests depends on python
+  * Fix CTDB socketpath parsing
+  * Fix CTDB build with PMDA
+  * ctdb: Fix privacy breach on google.com (from documentation)
+
+ -- Jelmer Vernooij <jelmer@debian.org>  Sun, 07 Dec 2014 15:34:36 +0000
 
 samba (2:4.1.17+dfsg-2) unstable; urgency=medium
 

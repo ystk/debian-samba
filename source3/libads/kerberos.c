@@ -49,7 +49,33 @@ kerb_prompter(krb5_context ctx, void *data,
 	       krb5_prompt prompts[])
 {
 	if (num_prompts == 0) return 0;
+#if HAVE_KRB5_PROMPT_TYPE
 
+	/*
+	 * only heimdal has a prompt type and we need to deal with it here to
+	 * avoid loops.
+	 *
+	 * removing the prompter completely is not an option as at least these
+	 * versions would crash: heimdal-1.0.2 and heimdal-1.1. Later heimdal
+	 * version have looping detection and return with a proper error code.
+	 */
+
+	if ((num_prompts == 2) &&
+	    (prompts[0].type == KRB5_PROMPT_TYPE_NEW_PASSWORD) &&
+	    (prompts[1].type == KRB5_PROMPT_TYPE_NEW_PASSWORD_AGAIN)) {
+		/*
+		 * We don't want to change passwords here. We're
+		 * called from heimal when the KDC returns
+		 * KRB5KDC_ERR_KEY_EXPIRED, but at this point we don't
+		 * have the chance to ask the user for a new
+		 * password. If we return 0 (i.e. success), we will be
+		 * spinning in the endless for-loop in
+		 * change_password() in
+		 * source4/heimdal/lib/krb5/init_creds_pw.c:526ff
+		 */
+		return KRB5KDC_ERR_KEY_EXPIRED;
+	}
+#endif /* HAVE_KRB5_PROMPT_TYPE */
 	memset(prompts[0].reply->data, '\0', prompts[0].reply->length);
 	if (prompts[0].reply->length > 0) {
 		if (data) {
@@ -490,7 +516,12 @@ int create_kerberos_key_from_string(krb5_context context,
 		return 0;
 	}
 	salt_princ = kerberos_fetch_salt_princ_for_host_princ(context, host_princ, enctype);
-	ret = create_kerberos_key_from_string_direct(context, salt_princ ? salt_princ : host_princ, password, key, enctype);
+	ret = smb_krb5_create_key_from_string(context,
+					      salt_princ ? &salt_princ : &host_princ,
+					      NULL,
+					      password,
+					      enctype,
+					      key);
 	if (salt_princ) {
 		krb5_free_principal(context, salt_princ);
 	}
@@ -592,70 +623,6 @@ int kerberos_kinit_password(const char *principal,
 /************************************************************************
 ************************************************************************/
 
-static char *print_kdc_line(char *mem_ctx,
-			const char *prev_line,
-			const struct sockaddr_storage *pss,
-			const char *kdc_name)
-{
-	char addr[INET6_ADDRSTRLEN];
-	uint16_t port = get_sockaddr_port(pss);
-
-	if (pss->ss_family == AF_INET) {
-		return talloc_asprintf(mem_ctx, "%s\tkdc = %s\n",
-				       prev_line,
-				       print_canonical_sockaddr(mem_ctx, pss));
-	}
-
-	/*
-	 * IPv6 starts here
-	 */
-
-	DEBUG(10, ("print_kdc_line: IPv6 case for kdc_name: %s, port: %d\n",
-		   kdc_name, port));
-
-	if (port != 0 && port != DEFAULT_KRB5_PORT) {
-		/* Currently for IPv6 we can't specify a non-default
-		   krb5 port with an address, as this requires a ':'.
-		   Resolve to a name. */
-		char hostname[MAX_DNS_NAME_LENGTH];
-		int ret = sys_getnameinfo((const struct sockaddr *)pss,
-					  sizeof(*pss),
-					  hostname, sizeof(hostname),
-					  NULL, 0,
-					  NI_NAMEREQD);
-		if (ret) {
-			DEBUG(0,("print_kdc_line: can't resolve name "
-				 "for kdc with non-default port %s. "
-				 "Error %s\n.",
-				 print_canonical_sockaddr(mem_ctx, pss),
-				 gai_strerror(ret)));
-			return NULL;
-		}
-		/* Success, use host:port */
-		return talloc_asprintf(mem_ctx,
-				       "%s\tkdc = %s:%u\n",
-				       prev_line,
-				       hostname,
-				       (unsigned int)port);
-	}
-
-	/* no krb5 lib currently supports "kdc = ipv6 address"
-	 * at all, so just fill in just the kdc_name if we have
-	 * it and let the krb5 lib figure out the appropriate
-	 * ipv6 address - gd */
-
-	if (kdc_name) {
-		return talloc_asprintf(mem_ctx, "%s\tkdc = %s\n",
-				       prev_line, kdc_name);
-	}
-
-	return talloc_asprintf(mem_ctx, "%s\tkdc = %s\n",
-			       prev_line,
-			       print_sockaddr(addr,
-					      sizeof(addr),
-					      pss));
-}
-
 /************************************************************************
  Create a string list of available kdc's, possibly searching by sitename.
  Does DNS queries.
@@ -679,11 +646,35 @@ static void add_sockaddr_unique(struct sockaddr_storage *addrs, int *num_addrs,
 	*num_addrs += 1;
 }
 
+/* print_canonical_sockaddr prints an ipv6 addr in the form of
+* [ipv6.addr]. This string, when put in a generated krb5.conf file is not
+* always properly dealt with by some older krb5 libraries. Adding the hard-coded
+* portnumber workarounds the issue. - gd */
+
+static char *print_canonical_sockaddr_with_port(TALLOC_CTX *mem_ctx,
+						const struct sockaddr_storage *pss)
+{
+	char *str = NULL;
+
+	str = print_canonical_sockaddr(mem_ctx, pss);
+	if (str == NULL) {
+		return NULL;
+	}
+
+	if (pss->ss_family != AF_INET6) {
+		return str;
+	}
+
+#if defined(HAVE_IPV6)
+	str = talloc_asprintf_append(str, ":88");
+#endif
+	return str;
+}
+
 static char *get_kdc_ip_string(char *mem_ctx,
 		const char *realm,
 		const char *sitename,
-		const struct sockaddr_storage *pss,
-		const char *kdc_name)
+		const struct sockaddr_storage *pss)
 {
 	TALLOC_CTX *frame = talloc_stackframe();
 	int i;
@@ -698,7 +689,8 @@ static char *get_kdc_ip_string(char *mem_ctx,
 	char *result = NULL;
 	struct netlogon_samlogon_response **responses = NULL;
 	NTSTATUS status;
-	char *kdc_str = print_kdc_line(mem_ctx, "", pss, kdc_name);
+	char *kdc_str = talloc_asprintf(mem_ctx, "%s\tkdc = %s\n", "",
+					print_canonical_sockaddr_with_port(mem_ctx, pss));
 
 	if (kdc_str == NULL) {
 		TALLOC_FREE(frame);
@@ -788,9 +780,9 @@ static char *get_kdc_ip_string(char *mem_ctx,
 		}
 
 		/* Append to the string - inefficient but not done often. */
-		new_kdc_str = print_kdc_line(mem_ctx, kdc_str,
-					     &dc_addrs[i],
-					     kdc_name);
+		new_kdc_str = talloc_asprintf(mem_ctx, "%s\tkdc = %s\n",
+					      kdc_str,
+					      print_canonical_sockaddr_with_port(mem_ctx, &dc_addrs[i]));
 		if (new_kdc_str == NULL) {
 			goto fail;
 		}
@@ -819,8 +811,7 @@ fail:
 bool create_local_private_krb5_conf_for_domain(const char *realm,
 						const char *domain,
 						const char *sitename,
-					        const struct sockaddr_storage *pss,
-						const char *kdc_name)
+					        const struct sockaddr_storage *pss)
 {
 	char *dname;
 	char *tmpname = NULL;
@@ -845,7 +836,7 @@ bool create_local_private_krb5_conf_for_domain(const char *realm,
 		return false;
 	}
 
-	if (domain == NULL || pss == NULL || kdc_name == NULL) {
+	if (domain == NULL || pss == NULL) {
 		return false;
 	}
 
@@ -878,7 +869,7 @@ bool create_local_private_krb5_conf_for_domain(const char *realm,
 		goto done;
 	}
 
-	kdc_ip_string = get_kdc_ip_string(dname, realm, sitename, pss, kdc_name);
+	kdc_ip_string = get_kdc_ip_string(dname, realm, sitename, pss);
 	if (!kdc_ip_string) {
 		goto done;
 	}

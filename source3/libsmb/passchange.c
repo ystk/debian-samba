@@ -57,7 +57,7 @@ NTSTATUS remote_password_change(const char *remote_machine, const char *user_nam
 	*err_str = NULL;
 
 	result = cli_connect_nb(remote_machine, NULL, 0, 0x20, NULL,
-				SMB_SIGNING_DEFAULT, 0, &cli);
+				SMB_SIGNING_IPC_DEFAULT, 0, &cli);
 	if (!NT_STATUS_IS_OK(result)) {
 		if (asprintf(err_str, "Unable to connect to SMB server on "
 			 "machine %s. Error was : %s.\n",
@@ -67,8 +67,9 @@ NTSTATUS remote_password_change(const char *remote_machine, const char *user_nam
 		return result;
 	}
 
-	result = smbXcli_negprot(cli->conn, cli->timeout, PROTOCOL_CORE,
-				 PROTOCOL_NT1);
+	result = smbXcli_negprot(cli->conn, cli->timeout,
+				 lp_client_ipc_min_protocol(),
+				 lp_client_ipc_max_protocol());
 
 	if (!NT_STATUS_IS_OK(result)) {
 		if (asprintf(err_str, "machine %s rejected the negotiate "
@@ -169,7 +170,7 @@ NTSTATUS remote_password_change(const char *remote_machine, const char *user_nam
 		 * way.
 		 */
 		result = cli_rpc_pipe_open_noauth(
-			cli, &ndr_table_samr.syntax_id, &pipe_hnd);
+			cli, &ndr_table_samr, &pipe_hnd);
 	}
 
 	if (!NT_STATUS_IS_OK(result)) {
@@ -230,7 +231,7 @@ NTSTATUS remote_password_change(const char *remote_machine, const char *user_nam
 	result = NT_STATUS_UNSUCCESSFUL;
 
 	/* OK, this is ugly, but... try an anonymous pipe. */
-	result = cli_rpc_pipe_open_noauth(cli, &ndr_table_samr.syntax_id,
+	result = cli_rpc_pipe_open_noauth(cli, &ndr_table_samr,
 					  &pipe_hnd);
 
 	if ( NT_STATUS_IS_OK(result) &&

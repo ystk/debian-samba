@@ -25,7 +25,27 @@ sub have_ads($) {
 	close IN;
 
 	# If we were not built with ADS support, pretend we were never even available
+	print "smbd does not have ADS support\n" unless $found_ads;
 	return $found_ads;
+}
+
+# return smb.conf parameters applicable to @path, based on the underlying
+# filesystem type
+sub get_fs_specific_conf($$)
+{
+	my ($self, $path) = @_;
+	my $mods = "";
+	my $stat_out = `stat --file-system $path` or return "";
+
+	if ($stat_out =~ m/Type:\s+btrfs/) {
+		$mods .= "btrfs ";
+	}
+
+	if ($mods) {
+		return "vfs objects = $mods";
+	}
+
+	return undef;
 }
 
 sub new($$) {
@@ -44,7 +64,7 @@ sub teardown_env($$)
 {
 	my ($self, $envvars) = @_;
 	my $count = 0;
-	
+
 	# This should cause smbd to terminate gracefully
 	close($envvars->{STDIN_PIPE});
 
@@ -146,10 +166,19 @@ sub check_env($$)
 sub setup_env($$$)
 {
 	my ($self, $envname, $path) = @_;
-	
+
+	$ENV{ENVNAME} = $envname;
+
 	if (defined($self->{vars}->{$envname})) {
 	        return $self->{vars}->{$envname};
 	}
+
+	#
+	# Avoid hitting system krb5.conf -
+	# An env that needs Kerberos will reset this to the real
+	# value.
+	#
+	$ENV{KRB5_CONFIG} = "$path/no_krb5.conf";
 
 	if ($envname eq "s3dc") {
 		return $self->setup_s3dc("$path/s3dc");
@@ -181,6 +210,7 @@ sub setup_s3dc($$)
 	domain master = yes
 	domain logons = yes
 	lanman auth = yes
+	raw NTLMv2 auth = yes
 
 	rpc_server:epmapper = external
 	rpc_server:spoolss = external
@@ -226,6 +256,7 @@ sub setup_member($$$)
 	my $member_options = "
 	security = domain
 	server signing = on
+	dbwrap_tdb_mutexes:* = yes
 ";
 	my $ret = $self->provision($prefix,
 				   "LOCALMEMBER3",
@@ -618,14 +649,16 @@ sub check_or_start($$$$$) {
 		SocketWrapper::set_default_iface($env_vars->{SOCKET_WRAPPER_DEFAULT_IFACE});
 
 		$ENV{KRB5_CONFIG} = $env_vars->{KRB5_CONFIG};
-		$ENV{WINBINDD_SOCKET_DIR} = $env_vars->{WINBINDD_SOCKET_DIR};
+		$ENV{SELFTEST_WINBINDD_SOCKET_DIR} = $env_vars->{SELFTEST_WINBINDD_SOCKET_DIR};
 		$ENV{NMBD_SOCKET_DIR} = $env_vars->{NMBD_SOCKET_DIR};
 
 		$ENV{NSS_WRAPPER_PASSWD} = $env_vars->{NSS_WRAPPER_PASSWD};
 		$ENV{NSS_WRAPPER_GROUP} = $env_vars->{NSS_WRAPPER_GROUP};
-		$ENV{NSS_WRAPPER_WINBIND_SO_PATH} = $env_vars->{NSS_WRAPPER_WINBIND_SO_PATH};
+		$ENV{NSS_WRAPPER_HOSTS} = $env_vars->{NSS_WRAPPER_HOSTS};
+		$ENV{NSS_WRAPPER_MODULE_SO_PATH} = $env_vars->{NSS_WRAPPER_MODULE_SO_PATH};
+		$ENV{NSS_WRAPPER_MODULE_FN_PREFIX} = $env_vars->{NSS_WRAPPER_MODULE_FN_PREFIX};
 
-		$ENV{UID_WRAPPER} = "1";
+		$ENV{ENVNAME} = "$ENV{ENVNAME}.nmbd";
 
 		if ($nmbd ne "yes") {
 			$SIG{USR1} = $SIG{ALRM} = $SIG{INT} = $SIG{QUIT} = $SIG{TERM} = sub {
@@ -637,22 +670,27 @@ sub check_or_start($$$$$) {
 			exit 0;
 		}
 
+		$ENV{MAKE_TEST_BINARY} = Samba::bindir_path($self, "nmbd");
 		my @optargs = ("-d0");
 		if (defined($ENV{NMBD_OPTIONS})) {
 			@optargs = split(/ /, $ENV{NMBD_OPTIONS});
 		}
-
-		$ENV{MAKE_TEST_BINARY} = Samba::bindir_path($self, "nmbd");
-
 		my @preargs = (Samba::bindir_path($self, "timelimit"), $self->{server_maxtime});
 		if(defined($ENV{NMBD_VALGRIND})) { 
 			@preargs = split(/ /, $ENV{NMBD_VALGRIND});
+		}
+		my @args = ("-F", "--no-process-group",
+			    "-s", $env_vars->{SERVERCONFFILE},
+			    "-l", $env_vars->{LOGDIR});
+		if (not defined($ENV{NMBD_DONT_LOG_STDOUT})) {
+			push(@args, "--log-stdout");
 		}
 
 		close($env_vars->{STDIN_PIPE});
 		open STDIN, ">&", \*STDIN_READER or die "can't dup STDIN_READER to STDIN: $!";
 
-		exec(@preargs, Samba::bindir_path($self, "nmbd"), "-F", "--no-process-group", "--log-stdout", "-s", $env_vars->{SERVERCONFFILE}, @optargs) or die("Unable to start nmbd: $!");
+		exec(@preargs, $ENV{MAKE_TEST_BINARY}, @args, @optargs)
+			or die("Unable to start $ENV{MAKE_TEST_BINARY}: $!");
 	}
 	$env_vars->{NMBD_TL_PID} = $pid;
 	write_pid($env_vars, "nmbd", $pid);
@@ -668,14 +706,16 @@ sub check_or_start($$$$$) {
 		SocketWrapper::set_default_iface($env_vars->{SOCKET_WRAPPER_DEFAULT_IFACE});
 
 		$ENV{KRB5_CONFIG} = $env_vars->{KRB5_CONFIG};
-		$ENV{WINBINDD_SOCKET_DIR} = $env_vars->{WINBINDD_SOCKET_DIR};
+		$ENV{SELFTEST_WINBINDD_SOCKET_DIR} = $env_vars->{SELFTEST_WINBINDD_SOCKET_DIR};
 		$ENV{NMBD_SOCKET_DIR} = $env_vars->{NMBD_SOCKET_DIR};
 
 		$ENV{NSS_WRAPPER_PASSWD} = $env_vars->{NSS_WRAPPER_PASSWD};
 		$ENV{NSS_WRAPPER_GROUP} = $env_vars->{NSS_WRAPPER_GROUP};
-		$ENV{NSS_WRAPPER_WINBIND_SO_PATH} = $env_vars->{NSS_WRAPPER_WINBIND_SO_PATH};
+		$ENV{NSS_WRAPPER_HOSTS} = $env_vars->{NSS_WRAPPER_HOSTS};
+		$ENV{NSS_WRAPPER_MODULE_SO_PATH} = $env_vars->{NSS_WRAPPER_MODULE_SO_PATH};
+		$ENV{NSS_WRAPPER_MODULE_FN_PREFIX} = $env_vars->{NSS_WRAPPER_MODULE_FN_PREFIX};
 
-		$ENV{UID_WRAPPER} = "1";
+		$ENV{ENVNAME} = "$ENV{ENVNAME}.winbindd";
 
 		if ($winbindd ne "yes") {
 			$SIG{USR1} = $SIG{ALRM} = $SIG{INT} = $SIG{QUIT} = $SIG{TERM} = sub {
@@ -687,24 +727,27 @@ sub check_or_start($$$$$) {
 			exit 0;
 		}
 
+		$ENV{MAKE_TEST_BINARY} = Samba::bindir_path($self, "winbindd");
 		my @optargs = ("-d0");
 		if (defined($ENV{WINBINDD_OPTIONS})) {
 			@optargs = split(/ /, $ENV{WINBINDD_OPTIONS});
 		}
-
-		$ENV{MAKE_TEST_BINARY} = Samba::bindir_path($self, "winbindd");
-
 		my @preargs = (Samba::bindir_path($self, "timelimit"), $self->{server_maxtime});
 		if(defined($ENV{WINBINDD_VALGRIND})) {
 			@preargs = split(/ /, $ENV{WINBINDD_VALGRIND});
 		}
-
-		print "Starting winbindd with config $env_vars->{SERVERCONFFILE}\n";
+		my @args = ("-F", "--no-process-group",
+			    "-s", $env_vars->{SERVERCONFFILE},
+			    "-l", $env_vars->{LOGDIR});
+		if (not defined($ENV{WINBINDD_DONT_LOG_STDOUT})) {
+			push(@args, "--stdout");
+		}
 
 		close($env_vars->{STDIN_PIPE});
 		open STDIN, ">&", \*STDIN_READER or die "can't dup STDIN_READER to STDIN: $!";
 
-		exec(@preargs, Samba::bindir_path($self, "winbindd"), "-F", "--no-process-group", "--stdout", "-s", $env_vars->{SERVERCONFFILE}, @optargs) or die("Unable to start winbindd: $!");
+		exec(@preargs, $ENV{MAKE_TEST_BINARY}, @args, @optargs)
+			or die("Unable to start $ENV{MAKE_TEST_BINARY}: $!");
 	}
 	$env_vars->{WINBINDD_TL_PID} = $pid;
 	write_pid($env_vars, "winbindd", $pid);
@@ -720,14 +763,16 @@ sub check_or_start($$$$$) {
 		SocketWrapper::set_default_iface($env_vars->{SOCKET_WRAPPER_DEFAULT_IFACE});
 
 		$ENV{KRB5_CONFIG} = $env_vars->{KRB5_CONFIG};
-		$ENV{WINBINDD_SOCKET_DIR} = $env_vars->{WINBINDD_SOCKET_DIR};
+		$ENV{SELFTEST_WINBINDD_SOCKET_DIR} = $env_vars->{SELFTEST_WINBINDD_SOCKET_DIR};
 		$ENV{NMBD_SOCKET_DIR} = $env_vars->{NMBD_SOCKET_DIR};
 
 		$ENV{NSS_WRAPPER_PASSWD} = $env_vars->{NSS_WRAPPER_PASSWD};
 		$ENV{NSS_WRAPPER_GROUP} = $env_vars->{NSS_WRAPPER_GROUP};
-		$ENV{NSS_WRAPPER_WINBIND_SO_PATH} = $env_vars->{NSS_WRAPPER_WINBIND_SO_PATH};
+		$ENV{NSS_WRAPPER_HOSTS} = $env_vars->{NSS_WRAPPER_HOSTS};
+		$ENV{NSS_WRAPPER_MODULE_SO_PATH} = $env_vars->{NSS_WRAPPER_MODULE_SO_PATH};
+		$ENV{NSS_WRAPPER_MODULE_FN_PREFIX} = $env_vars->{NSS_WRAPPER_MODULE_FN_PREFIX};
 
-		$ENV{UID_WRAPPER} = "1";
+		$ENV{ENVNAME} = "$ENV{ENVNAME}.smbd";
 
 		if ($smbd ne "yes") {
 			$SIG{USR1} = $SIG{ALRM} = $SIG{INT} = $SIG{QUIT} = $SIG{TERM} = sub {
@@ -748,11 +793,18 @@ sub check_or_start($$$$$) {
 		if(defined($ENV{SMBD_VALGRIND})) {
 			@preargs = split(/ /,$ENV{SMBD_VALGRIND});
 		}
+		my @args = ("-F", "--no-process-group",
+			    "-s", $env_vars->{SERVERCONFFILE},
+			    "-l", $env_vars->{LOGDIR});
+		if (not defined($ENV{SMBD_DONT_LOG_STDOUT})) {
+			push(@args, "--log-stdout");
+		}
 
 		close($env_vars->{STDIN_PIPE});
 		open STDIN, ">&", \*STDIN_READER or die "can't dup STDIN_READER to STDIN: $!";
 
-		exec(@preargs, Samba::bindir_path($self, "smbd"), "-F", "--no-process-group", "--log-stdout", "-s", $env_vars->{SERVERCONFFILE}, @optargs) or die("Unable to start smbd: $!");
+		exec(@preargs, $ENV{MAKE_TEST_BINARY}, @args, @optargs)
+			or die("Unable to start $ENV{MAKE_TEST_BINARY}: $!");
 	}
 	$env_vars->{SMBD_TL_PID} = $pid;
 	write_pid($env_vars, "smbd", $pid);
@@ -829,6 +881,18 @@ sub provision($$$$$$)
 	my $msdfs_deeppath="$msdfs_shrdir/deeppath";
 	push(@dirs,$msdfs_deeppath);
 
+	my $badnames_shrdir="$shrdir/badnames";
+	push(@dirs,$badnames_shrdir);
+
+	my $lease1_shrdir="$shrdir/SMB2_10";
+	push(@dirs,$lease1_shrdir);
+
+	my $lease2_shrdir="$shrdir/SMB3_00";
+	push(@dirs,$lease2_shrdir);
+
+	my $manglenames_shrdir="$shrdir/manglenames";
+	push(@dirs,$manglenames_shrdir);
+
 	# this gets autocreated by winbindd
 	my $wbsockdir="$prefix_abs/winbindd";
 	my $wbsockprivdir="$lockdir/winbindd_privileged";
@@ -848,6 +912,8 @@ sub provision($$$$$$)
 	    system("rm -rf $prefix_abs/*");
 	}
 	mkdir($_, 0777) foreach(@dirs);
+
+	my $fs_specific_conf = $self->get_fs_specific_conf($shrdir);
 
 	##
 	## lockdir and piddir must be 0755
@@ -879,11 +945,48 @@ sub provision($$$$$$)
 	symlink "msdfs:$server_ip\\ro-tmp", "$msdfs_shrdir/msdfs-src1";
 	symlink "msdfs:$server_ipv6\\ro-tmp", "$msdfs_shrdir/deeppath/msdfs-src2";
 
+	##
+	## create bad names in $badnames_shrdir
+	##
+	## (An invalid name, would be mangled to 8.3).
+        my $badname_target = "$badnames_shrdir/\340|\231\216\377\177";
+        unless (open(BADNAME_TARGET, ">$badname_target")) {
+                warn("Unable to open $badname_target");
+                return undef;
+        }
+        close(BADNAME_TARGET);
+        chmod 0666, $badname_target;
+
+	## (A bad name, would not be mangled to 8.3).
+        my $badname_target = "$badnames_shrdir/\240\276\346\327\377\177";
+        unless (open(BADNAME_TARGET, ">$badname_target")) {
+                warn("Unable to open $badname_target");
+                return undef;
+        }
+        close(BADNAME_TARGET);
+        chmod 0666, $badname_target;
+
+	## (A bad good name).
+        my $badname_target = "$badnames_shrdir/blank.txt";
+        unless (open(BADNAME_TARGET, ">$badname_target")) {
+                warn("Unable to open $badname_target");
+                return undef;
+        }
+        close(BADNAME_TARGET);
+        chmod 0666, $badname_target;
+
+	##
+	## create mangleable directory names in $manglenames_shrdir
+	##
+        my $manglename_target = "$manglenames_shrdir/foo:bar";
+	mkdir($manglename_target, 0777);
+
 	my $conffile="$libdir/server.conf";
 
 	my $nss_wrapper_pl = "$ENV{PERL} $self->{srcdir}/lib/nss_wrapper/nss_wrapper.pl";
 	my $nss_wrapper_passwd = "$privatedir/passwd";
 	my $nss_wrapper_group = "$privatedir/group";
+	my $nss_wrapper_hosts = "$ENV{SELFTEST_PREFIX}/hosts";
 
 	my $mod_printer_pl = "$ENV{PERL} $self->{srcdir}/source3/script/tests/printing/modprinter.pl";
 
@@ -894,10 +997,10 @@ sub provision($$$$$$)
 	##
 
 	my ($max_uid, $max_gid);
-	my ($uid_nobody, $uid_root, $uid_pdbtest);
+	my ($uid_nobody, $uid_root, $uid_pdbtest, $uid_pdbtest2);
 	my ($gid_nobody, $gid_nogroup, $gid_root, $gid_domusers, $gid_domadmins);
 
-	if ($unix_uid < 0xffff - 2) {
+	if ($unix_uid < 0xffff - 4) {
 		$max_uid = 0xffff;
 	} else {
 		$max_uid = $unix_uid;
@@ -906,8 +1009,9 @@ sub provision($$$$$$)
 	$uid_root = $max_uid - 1;
 	$uid_nobody = $max_uid - 2;
 	$uid_pdbtest = $max_uid - 3;
+	$uid_pdbtest2 = $max_uid - 4;
 
-	if ($unix_gids[0] < 0xffff - 3) {
+	if ($unix_gids[0] < 0xffff - 5) {
 		$max_gid = 0xffff;
 	} else {
 		$max_gid = $unix_gids[0];
@@ -932,7 +1036,7 @@ sub provision($$$$$$)
 	netbios name = $server
 	interfaces = $server_ip/8 $server_ipv6/64
 	bind interfaces only = yes
-	panic action = $self->{srcdir}/selftest/gdb_backtrace %d %\$(MAKE_TEST_BINARY)
+	panic action = cd $self->{srcdir} && $self->{srcdir}/selftest/gdb_backtrace %d %\$(MAKE_TEST_BINARY)
 	smbd:suicide mode = yes
 
 	workgroup = $domain
@@ -967,16 +1071,18 @@ sub provision($$$$$$)
 
 	kernel oplocks = no
 	kernel change notify = no
+	smb2 leases = yes
 
 	syslog = no
 	printing = bsd
 	printcap name = /dev/null
 
-	winbindd:socket dir = $wbsockdir
+	winbindd socket directory = $wbsockdir
 	nmbd:socket dir = $nmbdsockdir
 	idmap config * : range = 100000-200000
 	winbind enum users = yes
 	winbind enum groups = yes
+	winbind separator = /
 
 #	min receivefile size = 4000
 
@@ -991,6 +1097,7 @@ sub provision($$$$$$)
 	store dos attributes = yes
 	create mask = 755
 	dos filemode = yes
+	strict rename = yes
 	vfs objects = acl_xattr fake_acls xattr_tdb streams_depot
 
 	printing = vlp
@@ -1002,6 +1109,7 @@ sub provision($$$$$$)
 	queue pause command = $bindir_abs/vlp tdbfile=$lockdir/vlp.tdb queuepause %p
 	queue resume command = $bindir_abs/vlp tdbfile=$lockdir/vlp.tdb queueresume %p
 	lpq cache time = 0
+	print notify backchannel = yes
 
 	ncalrpc dir = $prefix_abs/ncalrpc
         resolv:host file = $dns_host_file
@@ -1009,6 +1117,9 @@ sub provision($$$$$$)
         # The samba3.blackbox.smbclient_s3 test uses this to test that
         # sending messages works, and that the %m sub works.
         message command = mv %s $shrdir/message.%m
+
+	# fruit:copyfile is a global option
+	fruit:copyfile = yes
 
 	# Begin extra options
 	$extra_options
@@ -1045,6 +1156,10 @@ sub provision($$$$$$)
 	path = $shrdir
         force user = $unix_name
         guest ok = yes
+[forceuser_unixonly]
+	path = $shrdir
+	force user = pdbtest
+	guest ok = yes
 [forcegroup]
 	path = $shrdir
         force group = nogroup
@@ -1077,6 +1192,9 @@ sub provision($$$$$$)
 	kernel share modes = no
 	kernel oplocks = no
 	posix locking = no
+[fs_specific]
+	copy = tmp
+	$fs_specific_conf
 [print1]
 	copy = tmp
 	printable = yes
@@ -1121,6 +1239,27 @@ sub provision($$$$$$)
 
 [print\$]
 	copy = tmp
+
+[vfs_fruit]
+	path = $shrdir
+	vfs objects = catia fruit streams_xattr acl_xattr
+	ea support = yes
+	fruit:ressource = file
+	fruit:metadata = netatalk
+	fruit:locking = netatalk
+	fruit:encoding = native
+
+[badname-tmp]
+	path = $badnames_shrdir
+	guest ok = yes
+
+[manglenames_share]
+	path = $manglenames_shrdir
+	guest ok = yes
+
+[dynamic_share]
+	path = $shrdir/%R
+	guest ok = yes
 	";
 	close(CONF);
 
@@ -1135,6 +1274,7 @@ sub provision($$$$$$)
 	print PASSWD "nobody:x:$uid_nobody:$gid_nobody:nobody gecos:$prefix_abs:/bin/false
 $unix_name:x:$unix_uid:$unix_gids[0]:$unix_name gecos:$prefix_abs:/bin/false
 pdbtest:x:$uid_pdbtest:$gid_nogroup:pdbtest gecos:$prefix_abs:/bin/false
+pdbtest2:x:$uid_pdbtest2:$gid_nogroup:pdbtest gecos:$prefix_abs:/bin/false
 ";
 	if ($unix_uid != 0) {
 		print PASSWD "root:x:$uid_root:$gid_root:root gecos:$prefix_abs:/bin/false
@@ -1159,6 +1299,17 @@ domadmins:X:$gid_domadmins:
 
 	close(GROUP);
 
+	## hosts
+	my $hostname = lc($server);
+	unless (open(HOSTS, ">>$nss_wrapper_hosts")) {
+		warn("Unable to open $nss_wrapper_hosts");
+		return undef;
+	}
+	print HOSTS "${server_ip} ${hostname}.samba.example.com ${hostname}\n";
+	print HOSTS "${server_ipv6} ${hostname}.samba.example.com ${hostname}\n";
+	close(HOSTS);
+
+
 	foreach my $evlog (@eventlog_list) {
 		my $evlogtdb = "$eventlogdir/$evlog.tdb";
 		open(EVENTLOG, ">$evlogtdb") or die("Unable to open $evlogtdb");
@@ -1167,8 +1318,9 @@ domadmins:X:$gid_domadmins:
 
 	$ENV{NSS_WRAPPER_PASSWD} = $nss_wrapper_passwd;
 	$ENV{NSS_WRAPPER_GROUP} = $nss_wrapper_group;
+	$ENV{NSS_WRAPPER_HOSTS} = $nss_wrapper_hosts;
 
-        my $cmd = Samba::bindir_path($self, "smbpasswd")." -c $conffile -L -s -a $unix_name > /dev/null";
+        my $cmd = "UID_WRAPPER_ROOT=1 " . Samba::bindir_path($self, "smbpasswd")." -c $conffile -L -s -a $unix_name > /dev/null";
 	unless (open(PWD, "|$cmd")) {
              warn("Unable to set password for test account\n$cmd");
              return undef;
@@ -1206,14 +1358,24 @@ domadmins:X:$gid_domadmins:
 	$ret{NETBIOSNAME} = $server;
 	$ret{PASSWORD} = $password;
 	$ret{PIDDIR} = $piddir;
-	$ret{WINBINDD_SOCKET_DIR} = $wbsockdir;
+	$ret{SELFTEST_WINBINDD_SOCKET_DIR} = $wbsockdir;
 	$ret{WINBINDD_PRIV_PIPE_DIR} = $wbsockprivdir;
 	$ret{NMBD_SOCKET_DIR} = $nmbdsockdir;
 	$ret{SOCKET_WRAPPER_DEFAULT_IFACE} = $swiface;
 	$ret{NSS_WRAPPER_PASSWD} = $nss_wrapper_passwd;
 	$ret{NSS_WRAPPER_GROUP} = $nss_wrapper_group;
-	$ret{NSS_WRAPPER_WINBIND_SO_PATH} = Samba::nss_wrapper_winbind_so_path($self);
+	$ret{NSS_WRAPPER_HOSTS} = $nss_wrapper_hosts;
+	$ret{NSS_WRAPPER_MODULE_SO_PATH} = Samba::nss_wrapper_winbind_so_path($self);
+	$ret{NSS_WRAPPER_MODULE_FN_PREFIX} = "winbind";
 	$ret{LOCAL_PATH} = "$shrdir";
+        $ret{LOGDIR} = $logdir;
+
+	#
+	# Avoid hitting system krb5.conf -
+	# An env that needs Kerberos will reset this to the real
+	# value.
+	#
+	$ret{KRB5_CONFIG} = abs_path($prefix) . "/no_krb5.conf";
 
 	return \%ret;
 }
@@ -1224,23 +1386,38 @@ sub wait_for_start($$$$$)
 	my $ret;
 
 	if ($nmbd eq "yes") {
-	    # give time for nbt server to register its names
-	    print "delaying for nbt name registration\n";
-	    sleep(10);
-	    # This will return quickly when things are up, but be slow if we need to wait for (eg) SSL init 
-	    my $nmblookup = Samba::bindir_path($self, "nmblookup3");
-	    system("$nmblookup $envvars->{CONFIGURATION} -U $envvars->{SERVER_IP} __SAMBA__");
-	    system("$nmblookup $envvars->{CONFIGURATION} __SAMBA__");
-	    system("$nmblookup $envvars->{CONFIGURATION} -U 127.255.255.255 __SAMBA__");
-	    system("$nmblookup $envvars->{CONFIGURATION} -U $envvars->{SERVER_IP} $envvars->{SERVER}");
-	    system("$nmblookup $envvars->{CONFIGURATION} $envvars->{SERVER}");
+		my $count = 0;
+
+		# give time for nbt server to register its names
+		print "checking for nmbd\n";
+
+		# This will return quickly when things are up, but be slow if we need to wait for (eg) SSL init
+		my $nmblookup = Samba::bindir_path($self, "nmblookup");
+
+		do {
+			$ret = system("$nmblookup $envvars->{CONFIGURATION} $envvars->{SERVER}");
+			if ($ret != 0) {
+				sleep(1);
+			} else {
+				system("$nmblookup $envvars->{CONFIGURATION} -U $envvars->{SERVER_IP} __SAMBA__");
+				system("$nmblookup $envvars->{CONFIGURATION} __SAMBA__");
+				system("$nmblookup $envvars->{CONFIGURATION} -U 127.255.255.255 __SAMBA__");
+				system("$nmblookup $envvars->{CONFIGURATION} -U $envvars->{SERVER_IP} $envvars->{SERVER}");
+			}
+			$count++;
+		} while ($ret != 0 && $count < 10);
+		if ($count == 10) {
+			print "NMBD not reachable after 10 retries\n";
+			teardown_env($self, $envvars);
+			return 0;
+		}
 	}
 
 	if ($winbindd eq "yes") {
 	    print "checking for winbindd\n";
 	    my $count = 0;
 	    do {
-		$ret = system("WINBINDD_SOCKET_DIR=" . $envvars->{WINBINDD_SOCKET_DIR} . " " . Samba::bindir_path($self, "wbinfo") . " -p");
+		$ret = system("SELFTEST_WINBINDD_SOCKET_DIR=" . $envvars->{SELFTEST_WINBINDD_SOCKET_DIR} . " " . Samba::bindir_path($self, "wbinfo") . " --ping-dc");
 		if ($ret != 0) {
 		    sleep(2);
 		}
@@ -1285,7 +1462,7 @@ sub wait_for_start($$$$$)
 	if ($winbindd eq "yes") {
 	    # note: creating builtin groups requires winbindd for the
 	    # unix id allocator
-	    $ret = system("WINBINDD_SOCKET_DIR=" . $envvars->{WINBINDD_SOCKET_DIR} . " " . Samba::bindir_path($self, "net") ." $envvars->{CONFIGURATION} sam createbuiltingroup Users");
+	    $ret = system("SELFTEST_WINBINDD_SOCKET_DIR=" . $envvars->{SELFTEST_WINBINDD_SOCKET_DIR} . " " . Samba::bindir_path($self, "net") ." $envvars->{CONFIGURATION} sam createbuiltingroup Users");
 	    if ($ret != 0) {
 	        print "Failed to create BUILTIN\\Users group\n";
 	        return 0;
@@ -1293,7 +1470,7 @@ sub wait_for_start($$$$$)
 	    my $count = 0;
 	    do {
 		system(Samba::bindir_path($self, "net") . " $envvars->{CONFIGURATION} cache flush");
-		$ret = system("WINBINDD_SOCKET_DIR=" . $envvars->{WINBINDD_SOCKET_DIR} . " " . Samba::bindir_path($self, "wbinfo") . " --sid-to-gid=S-1-5-32-545");
+		$ret = system("SELFTEST_WINBINDD_SOCKET_DIR=" . $envvars->{SELFTEST_WINBINDD_SOCKET_DIR} . " " . Samba::bindir_path($self, "wbinfo") . " --sid-to-gid=S-1-5-32-545");
 		if ($ret != 0) {
 		    sleep(2);
 		}

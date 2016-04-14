@@ -45,10 +45,26 @@ int
 SMBC_check_server(SMBCCTX * context,
                   SMBCSRV * server)
 {
+	time_t now;
+
 	if (!cli_state_is_connected(server->cli)) {
 		return 1;
 	}
 
+	now = time_mono(NULL);
+
+	if (server->last_echo_time == (time_t)0 ||
+			now > server->last_echo_time +
+				(server->cli->timeout/1000)) {
+		unsigned char data[16] = {0};
+		NTSTATUS status = cli_echo(server->cli,
+					1,
+					data_blob_const(data, sizeof(data)));
+		if (!NT_STATUS_IS_OK(status)) {
+			return 1;
+		}
+		server->last_echo_time = now;
+	}
 	return 0;
 }
 
@@ -251,12 +267,13 @@ SMBC_server_internal(TALLOC_CTX *ctx,
 	struct cli_state *c = NULL;
 	const char *server_n = server;
         int is_ipc = (share != NULL && strcmp(share, "IPC$") == 0);
-	uint32 fs_attrs = 0;
+	uint32_t fs_attrs = 0;
         const char *username_used;
  	NTSTATUS status;
 	char *newserver, *newshare;
 	int flags = 0;
 	struct smbXcli_tcon *tcon = NULL;
+	int signing_state = SMB_SIGNING_DEFAULT;
 
 	ZERO_STRUCT(c);
 	*in_cache = false;
@@ -423,6 +440,10 @@ SMBC_server_internal(TALLOC_CTX *ctx,
 		flags |= CLI_FULL_CONNECTION_USE_NT_HASH;
 	}
 
+	if (context->internal->smb_encryption_level != SMBC_ENCRYPTLEVEL_NONE) {
+		signing_state = SMB_SIGNING_REQUIRED;
+	}
+
 	if (port == 0) {
 	        if (share == NULL || *share == '\0' || is_ipc) {
 			/*
@@ -430,7 +451,7 @@ SMBC_server_internal(TALLOC_CTX *ctx,
 			 */
 			status = cli_connect_nb(server_n, NULL, NBT_SMB_PORT, 0x20,
 					smbc_getNetbiosName(context),
-					SMB_SIGNING_DEFAULT, flags, &c);
+					signing_state, flags, &c);
 		}
 	}
 
@@ -440,7 +461,7 @@ SMBC_server_internal(TALLOC_CTX *ctx,
 		 */
 		status = cli_connect_nb(server_n, NULL, port, 0x20,
 					smbc_getNetbiosName(context),
-					SMB_SIGNING_DEFAULT, flags, &c);
+					signing_state, flags, &c);
 	}
 
 	if (!NT_STATUS_IS_OK(status)) {
@@ -451,8 +472,8 @@ SMBC_server_internal(TALLOC_CTX *ctx,
 	cli_set_timeout(c, smbc_getTimeout(context));
 
 	status = smbXcli_negprot(c->conn, c->timeout,
-				 lp_cli_minprotocol(),
-				 lp_cli_maxprotocol());
+				 lp_client_min_protocol(),
+				 lp_client_max_protocol());
 	if (!NT_STATUS_IS_OK(status)) {
 		cli_shutdown(c);
 		errno = ETIMEDOUT;
@@ -607,7 +628,7 @@ SMBC_server_internal(TALLOC_CTX *ctx,
 	}
 
 	ZERO_STRUCTP(srv);
-	srv->cli = c;
+	DLIST_ADD(srv->cli, c);
 	srv->dev = (dev_t)(str_checksum(server) ^ str_checksum(share));
         srv->no_pathinfo = False;
         srv->no_pathinfo2 = False;
@@ -729,6 +750,7 @@ SMBC_attr_server(TALLOC_CTX *ctx,
         ipc_srv = SMBC_find_server(ctx, context, server, "*IPC$",
                                    pp_workgroup, pp_username, pp_password);
         if (!ipc_srv) {
+		int signing_state = SMB_SIGNING_DEFAULT;
 
                 /* We didn't find a cached connection.  Get the password */
 		if (!*pp_password || (*pp_password)[0] == '\0') {
@@ -750,6 +772,9 @@ SMBC_attr_server(TALLOC_CTX *ctx,
                 if (smbc_getOptionUseCCache(context)) {
                         flags |= CLI_FULL_CONNECTION_USE_CCACHE;
                 }
+		if (context->internal->smb_encryption_level != SMBC_ENCRYPTLEVEL_NONE) {
+			signing_state = SMB_SIGNING_REQUIRED;
+		}
 
                 nt_status = cli_full_connection(&ipc_cli,
 						lp_netbios_name(), server,
@@ -758,7 +783,7 @@ SMBC_attr_server(TALLOC_CTX *ctx,
 						*pp_workgroup,
 						*pp_password,
 						flags,
-						SMB_SIGNING_DEFAULT);
+						signing_state);
                 if (! NT_STATUS_IS_OK(nt_status)) {
                         DEBUG(1,("cli_full_connection failed! (%s)\n",
                                  nt_errstr(nt_status)));
@@ -799,10 +824,10 @@ SMBC_attr_server(TALLOC_CTX *ctx,
                 }
 
                 ZERO_STRUCTP(ipc_srv);
-                ipc_srv->cli = ipc_cli;
+                DLIST_ADD(ipc_srv->cli, ipc_cli);
 
                 nt_status = cli_rpc_pipe_open_noauth(
-			ipc_srv->cli, &ndr_table_lsarpc.syntax_id, &pipe_hnd);
+			ipc_srv->cli, &ndr_table_lsarpc, &pipe_hnd);
                 if (!NT_STATUS_IS_OK(nt_status)) {
                         DEBUG(1, ("cli_nt_session_open fail!\n"));
                         errno = ENOTSUP;

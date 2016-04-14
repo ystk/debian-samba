@@ -46,8 +46,7 @@ static WERROR create_response_rr(const struct dns_name_question *question,
 {
 	struct dns_res_rec *ans = *answers;
 	uint16_t ai = *ancount;
-	char *tmp;
-	uint32_t i;
+	enum ndr_err_code ndr_err;
 
 	ZERO_STRUCT(ans[ai]);
 
@@ -101,14 +100,12 @@ static WERROR create_response_rr(const struct dns_name_question *question,
 		}
 		break;
 	case DNS_QTYPE_TXT:
-		tmp = talloc_asprintf(ans, "\"%s\"", rec->data.txt.str[0]);
-		W_ERROR_HAVE_NO_MEMORY(tmp);
-		for (i=1; i<rec->data.txt.count; i++) {
-			tmp = talloc_asprintf_append_buffer(
-				tmp, " \"%s\"", rec->data.txt.str[i]);
-			W_ERROR_HAVE_NO_MEMORY(tmp);
+		ndr_err = ndr_dnsp_string_list_copy(ans,
+						    &rec->data.txt,
+						    &ans[ai].rdata.txt_record.txt);
+		if (!NDR_ERR_CODE_IS_SUCCESS(ndr_err)) {
+			return WERR_NOMEM;
 		}
-		ans[ai].rdata.txt_record.txt = tmp;
 		break;
 	default:
 		DEBUG(0, ("Got unhandled type %u query.\n", rec->wType));
@@ -414,8 +411,8 @@ static NTSTATUS accept_gss_ticket(TALLOC_CTX *mem_ctx,
 {
 	NTSTATUS status;
 
-	status = gensec_update(tkey->gensec, mem_ctx, dns->task->event_ctx,
-			       *key, reply);
+	status = gensec_update_ev(tkey->gensec, mem_ctx, dns->task->event_ctx,
+				  *key, reply);
 
 	if (NT_STATUS_EQUAL(NT_STATUS_MORE_PROCESSING_REQUIRED, status)) {
 		*dns_auth_error = DNS_RCODE_OK;

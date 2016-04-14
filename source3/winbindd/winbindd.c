@@ -31,12 +31,17 @@
 #include "../librpc/gen_ndr/srv_lsa.h"
 #include "../librpc/gen_ndr/srv_samr.h"
 #include "secrets.h"
+#include "rpc_client/cli_netlogon.h"
 #include "idmap.h"
 #include "lib/addrchange.h"
 #include "serverid.h"
 #include "auth.h"
 #include "messages.h"
 #include "../lib/util/pidfile.h"
+#include "util_cluster.h"
+#include "source4/lib/messaging/irpc.h"
+#include "source4/lib/messaging/messaging.h"
+#include "lib/param/param.h"
 
 #undef DBGC_CLASS
 #define DBGC_CLASS DBGC_WINBIND
@@ -87,6 +92,33 @@ struct messaging_context *winbind_messaging_context(void)
 	return msg;
 }
 
+struct imessaging_context *winbind_imessaging_context(void)
+{
+	static struct imessaging_context *msg = NULL;
+	struct loadparm_context *lp_ctx;
+
+	if (msg != NULL) {
+		return msg;
+	}
+
+	lp_ctx = loadparm_init_s3(NULL, loadparm_s3_helpers());
+	if (lp_ctx == NULL) {
+		smb_panic("Could not load smb.conf to init winbindd's imessaging context.\n");
+	}
+
+	/*
+	 * Note we MUST use the NULL context here, not the autofree context,
+	 * to avoid side effects in forked children exiting.
+	 */
+	msg = imessaging_init(NULL, lp_ctx, procid_self(), winbind_event_context(), false);
+	talloc_unlink(NULL, lp_ctx);
+
+	if (msg == NULL) {
+		smb_panic("Could not init winbindd's messaging context.\n");
+	}
+	return msg;
+}
+
 /* Reload configuration */
 
 static bool reload_services_file(const char *lfile)
@@ -94,7 +126,7 @@ static bool reload_services_file(const char *lfile)
 	bool ret;
 
 	if (lp_loaded()) {
-		char *fname = lp_configfile(talloc_tos());
+		char *fname = lp_next_configfile(talloc_tos());
 
 		if (file_exist(fname) && !strcsequal(fname,get_dyn_CONFIGFILE())) {
 			set_dyn_CONFIGFILE(fname);
@@ -189,7 +221,7 @@ static void terminate(bool is_parent)
 		char *path = NULL;
 
 		if (asprintf(&path, "%s/%s",
-			get_winbind_pipe_dir(), WINBINDD_SOCKET_NAME) > 0) {
+			lp_winbindd_socket_directory(), WINBINDD_SOCKET_NAME) > 0) {
 			unlink(path);
 			SAFE_FREE(path);
 		}
@@ -215,7 +247,7 @@ static void terminate(bool is_parent)
 		struct messaging_context *msg = winbind_messaging_context();
 		struct server_id self = messaging_server_id(msg);
 		serverid_deregister(self);
-		pidfile_unlink(lp_piddir(), "winbindd");
+		pidfile_unlink(lp_pid_directory(), "winbindd");
 	}
 
 	exit(0);
@@ -792,6 +824,7 @@ static void request_finished(struct winbindd_cli_state *state)
 		return;
 	}
 	tevent_req_set_callback(req, winbind_client_response_written, state);
+	state->io_req = req;
 }
 
 static void winbind_client_response_written(struct tevent_req *req)
@@ -800,6 +833,8 @@ static void winbind_client_response_written(struct tevent_req *req)
 		req, struct winbindd_cli_state);
 	ssize_t ret;
 	int err;
+
+	state->io_req = NULL;
 
 	ret = wb_resp_write_recv(req, &err);
 	TALLOC_FREE(req);
@@ -827,6 +862,7 @@ static void winbind_client_response_written(struct tevent_req *req)
 		return;
 	}
 	tevent_req_set_callback(req, winbind_client_request_read, state);
+	state->io_req = req;
 }
 
 void request_error(struct winbindd_cli_state *state)
@@ -897,6 +933,7 @@ static void new_connection(int listen_sock, bool privileged)
 		return;
 	}
 	tevent_req_set_callback(req, winbind_client_request_read, state);
+	state->io_req = req;
 
 	/* Add to connection list */
 
@@ -909,6 +946,8 @@ static void winbind_client_request_read(struct tevent_req *req)
 		req, struct winbindd_cli_state);
 	ssize_t ret;
 	int err;
+
+	state->io_req = NULL;
 
 	ret = wb_req_read_recv(req, state, &state->request, &err);
 	TALLOC_FREE(req);
@@ -940,6 +979,25 @@ static void remove_client(struct winbindd_cli_state *state)
 	if (state == NULL) {
 		return;
 	}
+
+	/*
+	 * We need to remove a pending wb_req_read_*
+	 * or wb_resp_write_* request before closing the
+	 * socket.
+	 *
+	 * This is important as they might have used tevent_add_fd() and we
+	 * use the epoll * backend on linux. So we must remove the tevent_fd
+	 * before closing the fd.
+	 *
+	 * Otherwise we might hit a race with close_conns_after_fork() (via
+	 * winbindd_reinit_after_fork()) where a file description
+	 * is still open in a child, which means it's still active in
+	 * the parents epoll queue, but the related tevent_fd is already
+	 * already gone in the parent.
+	 *
+	 * See bug #11141.
+	 */
+	TALLOC_FREE(state->io_req);
 
 	if (state->sock != -1) {
 		/* tell client, we are closing ... */
@@ -1067,11 +1125,6 @@ static void winbindd_listen_fde_handler(struct tevent_context *ev,
  * Winbindd socket accessor functions
  */
 
-const char *get_winbind_pipe_dir(void)
-{
-	return lp_parm_const_string(-1, "winbindd", "socket dir", get_dyn_WINBINDD_SOCKET_DIR());
-}
-
 char *get_winbind_priv_pipe_dir(void)
 {
 	return state_path(WINBINDD_PRIV_SOCKET_SUBDIR);
@@ -1092,7 +1145,7 @@ static bool winbindd_setup_listeners(void)
 
 	pub_state->privileged = false;
 	pub_state->fd = create_pipe_sock(
-		get_winbind_pipe_dir(), WINBINDD_SOCKET_NAME, 0755);
+		lp_winbindd_socket_directory(), WINBINDD_SOCKET_NAME, 0755);
 	if (pub_state->fd == -1) {
 		goto failed;
 	}
@@ -1156,6 +1209,7 @@ bool winbindd_use_cache(void)
 static void winbindd_register_handlers(struct messaging_context *msg_ctx,
 				       bool foreground)
 {
+	NTSTATUS status;
 	/* Setup signal handlers */
 
 	if (!winbindd_setup_sig_term_handler(true))
@@ -1255,6 +1309,12 @@ static void winbindd_register_handlers(struct messaging_context *msg_ctx,
 		}
 	}
 
+	status = wb_irpc_register();
+
+	if (!NT_STATUS_IS_OK(status)) {
+		DEBUG(0, ("Could not register IRPC handlers\n"));
+		exit(1);
+	}
 }
 
 struct winbindd_addrchanged_state {
@@ -1343,7 +1403,7 @@ static void winbindd_addr_changed(struct tevent_req *req)
 
 /* Main function */
 
-int main(int argc, char **argv, char **envp)
+int main(int argc, const char **argv)
 {
 	static bool is_daemon = False;
 	static bool Fork = True;
@@ -1364,7 +1424,6 @@ int main(int argc, char **argv, char **envp)
 		{ "interactive", 'i', POPT_ARG_NONE, NULL, 'i', "Interactive mode" },
 		{ "no-caching", 'n', POPT_ARG_NONE, NULL, 'n', "Disable caching" },
 		POPT_COMMON_SAMBA
-		POPT_COMMON_DYNCONFIG
 		POPT_TABLEEND
 	};
 	poptContext pc;
@@ -1414,7 +1473,7 @@ int main(int argc, char **argv, char **envp)
 
 	/* Initialise samba/rpc client stuff */
 
-	pc = poptGetContext("winbindd", argc, (const char **)argv, long_options, 0);
+	pc = poptGetContext("winbindd", argc, argv, long_options, 0);
 
 	while ((opt = poptGetNextOpt(pc)) != -1) {
 		switch (opt) {
@@ -1500,9 +1559,14 @@ int main(int argc, char **argv, char **envp)
 	 */
 	dump_core_setup("winbindd", lp_logfile(talloc_tos()));
 
-	if (lp_server_role() == ROLE_ACTIVE_DIRECTORY_DC) {
+	if (lp_server_role() == ROLE_ACTIVE_DIRECTORY_DC
+	    && !lp_parm_bool(-1, "server role check", "inhibit", false)) {
 		DEBUG(0, ("server role = 'active directory domain controller' not compatible with running the winbindd binary. \n"));
 		DEBUGADD(0, ("You should start 'samba' instead, and it will control starting the internal AD DC winbindd implementation, which is not the same as this one\n"));
+		exit(1);
+	}
+
+	if (!cluster_probe_ok()) {
 		exit(1);
 	}
 
@@ -1517,17 +1581,17 @@ int main(int argc, char **argv, char **envp)
 		exit(1);
 	}
 
-	ok = directory_create_or_exist(lp_lockdir(), geteuid(), 0755);
+	ok = directory_create_or_exist(lp_lock_directory(), 0755);
 	if (!ok) {
 		DEBUG(0, ("Failed to create directory %s for lock files - %s\n",
-			  lp_lockdir(), strerror(errno)));
+			  lp_lock_directory(), strerror(errno)));
 		exit(1);
 	}
 
-	ok = directory_create_or_exist(lp_piddir(), geteuid(), 0755);
+	ok = directory_create_or_exist(lp_pid_directory(), 0755);
 	if (!ok) {
 		DEBUG(0, ("Failed to create directory %s for pid files - %s\n",
-			  lp_piddir(), strerror(errno)));
+			  lp_pid_directory(), strerror(errno)));
 		exit(1);
 	}
 
@@ -1544,6 +1608,13 @@ int main(int argc, char **argv, char **envp)
 		return False;
 	}
 
+	status = rpccli_pre_open_netlogon_creds();
+	if (!NT_STATUS_IS_OK(status)) {
+		DEBUG(0, ("rpccli_pre_open_netlogon_creds() - %s\n",
+			  nt_errstr(status)));
+		exit(1);
+	}
+
 	/* Unblock all signals we are interested in as they may have been
 	   blocked by the parent process. */
 
@@ -1558,7 +1629,7 @@ int main(int argc, char **argv, char **envp)
 	if (!interactive)
 		become_daemon(Fork, no_process_group, log_stdout);
 
-	pidfile_create(lp_piddir(), "winbindd");
+	pidfile_create(lp_pid_directory(), "winbindd");
 
 #if HAVE_SETPGID
 	/*
@@ -1595,6 +1666,10 @@ int main(int argc, char **argv, char **envp)
 
 	winbindd_register_handlers(winbind_messaging_context(), !Fork);
 
+	if (!messaging_parent_dgm_cleanup_init(winbind_messaging_context())) {
+		exit(1);
+	}
+
 	status = init_system_session_info();
 	if (!NT_STATUS_IS_OK(status)) {
 		exit_daemon("Winbindd failed to setup system user info", map_errno_from_nt_status(status));
@@ -1611,6 +1686,8 @@ int main(int argc, char **argv, char **envp)
 	if (!winbindd_setup_listeners()) {
 		exit_daemon("Winbindd failed to setup listeners", EPIPE);
 	}
+
+	irpc_add_name(winbind_imessaging_context(), "winbind_server");
 
 	TALLOC_FREE(frame);
 

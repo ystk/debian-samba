@@ -1,3 +1,67 @@
+samba (2:4.2.10+dfsg-0+deb8u1) jessie-security; urgency=high
+
+    This Samba security release moves Samba from Samba 4.1 to 4.2 in
+    Debian jessie.  This addresses both Denial of Service and Man in
+    the Middle vulnerabilities.
+
+    This change was required as the scale of the patches did not
+    permit a backport to Samba 4.1.
+
+    Both of these changes implement a number of stricter behaviours
+    to prevent Man in the Middle attacks on our network services, as a
+    client and as a server.
+
+    Between these changes, compatibility with a large number of older
+    software versions has been lost in the default configuration.
+
+    As an AD DC server, only Windows 2000 and Samba 3.6 and above as a
+    domain member is supported out-of-the box.
+
+    Specifically compatibility with the sssd client depends on the
+    options selected (the ad or krb5 identity providers should work).
+
+    Also as an AD DC, use of ldaps:// from ldbsearch or OpenLDAP's
+    ldapsearch is not compatible with NTLMSSP or Kerberos, it is now
+    only useful for simple binds.  This applies unless the 'ldap
+    server require strong auth' option is modified to a less secure
+    setting of 'allow_sasl_over_tls'.  Instead, use ldap:// and allow
+    NTLMSSP/Kerberos to provide the sign/seal protection (on by
+    default for Samba clients, and required by the server in this release).
+
+    As a File Server, compatibility with the Linux Kernel cifs client
+    depends on which configuration options are selected, please use
+    sec=krb5(i) or sec=ntlmssp(i), not sec=ntlmv2.
+
+    As a file or printer client and as a domain member, out of the box
+    compatibility with Samba less than 4.0 and other SMB/CIFS servers,
+    depends on support for SMB signing or SMB2 on the server, which is
+    often disabled or absent.
+
+    Additionally, as a domain member, out the the box compatibility
+    for Samba 3.x domain controllers requires NETLOGON features only
+    in Samba 3.2 and above.
+
+    However, all of these can be worked around by setting smb.conf
+    options in Samba, see WHATSNEW.txt the 4.2.0 release notes at
+    https://www.samba.org/samba/history/samba-4.2.0.html and the Samba
+    wiki for details, workarounds and suggested security-improving
+    changes to these and other software packages.
+
+    Finally, two important configuration options should be considered,
+    that we were unable to silently change defaults for:
+    - smb signing = required
+    - ntlm auth = no
+
+    Without smb signing = required, Man in the Middle attacks are
+    still possible against our file server and classic/NT4-like/Samba3
+    Domain controller.  (It is now enforced on our AD DC.)
+
+    Without 'ntlm auth = no', there may still be clients not using
+    NTLMv2, and these observed passwords may be brute-forced easily
+    using cloud-computing resources or rainbow tables. 
+
+ -- Andrew Bartlett <abartlet+debian@catalyst.net.nz>  Tue, 12 Apr 2016 16:18:57 +1200
+
 samba (2:4.0.10+dfsg-3) unstable; urgency=low
 
     The SWAT package is no longer available.

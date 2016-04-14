@@ -26,6 +26,11 @@
 struct cli_state;
 struct file_info;
 
+enum {
+	ATTR_UNSET,
+	ATTR_SET,
+};
+
 /* The following definitions come from client/client.c  */
 
 const char *client_get_cur_dir(void);
@@ -36,16 +41,8 @@ NTSTATUS do_list(const char *mask,
 				   const char *dir),
 			bool rec,
 			bool dirs);
+int set_remote_attr(const char *filename, uint16_t new_attr, int mode);
 int cmd_iosize(void);
-
-/* The following definitions come from client/clitar.c  */
-
-int cmd_block(void);
-int cmd_tarmode(void);
-int cmd_setmode(void);
-int cmd_tar(void);
-int process_tar(void);
-int tar_parseargs(int argc, char *argv[], const char *Optarg, int Optind);
 
 /* The following definitions come from client/dnsbrowse.c  */
 

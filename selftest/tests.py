@@ -37,13 +37,18 @@ if have_man_pages_support:
     planpythontestsuite("none", "samba.tests.docs")
 
 planpythontestsuite("none", "selftest.tests.test_suite", extra_path=[srcdir()])
-planpythontestsuite("none", "subunit")
+try:
+    import testscenarios
+except ImportError:
+    skiptestsuite("subunit", "testscenarios not available")
+else:
+    planpythontestsuite("none", "subunit.tests.test_suite")
 planpythontestsuite("none", "samba.tests.blackbox.ndrdump")
 planpythontestsuite("none", "api", name="ldb.python", extra_path=['lib/ldb/tests/python'])
 planpythontestsuite("none", "samba.tests.credentials")
 planpythontestsuite("none", "samba.tests.registry")
 planpythontestsuite("none", "samba.tests.auth")
-planpythontestsuite("none", "samba.tests.getopt")
+planpythontestsuite("none", "samba.tests.get_opt")
 planpythontestsuite("none", "samba.tests.security")
 planpythontestsuite("none", "samba.tests.dcerpc.misc")
 planpythontestsuite("none", "samba.tests.param")
@@ -54,7 +59,6 @@ planpythontestsuite("none", "samba.tests.samba3")
 planpythontestsuite("none", "samba.tests.strings")
 planpythontestsuite("none", "samba.tests.netcmd")
 planpythontestsuite("none", "samba.tests.dcerpc.rpc_talloc")
-planpythontestsuite("none", "samba.tests.samdb")
 planpythontestsuite("none", "samba.tests.hostconfig")
 planpythontestsuite("none", "samba.tests.messaging")
 planpythontestsuite("none", "samba.tests.samba3sam")
