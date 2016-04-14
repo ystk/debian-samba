@@ -698,12 +698,10 @@ static NTSTATUS get_md4pw(struct samr_Password *md4pw, const char *mach_acct,
 		goto out;
 	}
 
-	become_root();
 	status = samr_find_machine_account(mem_ctx, h, mach_acct,
 					   SEC_FLAG_MAXIMUM_ALLOWED,
 					   &domain_sid, &user_rid,
 					   &user_handle);
-	unbecome_root();
 	if (!NT_STATUS_IS_OK(status)) {
 		goto out;
 	}
@@ -1020,6 +1018,7 @@ NTSTATUS _netr_ServerAuthenticate3(struct pipes_struct *p,
 	talloc_unlink(p->mem_ctx, lp_ctx);
 
 	if (!NT_STATUS_IS_OK(status)) {
+		ZERO_STRUCTP(r->out.return_credentials);
 		goto out;
 	}
 
@@ -1476,6 +1475,15 @@ static NTSTATUS _netr_LogonSamLogon_base(struct pipes_struct *p,
 	struct auth_context *auth_context = NULL;
 	const char *fn;
 
+#ifdef DEBUG_PASSWORD
+	logon = netlogon_creds_shallow_copy_logon(p->mem_ctx,
+						  r->in.logon_level,
+						  r->in.logon);
+	if (logon == NULL) {
+		logon = r->in.logon;
+	}
+#endif
+
 	switch (p->opnum) {
 		case NDR_NETR_LOGONSAMLOGON:
 			fn = "_netr_LogonSamLogon";
@@ -1556,11 +1564,16 @@ static NTSTATUS _netr_LogonSamLogon_base(struct pipes_struct *p,
 
 	status = NT_STATUS_OK;
 
+	netlogon_creds_decrypt_samlogon_logon(creds,
+					      r->in.logon_level,
+					      logon);
+
 	switch (r->in.logon_level) {
 	case NetlogonNetworkInformation:
 	case NetlogonNetworkTransitiveInformation:
 	{
 		const char *wksname = nt_workstation;
+		const char *workgroup = lp_workgroup();
 
 		status = make_auth_context_fixed(talloc_tos(), &auth_context,
 						 logon->network->challenge);
@@ -1575,7 +1588,8 @@ static NTSTATUS _netr_LogonSamLogon_base(struct pipes_struct *p,
 		if (*wksname == '\\') wksname++;
 
 		/* Standard challenge/response authentication */
-		if (!make_user_info_netlogon_network(&user_info,
+		if (!make_user_info_netlogon_network(talloc_tos(),
+						     &user_info,
 						     nt_username, nt_domain,
 						     wksname,
 						     p->remote_address,
@@ -1585,6 +1599,14 @@ static NTSTATUS _netr_LogonSamLogon_base(struct pipes_struct *p,
 						     logon->network->nt.data,
 						     logon->network->nt.length)) {
 			status = NT_STATUS_NO_MEMORY;
+		}
+
+		if (NT_STATUS_IS_OK(status)) {
+			status = NTLMv2_RESPONSE_verify_netlogon_creds(
+						user_info->client.account_name,
+						user_info->client.domain_name,
+						user_info->password.response.nt,
+						creds, workgroup);
 		}
 		break;
 	}
@@ -1601,32 +1623,16 @@ static NTSTATUS _netr_LogonSamLogon_base(struct pipes_struct *p,
 		uint8_t chal[8];
 
 #ifdef DEBUG_PASSWORD
-		DEBUG(100,("lm owf password:"));
-		dump_data(100, logon->password->lmpassword.hash, 16);
+		if (logon != r->in.logon) {
+			DEBUG(100,("lm owf password:"));
+			dump_data(100,
+				  r->in.logon->password->lmpassword.hash, 16);
 
-		DEBUG(100,("nt owf password:"));
-		dump_data(100, logon->password->ntpassword.hash, 16);
-#endif
-		if (creds->negotiate_flags & NETLOGON_NEG_SUPPORTS_AES) {
-			netlogon_creds_aes_decrypt(creds,
-						   logon->password->lmpassword.hash,
-						   16);
-			netlogon_creds_aes_decrypt(creds,
-						   logon->password->ntpassword.hash,
-						   16);
-		} else if (creds->negotiate_flags & NETLOGON_NEG_ARCFOUR) {
-			netlogon_creds_arcfour_crypt(creds,
-						     logon->password->lmpassword.hash,
-						     16);
-			netlogon_creds_arcfour_crypt(creds,
-						     logon->password->ntpassword.hash,
-						     16);
-		} else {
-			netlogon_creds_des_decrypt(creds, &logon->password->lmpassword);
-			netlogon_creds_des_decrypt(creds, &logon->password->ntpassword);
+			DEBUG(100,("nt owf password:"));
+			dump_data(100,
+				  r->in.logon->password->ntpassword.hash, 16);
 		}
 
-#ifdef DEBUG_PASSWORD
 		DEBUG(100,("decrypt of lm owf password:"));
 		dump_data(100, logon->password->lmpassword.hash, 16);
 
@@ -1641,7 +1647,8 @@ static NTSTATUS _netr_LogonSamLogon_base(struct pipes_struct *p,
 
 		auth_get_ntlm_challenge(auth_context, chal);
 
-		if (!make_user_info_netlogon_interactive(&user_info,
+		if (!make_user_info_netlogon_interactive(talloc_tos(),
+							 &user_info,
 							 nt_username, nt_domain,
 							 nt_workstation,
 							 p->remote_address,
@@ -1659,12 +1666,14 @@ static NTSTATUS _netr_LogonSamLogon_base(struct pipes_struct *p,
 	} /* end switch */
 
 	if ( NT_STATUS_IS_OK(status) ) {
-		status = auth_check_ntlm_password(auth_context,
-			user_info, &server_info);
+		status = auth_check_ntlm_password(p->mem_ctx,
+						  auth_context,
+						  user_info,
+						  &server_info);
 	}
 
 	TALLOC_FREE(auth_context);
-	free_user_info(&user_info);
+	TALLOC_FREE(user_info);
 
 	DEBUG(5,("%s: check_password returned status %s\n",
 		  fn, nt_errstr(status)));
@@ -1707,6 +1716,14 @@ static NTSTATUS _netr_LogonSamLogon_base(struct pipes_struct *p,
 						r->out.validation->sam3);
 		break;
 	case 6:
+		/* Only allow this if the pipe is protected. */
+		if (p->auth.auth_level < DCERPC_AUTH_LEVEL_PRIVACY) {
+			DEBUG(0,("netr_Validation6: client %s not using privacy for netlogon\n",
+				get_remote_machine_name()));
+			status = NT_STATUS_INVALID_PARAMETER;
+			break;
+		}
+
 		status = serverinfo_to_SamInfo6(server_info,
 						r->out.validation->sam6);
 		break;
@@ -2456,22 +2473,16 @@ NTSTATUS _netr_GetForestTrustInformation(struct pipes_struct *p,
 	NTSTATUS status;
 	struct netlogon_creds_CredentialState *creds;
 	struct lsa_ForestTrustInformation *info, **info_ptr;
-	struct loadparm_context *lp_ctx;
 
 	/* TODO: check server name */
 
-	lp_ctx = loadparm_init_s3(p->mem_ctx, loadparm_s3_helpers());
-	if (lp_ctx == NULL) {
-		DEBUG(0, ("loadparm_init_s3 failed\n"));
-		return NT_STATUS_INTERNAL_ERROR;
-	}
-
-	status = schannel_check_creds_state(p->mem_ctx, lp_ctx,
-					    r->in.computer_name,
-					    r->in.credential,
-					    r->out.return_authenticator,
-					    &creds);
-	talloc_unlink(p->mem_ctx, lp_ctx);
+	become_root();
+	status = netr_creds_server_step_check(p, p->mem_ctx,
+					      r->in.computer_name,
+					      r->in.credential,
+					      r->out.return_authenticator,
+					      &creds);
+	unbecome_root();
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
 	}
@@ -2558,22 +2569,16 @@ NTSTATUS _netr_ServerGetTrustInfo(struct pipes_struct *p,
 	bool trusted;
 	struct netr_TrustInfo *trust_info;
 	struct pdb_trusted_domain *td;
-	struct loadparm_context *lp_ctx;
-
-	lp_ctx = loadparm_init_s3(p->mem_ctx, loadparm_s3_helpers());
-	if (lp_ctx == NULL) {
-		DEBUG(0, ("loadparm_init_s3 failed\n"));
-		return NT_STATUS_INTERNAL_ERROR;
-	}
 
 	/* TODO: check server name */
 
-	status = schannel_check_creds_state(p->mem_ctx, lp_ctx,
-					    r->in.computer_name,
-					    r->in.credential,
-					    r->out.return_authenticator,
-					    &creds);
-	talloc_unlink(p->mem_ctx, lp_ctx);
+	become_root();
+	status = netr_creds_server_step_check(p, p->mem_ctx,
+					      r->in.computer_name,
+					      r->in.credential,
+					      r->out.return_authenticator,
+					      &creds);
+	unbecome_root();
 	if (!NT_STATUS_IS_OK(status)) {
 		return status;
 	}

@@ -26,7 +26,6 @@
 #include "auth.h"
 #include "lib/param/loadparm.h"
 #include "../lib/util/tevent_ntstatus.h"
-#include "lib/smbd_tevent_queue.h"
 
 static struct tevent_req *smbd_smb2_tree_connect_send(TALLOC_CTX *mem_ctx,
 					struct tevent_context *ev,
@@ -127,7 +126,7 @@ static void smbd_smb2_request_tcon_done(struct tevent_req *subreq)
 	if (!NT_STATUS_IS_OK(status)) {
 		error = smbd_smb2_request_error(req, status);
 		if (!NT_STATUS_IS_OK(error)) {
-			smbd_server_connection_terminate(req->sconn,
+			smbd_server_connection_terminate(req->xconn,
 							 nt_errstr(error));
 			return;
 		}
@@ -136,11 +135,11 @@ static void smbd_smb2_request_tcon_done(struct tevent_req *subreq)
 
 	outhdr = SMBD_SMB2_OUT_HDR_PTR(req);
 
-	outbody = data_blob_talloc(req->out.vector, NULL, 0x10);
+	outbody = smbd_smb2_generate_outbody(req, 0x10);
 	if (outbody.data == NULL) {
 		error = smbd_smb2_request_error(req, NT_STATUS_NO_MEMORY);
 		if (!NT_STATUS_IS_OK(error)) {
-			smbd_server_connection_terminate(req->sconn,
+			smbd_server_connection_terminate(req->xconn,
 							 nt_errstr(error));
 			return;
 		}
@@ -162,7 +161,7 @@ static void smbd_smb2_request_tcon_done(struct tevent_req *subreq)
 
 	error = smbd_smb2_request_done(req, outbody, NULL);
 	if (!NT_STATUS_IS_OK(error)) {
-		smbd_server_connection_terminate(req->sconn,
+		smbd_server_connection_terminate(req->xconn,
 						 nt_errstr(error));
 		return;
 	}
@@ -176,7 +175,7 @@ static NTSTATUS smbd_smb2_tree_connect(struct smbd_smb2_request *req,
 				       uint32_t *out_maximal_access,
 				       uint32_t *out_tree_id)
 {
-	struct smbXsrv_connection *conn = req->sconn->conn;
+	struct smbXsrv_connection *conn = req->xconn;
 	const char *share = in_path;
 	char *service = NULL;
 	int snum = -1;
@@ -185,6 +184,7 @@ static NTSTATUS smbd_smb2_tree_connect(struct smbd_smb2_request *req,
 	connection_struct *compat_conn = NULL;
 	struct user_struct *compat_vuser = req->session->compat;
 	NTSTATUS status;
+	bool encryption_desired = req->session->encryption_desired;
 	bool encryption_required = req->session->global->encryption_required;
 	bool guest_session = false;
 
@@ -236,7 +236,13 @@ static NTSTATUS smbd_smb2_tree_connect(struct smbd_smb2_request *req,
 		return NT_STATUS_BAD_NETWORK_NAME;
 	}
 
+	if ((lp_smb_encrypt(snum) >= SMB_SIGNING_DESIRED) &&
+	    (conn->smb2.client.capabilities & SMB2_CAP_ENCRYPTION)) {
+		encryption_desired = true;
+	}
+
 	if (lp_smb_encrypt(snum) == SMB_SIGNING_REQUIRED) {
+		encryption_desired = true;
 		encryption_required = true;
 	}
 
@@ -265,9 +271,10 @@ static NTSTATUS smbd_smb2_tree_connect(struct smbd_smb2_request *req,
 		return status;
 	}
 
+	tcon->encryption_desired = encryption_desired;
 	tcon->global->encryption_required = encryption_required;
 
-	compat_conn = make_connection_smb2(req->sconn,
+	compat_conn = make_connection_smb2(req,
 					tcon, snum,
 					req->session->compat,
 					"???",
@@ -330,12 +337,12 @@ static NTSTATUS smbd_smb2_tree_connect(struct smbd_smb2_request *req,
 		break;
 	}
 
-	if (lp_hideunreadable(SNUM(tcon->compat)) ||
-	    lp_hideunwriteable_files(SNUM(tcon->compat))) {
+	if (lp_hide_unreadable(SNUM(tcon->compat)) ||
+	    lp_hide_unwriteable_files(SNUM(tcon->compat))) {
 		*out_share_flags |= SMB2_SHAREFLAG_ACCESS_BASED_DIRECTORY_ENUM;
 	}
 
-	if (encryption_required) {
+	if (encryption_desired) {
 		*out_share_flags |= SMB2_SHAREFLAG_ENCRYPT_DATA;
 	}
 
@@ -455,18 +462,18 @@ static void smbd_smb2_request_tdis_done(struct tevent_req *subreq)
 	if (!NT_STATUS_IS_OK(status)) {
 		error = smbd_smb2_request_error(smb2req, status);
 		if (!NT_STATUS_IS_OK(error)) {
-			smbd_server_connection_terminate(smb2req->sconn,
+			smbd_server_connection_terminate(smb2req->xconn,
 							nt_errstr(error));
 			return;
 		}
 		return;
 	}
 
-	outbody = data_blob_talloc(smb2req->out.vector, NULL, 0x04);
+	outbody = smbd_smb2_generate_outbody(smb2req, 0x04);
 	if (outbody.data == NULL) {
 		error = smbd_smb2_request_error(smb2req, NT_STATUS_NO_MEMORY);
 		if (!NT_STATUS_IS_OK(error)) {
-			smbd_server_connection_terminate(smb2req->sconn,
+			smbd_server_connection_terminate(smb2req->xconn,
 							nt_errstr(error));
 			return;
 		}
@@ -478,7 +485,7 @@ static void smbd_smb2_request_tdis_done(struct tevent_req *subreq)
 
 	error = smbd_smb2_request_done(smb2req, outbody, NULL);
 	if (!NT_STATUS_IS_OK(error)) {
-		smbd_server_connection_terminate(smb2req->sconn,
+		smbd_server_connection_terminate(smb2req->xconn,
 						nt_errstr(error));
 		return;
 	}
@@ -498,7 +505,7 @@ static struct tevent_req *smbd_smb2_tdis_send(TALLOC_CTX *mem_ctx,
 	struct tevent_req *req;
 	struct smbd_smb2_tdis_state *state;
 	struct tevent_req *subreq;
-	struct smbd_smb2_request *preq;
+	struct smbXsrv_connection *xconn = NULL;
 
 	req = tevent_req_create(mem_ctx, &state,
 			struct smbd_smb2_tdis_state);
@@ -517,35 +524,40 @@ static struct tevent_req *smbd_smb2_tdis_send(TALLOC_CTX *mem_ctx,
 	 */
 	smb2req->tcon->status = NT_STATUS_NETWORK_NAME_DELETED;
 
-	for (preq = smb2req->sconn->smb2.requests; preq != NULL; preq = preq->next) {
-		if (preq == smb2req) {
-			/* Can't cancel current request. */
-			continue;
-		}
-		if (preq->tcon != smb2req->tcon) {
-			/* Request on different tcon. */
-			continue;
-		}
+	xconn = smb2req->xconn->client->connections;
+	for (; xconn != NULL; xconn = xconn->next) {
+		struct smbd_smb2_request *preq;
 
-		/*
-		 * Never cancel anything in a compound
-		 * request. Way too hard to deal with
-		 * the result.
-		 */
-		if (!preq->compound_related && preq->subreq != NULL) {
-			tevent_req_cancel(preq->subreq);
-		}
+		for (preq = xconn->smb2.requests; preq != NULL; preq = preq->next) {
+			if (preq == smb2req) {
+				/* Can't cancel current request. */
+				continue;
+			}
+			if (preq->tcon != smb2req->tcon) {
+				/* Request on different tcon. */
+				continue;
+			}
 
-		/*
-		 * Now wait until the request is finished.
-		 *
-		 * We don't set a callback, as we just want to block the
-		 * wait queue and the talloc_free() of the request will
-		 * remove the item from the wait queue.
-		 */
-		subreq = smbd_tevent_queue_wait_send(preq, ev, state->wait_queue);
-		if (tevent_req_nomem(subreq, req)) {
-			return tevent_req_post(req, ev);
+			/*
+			 * Never cancel anything in a compound
+			 * request. Way too hard to deal with
+			 * the result.
+			 */
+			if (!preq->compound_related && preq->subreq != NULL) {
+				tevent_req_cancel(preq->subreq);
+			}
+
+			/*
+			 * Now wait until the request is finished.
+			 *
+			 * We don't set a callback, as we just want to block the
+			 * wait queue and the talloc_free() of the request will
+			 * remove the item from the wait queue.
+			 */
+			subreq = tevent_queue_wait_send(preq, ev, state->wait_queue);
+			if (tevent_req_nomem(subreq, req)) {
+				return tevent_req_post(req, ev);
+			}
 		}
 	}
 
@@ -554,7 +566,7 @@ static struct tevent_req *smbd_smb2_tdis_send(TALLOC_CTX *mem_ctx,
 	 * this way we get notified when all pending requests are finished
 	 * and send to the socket.
 	 */
-	subreq = smbd_tevent_queue_wait_send(state, ev, state->wait_queue);
+	subreq = tevent_queue_wait_send(state, ev, state->wait_queue);
 	if (tevent_req_nomem(subreq, req)) {
 		return tevent_req_post(req, ev);
 	}
@@ -571,7 +583,7 @@ static void smbd_smb2_tdis_wait_done(struct tevent_req *subreq)
 		req, struct smbd_smb2_tdis_state);
 	NTSTATUS status;
 
-	smbd_tevent_queue_wait_recv(subreq);
+	tevent_queue_wait_recv(subreq);
 	TALLOC_FREE(subreq);
 
 	/*

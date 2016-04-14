@@ -22,9 +22,11 @@ $VERSION = '0.01';
 
 sub new($) {
 	my ($class) = @_;
-	my $self = { res => "", res_hdr => "", tabs => "", constants => {},
+	my $self = { res => "", res_hdr => "", tabs => "",
+				 constants => [], constants_uniq => {},
 	             module_methods => [], module_objects => [], ready_types => [],
-				 module_imports => {}, type_imports => {},
+				 module_imports => [], module_imports_uniq => {},
+				 type_imports => [], type_imports_uniq => {},
 				 patch_type_calls => [], prereadycode => [],
 			 	 postreadycode => []};
 	bless($self, $class);
@@ -94,7 +96,11 @@ sub register_constant($$$$)
 {
 	my ($self, $name, $type, $value) = @_;
 
-	$self->{constants}->{$name} = [$type, $value];
+	unless (defined $self->{constants_uniq}->{$name}) {
+		my $h = {"key" => $name, "val" => [$type, $value]};
+		push @{$self->{constants}}, $h;
+		$self->{constants_uniq}->{$name} = $h;
+	}
 }
 
 sub EnumAndBitmapConsts($$$)
@@ -349,7 +355,7 @@ sub PythonStruct($$$$$$)
 		$self->pidl("");
 	}
 
-	$self->pidl_hdr("staticforward PyTypeObject $name\_Type;\n");
+	$self->pidl_hdr("static PyTypeObject $name\_Type;\n");
 	$self->pidl("");
 	my $docstring = $self->DocString($d, $name);
 	my $typeobject = "$name\_Type";
@@ -685,7 +691,7 @@ sub Interface($$$)
 	}
 
 	if (defined $interface->{PROPERTIES}->{uuid}) {
-		$self->pidl_hdr("staticforward PyTypeObject $interface->{NAME}_InterfaceType;\n");
+		$self->pidl_hdr("static PyTypeObject $interface->{NAME}_InterfaceType;\n");
 		$self->pidl("");
 
 		my @fns = ();
@@ -768,6 +774,45 @@ sub Interface($$$)
 		my $dcerpc_typename = $self->import_type_variable("samba.dcerpc.base", "ClientConnection");
 		$self->register_module_prereadycode(["$if_typename.tp_base = $dcerpc_typename;", ""]);
 		$self->register_module_postreadycode(["if (!PyInterface_AddNdrRpcMethods(&$if_typename, py_ndr_$interface->{NAME}\_methods))", "\treturn;", ""]);
+
+
+		$self->pidl("static PyObject *syntax_$interface->{NAME}_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)");
+		$self->pidl("{");
+		$self->indent;
+		$self->pidl("return py_dcerpc_syntax_init_helper(type, args, kwargs, &ndr_table_$interface->{NAME}.syntax_id);");
+		$self->deindent;
+		$self->pidl("}");
+
+		$self->pidl("");
+
+		my $signature = "\"abstract_syntax()\\n\"";
+
+		my $docstring = $self->DocString($interface, $interface->{NAME}."_syntax");
+
+		if ($docstring) {
+			$docstring = "$signature$docstring";
+		} else {
+			$docstring = $signature;
+		}
+
+		my $syntax_typename = "$interface->{NAME}_SyntaxType";
+
+		$self->pidl("static PyTypeObject $syntax_typename = {");
+		$self->indent;
+		$self->pidl("PyObject_HEAD_INIT(NULL) 0,");
+		$self->pidl(".tp_name = \"$basename.$interface->{NAME}\",");
+		$self->pidl(".tp_basicsize = sizeof(pytalloc_Object),");
+		$self->pidl(".tp_doc = $docstring,");
+		$self->pidl(".tp_flags = Py_TPFLAGS_DEFAULT | Py_TPFLAGS_BASETYPE,");
+		$self->pidl(".tp_new = syntax_$interface->{NAME}_new,");
+		$self->deindent;
+		$self->pidl("};");
+
+		$self->pidl("");
+
+		$self->register_module_typeobject("abstract_syntax", "&$syntax_typename");
+		my $ndr_typename = $self->import_type_variable("samba.dcerpc.misc", "ndr_syntax_id");
+		$self->register_module_prereadycode(["$syntax_typename.tp_base = $ndr_typename;", ""]);
 	}
 
 	$self->pidl_hdr("\n");
@@ -805,8 +850,11 @@ sub register_module_import($$)
 	$var_name =~ s/\./_/g;
 	$var_name = "dep_$var_name";
 
-	$self->{module_imports}->{$var_name} = $module_path;
-
+	unless (defined $self->{module_imports_uniq}->{$var_name}) {
+		my $h = { "key" => $var_name, "val" => $module_path};
+		push @{$self->{module_imports}}, $h;
+		$self->{module_imports_uniq}->{$var_name} = $h;
+	}
 	return $var_name;
 }
 
@@ -815,8 +863,10 @@ sub import_type_variable($$$)
 	my ($self, $module, $name) = @_;
 
 	$self->register_module_import($module);
-	unless (defined($self->{type_imports}->{$name})) {
-		$self->{type_imports}->{$name} = $module;
+	unless (defined $self->{type_imports_uniq}->{$name}) {
+		my $h = { "key" => $name, "val" => $module};
+		push @{$self->{type_imports}}, $h;
+		$self->{type_imports_uniq}->{$name} = $h;
 	}
 	return "$name\_Type";
 }
@@ -1366,25 +1416,25 @@ sub Parse($$$$$)
 	$self->pidl("{");
 	$self->indent;
 	$self->pidl("PyObject *m;");
-	foreach (keys %{$self->{module_imports}}) {
-		$self->pidl("PyObject *$_;");
+	foreach my $h (@{$self->{module_imports}}) {
+		$self->pidl("PyObject *$h->{'key'};");
 	}
 	$self->pidl("");
 
-	foreach (keys %{$self->{module_imports}}) {
-		my $var_name = $_;
-		my $module_path = $self->{module_imports}->{$var_name};
+	foreach my $h (@{$self->{module_imports}}) {
+		my $var_name = $h->{'key'};
+		my $module_path = $h->{'val'};
 		$self->pidl("$var_name = PyImport_ImportModule(\"$module_path\");");
 		$self->pidl("if ($var_name == NULL)");
 		$self->pidl("\treturn;");
 		$self->pidl("");
 	}
 
-	foreach (keys %{$self->{type_imports}}) {
-		my $type_var = "$_\_Type";
-		my $module_path = $self->{type_imports}->{$_};
+	foreach my $h (@{$self->{type_imports}}) {
+		my $type_var = "$h->{'key'}\_Type";
+		my $module_path = $h->{'val'};
 		$self->pidl_hdr("static PyTypeObject *$type_var;\n");
-		my $pretty_name = PrettifyTypeName($_, $module_path);
+		my $pretty_name = PrettifyTypeName($h->{'key'}, $module_path);
 		my $module_var = "dep_$module_path";
 		$module_var =~ s/\./_/g;
 		$self->pidl("$type_var = (PyTypeObject *)PyObject_GetAttrString($module_var, \"$pretty_name\");");
@@ -1415,9 +1465,10 @@ sub Parse($$$$$)
 	$self->pidl("if (m == NULL)");
 	$self->pidl("\treturn;");
 	$self->pidl("");
-	foreach my $name (keys %{$self->{constants}}) {
+	foreach my $h (@{$self->{constants}}) {
+		my $name = $h->{'key'};
 		my $py_obj;
-		my ($ctype, $cvar) = @{$self->{constants}->{$name}};
+		my ($ctype, $cvar) = @{$h->{'val'}};
 		if ($cvar =~ /^[0-9]+$/ or $cvar =~ /^0x[0-9a-fA-F]+$/) {
 			$py_obj = "PyInt_FromLong($cvar)";
 		} elsif ($cvar =~ /^".*"$/) {

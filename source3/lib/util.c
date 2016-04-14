@@ -451,8 +451,11 @@ NTSTATUS reinit_after_fork(struct messaging_context *msg_ctx,
 		goto done;
 	}
 
-	if (ev_ctx && tevent_re_initialise(ev_ctx) != 0) {
-		smb_panic(__location__ ": Failed to re-initialise event context");
+	if (ev_ctx != NULL) {
+		tevent_set_trace_callback(ev_ctx, NULL, NULL);
+		if (tevent_re_initialise(ev_ctx) != 0) {
+			smb_panic(__location__ ": Failed to re-initialise event context");
+		}
 	}
 
 	if (reinit_after_fork_pipe[0] != -1) {
@@ -593,7 +596,7 @@ char *automount_lookup(TALLOC_CTX *ctx, const char *user_name)
 {
 	char *value = NULL;
 
-	char *nis_map = (char *)lp_nis_home_map_name();
+	char *nis_map = (char *)lp_homedir_map();
 
 	char buffer[NIS_MAXATTRVAL + 1];
 	nis_result *result;
@@ -645,7 +648,7 @@ char *automount_lookup(TALLOC_CTX *ctx, const char *user_name)
 	char *nis_result;     /* yp_match inits this */
 	int nis_result_len;  /* and set this */
 	char *nis_domain;     /* yp_get_default_domain inits this */
-	char *nis_map = lp_nis_home_map_name(talloc_tos());
+	char *nis_map = lp_homedir_map(talloc_tos());
 
 	if ((nis_error = yp_get_default_domain(&nis_domain)) != 0) {
 		DEBUG(3, ("YP Error: %s\n", yperr_string(nis_error)));
@@ -1192,7 +1195,9 @@ bool is_myname(const char *s)
 	bool ret = False;
 
 	for (n=0; my_netbios_names(n); n++) {
-		if (strequal(my_netbios_names(n), s)) {
+		const char *nbt_name = my_netbios_names(n);
+
+		if (strncasecmp_m(nbt_name, s, MAX_NETBIOSNAME_LEN-1) == 0) {
 			ret=True;
 			break;
 		}
@@ -1526,7 +1531,7 @@ static char *xx_path(const char *name, const char *rootpath)
 
 char *lock_path(const char *name)
 {
-	return xx_path(name, lp_lockdir());
+	return xx_path(name, lp_lock_directory());
 }
 
 /**
@@ -1539,7 +1544,7 @@ char *lock_path(const char *name)
 
 char *state_path(const char *name)
 {
-	return xx_path(name, lp_statedir());
+	return xx_path(name, lp_state_directory());
 }
 
 /**
@@ -1552,7 +1557,7 @@ char *state_path(const char *name)
 
 char *cache_path(const char *name)
 {
-	return xx_path(name, lp_cachedir());
+	return xx_path(name, lp_cache_directory());
 }
 
 /*******************************************************************
@@ -1825,48 +1830,60 @@ bool unix_wild_match(const char *pattern, const char *string)
 }
 
 /**********************************************************************
- Converts a name to a fully qualified domain name.
- Returns true if lookup succeeded, false if not (then fqdn is set to name)
- Note we deliberately use gethostbyname here, not getaddrinfo as we want
- to examine the h_aliases and I don't know how to do that with getaddrinfo.
-***********************************************************************/
+  Converts a name to a fully qualified domain name.
+  Returns true if lookup succeeded, false if not (then fqdn is set to name)
+  Uses getaddrinfo() with AI_CANONNAME flag to obtain the official
+  canonical name of the host. getaddrinfo() may use a variety of sources
+  including /etc/hosts to obtain the domainname. It expects aliases in
+  /etc/hosts to NOT be the FQDN. The FQDN should come first.
+************************************************************************/
 
 bool name_to_fqdn(fstring fqdn, const char *name)
 {
 	char *full = NULL;
-	struct hostent *hp = gethostbyname(name);
+	struct addrinfo hints;
+	struct addrinfo *result;
+	int s;
 
-	if (!hp || !hp->h_name || !*hp->h_name) {
+	/* Configure hints to obtain canonical name */
+
+	memset(&hints, 0, sizeof(struct addrinfo));
+	hints.ai_family = AF_UNSPEC;    /* Allow IPv4 or IPv6 */
+	hints.ai_socktype = SOCK_DGRAM; /* Datagram socket */
+	hints.ai_flags = AI_CANONNAME;  /* Get host's FQDN */
+	hints.ai_protocol = 0;          /* Any protocol */
+
+	s = getaddrinfo(name, NULL, &hints, &result);
+	if (s != 0) {
+		DEBUG(1, ("getaddrinfo: %s\n", gai_strerror(s)));
 		DEBUG(10,("name_to_fqdn: lookup for %s failed.\n", name));
 		fstrcpy(fqdn, name);
 		return false;
 	}
+	full = result->ai_canonname;
 
-	/* Find out if the fqdn is returned as an alias
+	/* Find out if the FQDN is returned as an alias
 	 * to cope with /etc/hosts files where the first
-	 * name is not the fqdn but the short name */
-	if (hp->h_aliases && (! strchr_m(hp->h_name, '.'))) {
-		int i;
-		for (i = 0; hp->h_aliases[i]; i++) {
-			if (strchr_m(hp->h_aliases[i], '.')) {
-				full = hp->h_aliases[i];
-				break;
-			}
-		}
+	 * name is not the FQDN but the short name.
+	 * getaddrinfo provides no easy way of handling aliases
+	 * in /etc/hosts. Users should make sure the FQDN
+	 * comes first in /etc/hosts. */
+	if (full && (! strchr_m(full, '.'))) {
+		DEBUG(1, ("WARNING: your /etc/hosts file may be broken!\n"));
+		DEBUGADD(1, ("    Full qualified domain names (FQDNs) should not be specified\n"));
+		DEBUGADD(1, ("    as an alias in /etc/hosts. FQDN should be the first name\n"));
+		DEBUGADD(1, ("    prior to any aliases.\n"));
 	}
 	if (full && (strcasecmp_m(full, "localhost.localdomain") == 0)) {
 		DEBUG(1, ("WARNING: your /etc/hosts file may be broken!\n"));
-		DEBUGADD(1, ("    Specifing the machine hostname for address 127.0.0.1 may lead\n"));
+		DEBUGADD(1, ("    Specifying the machine hostname for address 127.0.0.1 may lead\n"));
 		DEBUGADD(1, ("    to Kerberos authentication problems as localhost.localdomain\n"));
 		DEBUGADD(1, ("    may end up being used instead of the real machine FQDN.\n"));
-		full = hp->h_name;
-	}
-	if (!full) {
-		full = hp->h_name;
 	}
 
 	DEBUG(10,("name_to_fqdn: lookup for %s -> %s.\n", name, full));
 	fstrcpy(fqdn, full);
+	freeaddrinfo(result);           /* No longer needed */
 	return true;
 }
 
@@ -1955,48 +1972,6 @@ struct server_id pid_to_procid(pid_t pid)
 struct server_id procid_self(void)
 {
 	return pid_to_procid(getpid());
-}
-
-static struct idr_context *task_id_tree;
-
-static int free_task_id(struct server_id *server_id)
-{
-	idr_remove(task_id_tree, server_id->task_id);
-	return 0;
-}
-
-/* Return a server_id with a unique task_id element.  Free the
- * returned pointer to de-allocate the task_id via a talloc destructor
- * (ie, use talloc_free()) */
-struct server_id *new_server_id_task(TALLOC_CTX *mem_ctx)
-{
-	struct server_id *server_id;
-	int task_id;
-	if (!task_id_tree) {
-		task_id_tree = idr_init(NULL);
-		if (!task_id_tree) {
-			return NULL;
-		}
-	}
-
-	server_id = talloc(mem_ctx, struct server_id);
-
-	if (!server_id) {
-		return NULL;
-	}
-	*server_id = procid_self();
-
-	/* 0 is the default server_id, so we need to start with 1 */
-	task_id = idr_get_new_above(task_id_tree, server_id, 1, INT32_MAX);
-
-	if (task_id == -1) {
-		talloc_free(server_id);
-		return NULL;
-	}
-
-	talloc_set_destructor(server_id, free_task_id);
-	server_id->task_id = task_id;
-	return server_id;
 }
 
 bool procid_is_me(const struct server_id *pid)

@@ -120,7 +120,7 @@ bool lookup_name(TALLOC_CTX *mem_ctx,
 			goto ok;
 	}
 
-	if (((flags & LOOKUP_NAME_NO_NSS) == 0)
+	if (((flags & (LOOKUP_NAME_NO_NSS|LOOKUP_NAME_GROUP)) == 0)
 	    && strequal(domain, unix_users_domain_name())) {
 		if (lookup_unix_user_name(name, &sid)) {
 			type = SID_NAME_USER;
@@ -140,7 +140,31 @@ bool lookup_name(TALLOC_CTX *mem_ctx,
 		return false;
 	}
 
-	if ((domain[0] == '\0') && (!(flags & LOOKUP_NAME_ISOLATED))) {
+	/*
+	 * Finally check for a well known domain name ("NT Authority"),
+	 * this is taken care if in lookup_wellknown_name().
+	 */
+	if ((domain[0] != '\0') &&
+	    (flags & LOOKUP_NAME_WKN) &&
+	    lookup_wellknown_name(tmp_ctx, name, &sid, &domain))
+	{
+		type = SID_NAME_WKN_GRP;
+		goto ok;
+	}
+
+	/*
+	 * If we're told not to look up 'isolated' names then we're
+	 * done.
+	 */
+	if (!(flags & LOOKUP_NAME_ISOLATED)) {
+		TALLOC_FREE(tmp_ctx);
+		return false;
+	}
+
+	/*
+	 * No domain names beyond this point
+	 */
+	if (domain[0] != '\0') {
 		TALLOC_FREE(tmp_ctx);
 		return false;
 	}
@@ -151,6 +175,11 @@ bool lookup_name(TALLOC_CTX *mem_ctx,
 	 * November 27, 2005 */
 
 	/* 1. well-known names */
+
+	/*
+	 * Check for well known names without a domain name.
+	 * e.g. \Creator Owner.
+	 */
 
 	if ((flags & LOOKUP_NAME_WKN) &&
 	    lookup_wellknown_name(tmp_ctx, name, &sid, &domain))
@@ -293,7 +322,7 @@ bool lookup_name(TALLOC_CTX *mem_ctx,
 	/* 11. Ok, windows would end here. Samba has two more options:
                Unmapped users and unmapped groups */
 
-	if (((flags & LOOKUP_NAME_NO_NSS) == 0)
+	if (((flags & (LOOKUP_NAME_NO_NSS|LOOKUP_NAME_GROUP)) == 0)
 	    && lookup_unix_user_name(name, &sid)) {
 		domain = talloc_strdup(tmp_ctx, unix_users_domain_name());
 		type = SID_NAME_USER;
@@ -393,6 +422,30 @@ bool lookup_name_smbconf(TALLOC_CTX *mem_ctx,
 		return lookup_name(mem_ctx, full_name, flags,
 				ret_domain, ret_name,
 				ret_sid, ret_type);
+	}
+
+	/* Try with winbind default domain name. */
+	if (lp_winbind_use_default_domain()) {
+		bool ok;
+
+		qualified_name = talloc_asprintf(mem_ctx,
+						 "%s\\%s",
+						 lp_workgroup(),
+						 full_name);
+		if (qualified_name == NULL) {
+			return false;
+		}
+
+		ok = lookup_name(mem_ctx,
+				 qualified_name,
+				 flags,
+				 ret_domain,
+				 ret_name,
+				 ret_sid,
+				 ret_type);
+		if (ok) {
+			return true;
+		}
 	}
 
 	/* Try with our own SAM name. */
@@ -899,13 +952,18 @@ NTSTATUS lookup_sids(TALLOC_CTX *mem_ctx, int num_sids,
 			break;
 		}
 
-		if (dom->num_idxs) {
-			if (!(rids = talloc_array(tmp_ctx, uint32, dom->num_idxs))) {
-				result = NT_STATUS_NO_MEMORY;
-				goto fail;
-			}
-		} else {
-			rids = NULL;
+		if (dom->num_idxs == 0) {
+			/*
+			 * This happens only if the only sid related to
+			 * this domain is the domain sid itself, which
+			 * is mapped to SID_NAME_DOMAIN above.
+			 */
+			continue;
+		}
+
+		if (!(rids = talloc_array(tmp_ctx, uint32, dom->num_idxs))) {
+			result = NT_STATUS_NO_MEMORY;
+			goto fail;
 		}
 
 		for (j=0; j<dom->num_idxs; j++) {
@@ -1024,11 +1082,15 @@ bool lookup_sid(TALLOC_CTX *mem_ctx, const struct dom_sid *sid,
 static void legacy_uid_to_sid(struct dom_sid *psid, uid_t uid)
 {
 	bool ret;
+	struct unixid id;
 
 	ZERO_STRUCTP(psid);
 
+	id.id = uid;
+	id.type = ID_TYPE_UID;
+
 	become_root();
-	ret = pdb_uid_to_sid(uid, psid);
+	ret = pdb_id_to_sid(&id, psid);
 	unbecome_root();
 
 	if (ret) {
@@ -1054,11 +1116,15 @@ static void legacy_uid_to_sid(struct dom_sid *psid, uid_t uid)
 static void legacy_gid_to_sid(struct dom_sid *psid, gid_t gid)
 {
 	bool ret;
+	struct unixid id;
 
 	ZERO_STRUCTP(psid);
 
+	id.id = gid;
+	id.type = ID_TYPE_GID;
+
 	become_root();
-	ret = pdb_gid_to_sid(gid, psid);
+	ret = pdb_id_to_sid(&id, psid);
 	unbecome_root();
 
 	if (ret) {
@@ -1486,7 +1552,7 @@ NTSTATUS get_primary_group_sid(TALLOC_CTX *mem_ctx,
 	if (!pwd) {
 		pwd = Get_Pwnam_alloc(mem_ctx, username);
 		if (!pwd) {
-			DEBUG(0, ("Failed to find a Unix account for %s",
+			DEBUG(0, ("Failed to find a Unix account for %s\n",
 				  username));
 			TALLOC_FREE(tmp_ctx);
 			return NT_STATUS_NO_SUCH_USER;
@@ -1522,8 +1588,13 @@ NTSTATUS get_primary_group_sid(TALLOC_CTX *mem_ctx,
 			}
 		} else {
 			/* Try group mapping */
+			struct unixid id;
+
+			id.id = pwd->pw_gid;
+			id.type = ID_TYPE_GID;
+
 			ZERO_STRUCTP(group_sid);
-			if (pdb_gid_to_sid(pwd->pw_gid, group_sid)) {
+			if (pdb_id_to_sid(&id, group_sid)) {
 				need_lookup_sid = true;
 			}
 		}

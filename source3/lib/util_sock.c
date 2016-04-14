@@ -29,11 +29,6 @@
 #include "../lib/util/tevent_ntstatus.h"
 #include "../lib/tsocket/tsocket.h"
 
-const char *client_name(int fd)
-{
-	return get_peer_name(fd,false);
-}
-
 const char *client_addr(int fd, char *addr, size_t addrlen)
 {
 	return get_peer_addr(fd,addr,addrlen);
@@ -206,6 +201,49 @@ NTSTATUS read_data(int fd, char *buffer, size_t N)
 	return read_fd_with_timeout(fd, buffer, N, N, 0, NULL);
 }
 
+ssize_t iov_buflen(const struct iovec *iov, int iovcnt)
+{
+	size_t buflen = 0;
+	int i;
+
+	for (i=0; i<iovcnt; i++) {
+		size_t thislen = iov[i].iov_len;
+		size_t tmp = buflen + thislen;
+
+		if ((tmp < buflen) || (tmp < thislen)) {
+			/* overflow */
+			return -1;
+		}
+		buflen = tmp;
+	}
+	return buflen;
+}
+
+uint8_t *iov_buf(TALLOC_CTX *mem_ctx, const struct iovec *iov, int iovcnt)
+{
+	int i;
+	ssize_t buflen;
+	uint8_t *buf, *p;
+
+	buflen = iov_buflen(iov, iovcnt);
+	if (buflen == -1) {
+		return NULL;
+	}
+	buf = talloc_array(mem_ctx, uint8_t, buflen);
+	if (buf == NULL) {
+		return NULL;
+	}
+
+	p = buf;
+	for (i=0; i<iovcnt; i++) {
+		size_t len = iov[i].iov_len;
+
+		memcpy(p, iov[i].iov_base, len);
+		p += len;
+	}
+	return buf;
+}
+
 /****************************************************************************
  Write all data from an iov array
  NB. This can be called with a non-socket fd, don't add dependencies
@@ -214,15 +252,16 @@ NTSTATUS read_data(int fd, char *buffer, size_t N)
 
 ssize_t write_data_iov(int fd, const struct iovec *orig_iov, int iovcnt)
 {
-	int i;
-	size_t to_send;
+	ssize_t to_send;
 	ssize_t thistime;
 	size_t sent;
-	struct iovec *iov_copy, *iov;
+	struct iovec iov_copy[iovcnt];
+	struct iovec *iov;
 
-	to_send = 0;
-	for (i=0; i<iovcnt; i++) {
-		to_send += orig_iov[i].iov_len;
+	to_send = iov_buflen(orig_iov, iovcnt);
+	if (to_send == -1) {
+		errno = EINVAL;
+		return -1;
 	}
 
 	thistime = sys_writev(fd, orig_iov, iovcnt);
@@ -238,13 +277,7 @@ ssize_t write_data_iov(int fd, const struct iovec *orig_iov, int iovcnt)
 	 * discarding elements.
 	 */
 
-	iov_copy = (struct iovec *)talloc_memdup(
-		talloc_tos(), orig_iov, sizeof(struct iovec) * iovcnt);
-
-	if (iov_copy == NULL) {
-		errno = ENOMEM;
-		return -1;
-	}
+	memcpy(iov_copy, orig_iov, sizeof(struct iovec) * iovcnt);
 	iov = iov_copy;
 
 	while (sent < to_send) {
@@ -273,7 +306,6 @@ ssize_t write_data_iov(int fd, const struct iovec *orig_iov, int iovcnt)
 		sent += thistime;
 	}
 
-	TALLOC_FREE(iov_copy);
 	return sent;
 }
 
@@ -507,16 +539,34 @@ struct open_socket_out_state {
 	socklen_t salen;
 	uint16_t port;
 	int wait_usec;
+	struct tevent_req *connect_subreq;
 };
 
 static void open_socket_out_connected(struct tevent_req *subreq);
 
-static int open_socket_out_state_destructor(struct open_socket_out_state *s)
+static void open_socket_out_cleanup(struct tevent_req *req,
+				    enum tevent_req_state req_state)
 {
-	if (s->fd != -1) {
-		close(s->fd);
+	struct open_socket_out_state *state =
+		tevent_req_data(req, struct open_socket_out_state);
+
+	/*
+	 * Make sure that the async_connect_send subreq has a chance to reset
+	 * fcntl before the socket goes away.
+	 */
+	TALLOC_FREE(state->connect_subreq);
+
+	if (req_state == TEVENT_REQ_DONE) {
+		/*
+		 * we keep the socket open for the caller to use
+		 */
+		return;
 	}
-	return 0;
+
+	if (state->fd != -1) {
+		close(state->fd);
+		state->fd = -1;
+	}
 }
 
 /****************************************************************************
@@ -530,7 +580,7 @@ struct tevent_req *open_socket_out_send(TALLOC_CTX *mem_ctx,
 					int timeout)
 {
 	char addr[INET6_ADDRSTRLEN];
-	struct tevent_req *result, *subreq;
+	struct tevent_req *result;
 	struct open_socket_out_state *state;
 	NTSTATUS status;
 
@@ -550,7 +600,8 @@ struct tevent_req *open_socket_out_send(TALLOC_CTX *mem_ctx,
 		status = map_nt_error_from_unix(errno);
 		goto post_status;
 	}
-	talloc_set_destructor(state, open_socket_out_state_destructor);
+
+	tevent_req_set_cleanup_fn(result, open_socket_out_cleanup);
 
 	if (!tevent_req_set_endtime(
 		    result, ev, timeval_current_ofs_msec(timeout))) {
@@ -584,16 +635,17 @@ struct tevent_req *open_socket_out_send(TALLOC_CTX *mem_ctx,
 	print_sockaddr(addr, sizeof(addr), &state->ss);
 	DEBUG(3,("Connecting to %s at port %u\n", addr,	(unsigned int)port));
 
-	subreq = async_connect_send(state, state->ev, state->fd,
-				    (struct sockaddr *)&state->ss,
-				    state->salen, NULL, NULL, NULL);
-	if ((subreq == NULL)
+	state->connect_subreq = async_connect_send(
+		state, state->ev, state->fd, (struct sockaddr *)&state->ss,
+		state->salen, NULL, NULL, NULL);
+	if ((state->connect_subreq == NULL)
 	    || !tevent_req_set_endtime(
-		    subreq, state->ev,
+		    state->connect_subreq, state->ev,
 		    timeval_current_ofs(0, state->wait_usec))) {
 		goto fail;
 	}
-	tevent_req_set_callback(subreq, open_socket_out_connected, result);
+	tevent_req_set_callback(state->connect_subreq,
+				open_socket_out_connected, result);
 	return result;
 
  post_status:
@@ -615,6 +667,7 @@ static void open_socket_out_connected(struct tevent_req *subreq)
 
 	ret = async_connect_recv(subreq, &sys_errno);
 	TALLOC_FREE(subreq);
+	state->connect_subreq = NULL;
 	if (ret == 0) {
 		tevent_req_done(req);
 		return;
@@ -648,6 +701,7 @@ static void open_socket_out_connected(struct tevent_req *subreq)
 			tevent_req_nterror(req, NT_STATUS_NO_MEMORY);
 			return;
 		}
+		state->connect_subreq = subreq;
 		tevent_req_set_callback(subreq, open_socket_out_connected, req);
 		return;
 	}
@@ -670,10 +724,12 @@ NTSTATUS open_socket_out_recv(struct tevent_req *req, int *pfd)
 	NTSTATUS status;
 
 	if (tevent_req_is_nterror(req, &status)) {
+		tevent_req_received(req);
 		return status;
 	}
 	*pfd = state->fd;
 	state->fd = -1;
+	tevent_req_received(req);
 	return NT_STATUS_OK;
 }
 
@@ -1025,85 +1081,6 @@ static void store_nc(const struct name_addr_pair *nc)
 			data_blob_string_const_null("get_peer_name"),
 			tmp);
 	data_blob_free(&tmp);
-}
-
-/*******************************************************************
- Return the DNS name of the remote end of a socket.
-******************************************************************/
-
-const char *get_peer_name(int fd, bool force_lookup)
-{
-	struct name_addr_pair nc;
-	char addr_buf[INET6_ADDRSTRLEN];
-	struct sockaddr_storage ss;
-	socklen_t length = sizeof(ss);
-	const char *p;
-	int ret;
-	char name_buf[MAX_DNS_NAME_LENGTH];
-	char tmp_name[MAX_DNS_NAME_LENGTH];
-
-	/* reverse lookups can be *very* expensive, and in many
-	   situations won't work because many networks don't link dhcp
-	   with dns. To avoid the delay we avoid the lookup if
-	   possible */
-	if (!lp_hostname_lookups() && (force_lookup == false)) {
-		length = sizeof(nc.ss);
-		nc.name = get_peer_addr_internal(fd, addr_buf, sizeof(addr_buf),
-			(struct sockaddr *)&nc.ss, &length);
-		store_nc(&nc);
-		lookup_nc(&nc);
-		return nc.name ? nc.name : "UNKNOWN";
-	}
-
-	lookup_nc(&nc);
-
-	memset(&ss, '\0', sizeof(ss));
-	p = get_peer_addr_internal(fd, addr_buf, sizeof(addr_buf), (struct sockaddr *)&ss, &length);
-
-	/* it might be the same as the last one - save some DNS work */
-	if (sockaddr_equal((struct sockaddr *)&ss, (struct sockaddr *)&nc.ss)) {
-		return nc.name ? nc.name : "UNKNOWN";
-	}
-
-	/* Not the same. We need to lookup. */
-	if (fd == -1) {
-		return "UNKNOWN";
-	}
-
-	/* Look up the remote host name. */
-	ret = sys_getnameinfo((struct sockaddr *)&ss,
-			length,
-			name_buf,
-			sizeof(name_buf),
-			NULL,
-			0,
-			0);
-
-	if (ret) {
-		DEBUG(1,("get_peer_name: getnameinfo failed "
-			"for %s with error %s\n",
-			p,
-			gai_strerror(ret)));
-		strlcpy(name_buf, p, sizeof(name_buf));
-	} else {
-		if (!matchname(name_buf, (struct sockaddr *)&ss, length)) {
-			DEBUG(0,("Matchname failed on %s %s\n",name_buf,p));
-			strlcpy(name_buf,"UNKNOWN",sizeof(name_buf));
-		}
-	}
-
-	strlcpy(tmp_name, name_buf, sizeof(tmp_name));
-	alpha_strcpy(name_buf, tmp_name, "_-.", sizeof(name_buf));
-	if (strstr(name_buf,"..")) {
-		strlcpy(name_buf, "UNKNOWN", sizeof(name_buf));
-	}
-
-	nc.name = name_buf;
-	nc.ss = ss;
-
-	store_nc(&nc);
-	lookup_nc(&nc);
-	return nc.name ? nc.name : "UNKNOWN";
 }
 
 /*******************************************************************
@@ -1574,27 +1551,18 @@ int getaddrinfo_recv(struct tevent_req *req, struct addrinfo **res)
 
 int poll_one_fd(int fd, int events, int timeout, int *revents)
 {
-	struct pollfd *fds;
+	struct pollfd pfd;
 	int ret;
-	int saved_errno;
 
-	fds = talloc_zero_array(talloc_tos(), struct pollfd, 1);
-	if (fds == NULL) {
-		errno = ENOMEM;
-		return -1;
-	}
-	fds[0].fd = fd;
-	fds[0].events = events;
+	pfd.fd = fd;
+	pfd.events = events;
 
-	ret = poll(fds, 1, timeout);
+	ret = poll(&pfd, 1, timeout);
 
 	/*
 	 * Assign whatever poll did, even in the ret<=0 case.
 	 */
-	*revents = fds[0].revents;
-	saved_errno = errno;
-	TALLOC_FREE(fds);
-	errno = saved_errno;
+	*revents = pfd.revents;
 
 	return ret;
 }

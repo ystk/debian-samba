@@ -4414,6 +4414,72 @@ static bool run_deletetest(int dummy)
 	return correct;
 }
 
+
+/*
+  Test wildcard delete.
+ */
+static bool run_wild_deletetest(int dummy)
+{
+	struct cli_state *cli = NULL;
+	const char *dname = "\\WTEST";
+	const char *fname = "\\WTEST\\A";
+	const char *wunlink_name = "\\WTEST\\*";
+	uint16_t fnum1 = (uint16_t)-1;
+	bool correct = false;
+	NTSTATUS status;
+
+	printf("starting wildcard delete test\n");
+
+	if (!torture_open_connection(&cli, 0)) {
+		return false;
+	}
+
+	smbXcli_conn_set_sockopt(cli->conn, sockops);
+
+	cli_unlink(cli, fname, 0);
+	cli_rmdir(cli, dname);
+	status = cli_mkdir(cli, dname);
+	if (!NT_STATUS_IS_OK(status)) {
+		printf("mkdir of %s failed %s!\n", dname, nt_errstr(status));
+		goto fail;
+	}
+	status = cli_openx(cli, fname, O_CREAT|O_RDONLY, DENY_NONE, &fnum1);
+	if (!NT_STATUS_IS_OK(status)) {
+		printf("open of %s failed %s!\n", fname, nt_errstr(status));
+		goto fail;
+	}
+	status = cli_close(cli, fnum1);
+	fnum1 = -1;
+
+	/*
+	 * Note the unlink attribute-type of zero. This should
+	 * map into FILE_ATTRIBUTE_NORMAL at the server even
+	 * on a wildcard delete.
+	 */
+
+	status = cli_unlink(cli, wunlink_name, 0);
+	if (!NT_STATUS_IS_OK(status)) {
+		printf("unlink of %s failed %s!\n",
+			wunlink_name, nt_errstr(status));
+		goto fail;
+	}
+
+	printf("finished wildcard delete test\n");
+
+	correct = true;
+
+  fail:
+
+	if (fnum1 != (uint16_t)-1) cli_close(cli, fnum1);
+	cli_unlink(cli, fname, 0);
+	cli_rmdir(cli, dname);
+
+	if (cli && !torture_close_connection(cli)) {
+		correct = false;
+	}
+	return correct;
+}
+
 static bool run_deletetest_ln(int dummy)
 {
 	struct cli_state *cli;
@@ -5754,6 +5820,380 @@ static bool run_simple_posix_open_test(int dummy)
 	return correct;
 }
 
+/*
+ Test POSIX and Windows ACLs are rejected on symlinks.
+ */
+static bool run_acl_symlink_test(int dummy)
+{
+	static struct cli_state *cli;
+	const char *fname = "posix_file";
+	const char *sname = "posix_symlink";
+	uint16_t fnum = (uint16_t)-1;
+	bool correct = false;
+	NTSTATUS status;
+	char *posix_acl = NULL;
+	size_t posix_acl_len = 0;
+	char *posix_acl_sym = NULL;
+	size_t posix_acl_len_sym = 0;
+	struct security_descriptor *sd = NULL;
+	struct security_descriptor *sd_sym = NULL;
+	TALLOC_CTX *frame = NULL;
+
+	frame = talloc_stackframe();
+
+	printf("Starting acl symlink test\n");
+
+	if (!torture_open_connection(&cli, 0)) {
+		TALLOC_FREE(frame);
+		return false;
+	}
+
+	smbXcli_conn_set_sockopt(cli->conn, sockops);
+
+	status = torture_setup_unix_extensions(cli);
+	if (!NT_STATUS_IS_OK(status)) {
+		TALLOC_FREE(frame);
+		return false;
+	}
+
+	cli_setatr(cli, fname, 0, 0);
+	cli_posix_unlink(cli, fname);
+	cli_setatr(cli, sname, 0, 0);
+	cli_posix_unlink(cli, sname);
+
+	status = cli_ntcreate(cli,
+			fname,
+			0,
+			READ_CONTROL_ACCESS,
+			0,
+			FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
+			FILE_CREATE,
+			0x0,
+			0x0,
+			&fnum,
+			NULL);
+
+	if (!NT_STATUS_IS_OK(status)) {
+		printf("cli_ntcreate of %s failed (%s)\n",
+			fname,
+			nt_errstr(status));
+		goto out;
+	}
+
+	/* Get the Windows ACL on the file. */
+	status = cli_query_secdesc(cli,
+				fnum,
+				frame,
+				&sd);
+	if (!NT_STATUS_IS_OK(status)) {
+		printf("cli_query_secdesc failed (%s)\n",
+			nt_errstr(status));
+		goto out;
+	}
+
+	/* Get the POSIX ACL on the file. */
+	status = cli_posix_getacl(cli,
+				fname,
+				frame,
+				&posix_acl_len,
+				&posix_acl);
+
+	if (!NT_STATUS_IS_OK(status)) {
+		printf("cli_posix_getacl failed (%s)\n",
+			nt_errstr(status));
+		goto out;
+	}
+
+	status = cli_close(cli, fnum);
+	if (!NT_STATUS_IS_OK(status)) {
+		printf("close failed (%s)\n", nt_errstr(status));
+		goto out;
+	}
+	fnum = (uint16_t)-1;
+
+	/* Now create a symlink. */
+	status = cli_posix_symlink(cli, fname, sname);
+	if (!NT_STATUS_IS_OK(status)) {
+		printf("cli_posix_symlink of %s -> %s failed (%s)\n",
+			sname,
+			fname,
+			nt_errstr(status));
+		goto out;
+	}
+
+	/* Open a handle on the symlink. */
+	status = cli_ntcreate(cli,
+			sname,
+			0,
+			READ_CONTROL_ACCESS|SEC_STD_WRITE_DAC,
+			0,
+			FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
+			FILE_OPEN,
+			0x0,
+			0x0,
+			&fnum,
+			NULL);
+
+	if (!NT_STATUS_IS_OK(status)) {
+		printf("cli_posix_open of %s failed (%s)\n",
+			sname,
+			nt_errstr(status));
+		goto out;
+	}
+
+	/* Get the Windows ACL on the symlink handle. Should fail */
+	status = cli_query_secdesc(cli,
+				fnum,
+				frame,
+				&sd_sym);
+
+	if (!NT_STATUS_EQUAL(status, NT_STATUS_ACCESS_DENIED)) {
+		printf("cli_query_secdesc on a symlink gave %s. "
+			"Should be NT_STATUS_ACCESS_DENIED.\n",
+			nt_errstr(status));
+		goto out;
+	}
+
+	/* Get the POSIX ACL on the symlink pathname. Should fail. */
+	status = cli_posix_getacl(cli,
+				sname,
+				frame,
+				&posix_acl_len_sym,
+				&posix_acl_sym);
+
+	if (!NT_STATUS_EQUAL(status, NT_STATUS_ACCESS_DENIED)) {
+		printf("cli_posix_getacl on a symlink gave %s. "
+			"Should be NT_STATUS_ACCESS_DENIED.\n",
+			nt_errstr(status));
+		goto out;
+	}
+
+	/* Set the Windows ACL on the symlink handle. Should fail */
+	status = cli_set_security_descriptor(cli,
+				fnum,
+				SECINFO_DACL,
+				sd);
+
+	if (!NT_STATUS_EQUAL(status, NT_STATUS_ACCESS_DENIED)) {
+		printf("cli_query_secdesc on a symlink gave %s. "
+			"Should be NT_STATUS_ACCESS_DENIED.\n",
+			nt_errstr(status));
+		goto out;
+	}
+
+	/* Set the POSIX ACL on the symlink pathname. Should fail. */
+	status = cli_posix_setacl(cli,
+				sname,
+				posix_acl,
+				posix_acl_len);
+
+	if (!NT_STATUS_EQUAL(status, NT_STATUS_ACCESS_DENIED)) {
+		printf("cli_posix_getacl on a symlink gave %s. "
+			"Should be NT_STATUS_ACCESS_DENIED.\n",
+			nt_errstr(status));
+		goto out;
+	}
+
+	printf("ACL symlink test passed\n");
+	correct = true;
+
+  out:
+
+	if (fnum != (uint16_t)-1) {
+		cli_close(cli, fnum);
+		fnum = (uint16_t)-1;
+	}
+
+	cli_setatr(cli, sname, 0, 0);
+	cli_posix_unlink(cli, sname);
+	cli_setatr(cli, fname, 0, 0);
+	cli_posix_unlink(cli, fname);
+
+	if (!torture_close_connection(cli)) {
+		correct = false;
+	}
+
+	TALLOC_FREE(frame);
+	return correct;
+}
+
+/*
+  Test setting EA's are rejected on symlinks.
+ */
+static bool run_ea_symlink_test(int dummy)
+{
+	static struct cli_state *cli;
+	const char *fname = "posix_file_ea";
+	const char *sname = "posix_symlink_ea";
+	const char *ea_name = "testea_name";
+	const char *ea_value = "testea_value";
+	uint16_t fnum = (uint16_t)-1;
+	bool correct = false;
+	NTSTATUS status;
+	size_t i, num_eas;
+	struct ea_struct *eas = NULL;
+	TALLOC_CTX *frame = NULL;
+
+	frame = talloc_stackframe();
+
+	printf("Starting EA symlink test\n");
+
+	if (!torture_open_connection(&cli, 0)) {
+		TALLOC_FREE(frame);
+		return false;
+	}
+
+	smbXcli_conn_set_sockopt(cli->conn, sockops);
+
+	status = torture_setup_unix_extensions(cli);
+	if (!NT_STATUS_IS_OK(status)) {
+		TALLOC_FREE(frame);
+		return false;
+	}
+
+	cli_setatr(cli, fname, 0, 0);
+	cli_posix_unlink(cli, fname);
+	cli_setatr(cli, sname, 0, 0);
+	cli_posix_unlink(cli, sname);
+
+	status = cli_ntcreate(cli,
+			fname,
+			0,
+			READ_CONTROL_ACCESS,
+			0,
+			FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
+			FILE_CREATE,
+			0x0,
+			0x0,
+			&fnum,
+			NULL);
+
+	if (!NT_STATUS_IS_OK(status)) {
+		printf("cli_ntcreate of %s failed (%s)\n",
+			fname,
+			nt_errstr(status));
+		goto out;
+	}
+
+	status = cli_close(cli, fnum);
+	if (!NT_STATUS_IS_OK(status)) {
+		printf("close failed (%s)\n",
+			nt_errstr(status));
+		goto out;
+	}
+	fnum = (uint16_t)-1;
+
+	/* Set an EA on the path. */
+	status = cli_set_ea_path(cli,
+				fname,
+				ea_name,
+				ea_value,
+				strlen(ea_value)+1);
+
+	if (!NT_STATUS_IS_OK(status)) {
+		printf("cli_set_ea_path failed (%s)\n",
+			nt_errstr(status));
+		goto out;
+	}
+
+	/* Now create a symlink. */
+	status = cli_posix_symlink(cli, fname, sname);
+	if (!NT_STATUS_IS_OK(status)) {
+		printf("cli_posix_symlink of %s -> %s failed (%s)\n",
+			sname,
+			fname,
+			nt_errstr(status));
+		goto out;
+	}
+
+	/* Get the EA list on the path. Should return value set. */
+	status = cli_get_ea_list_path(cli,
+				fname,
+				frame,
+				&num_eas,
+				&eas);
+
+	if (!NT_STATUS_IS_OK(status)) {
+		printf("cli_get_ea_list_path failed (%s)\n",
+			nt_errstr(status));
+		goto out;
+	}
+
+	/* Ensure the EA we set is there. */
+	for (i=0; i<num_eas; i++) {
+		if (strcmp(eas[i].name, ea_name) == 0 &&
+				eas[i].value.length == strlen(ea_value)+1 &&
+				memcmp(eas[i].value.data,
+					ea_value,
+					eas[i].value.length) == 0) {
+			break;
+		}
+	}
+
+	if (i == num_eas) {
+		printf("Didn't find EA on pathname %s\n",
+			fname);
+		goto out;
+	}
+
+	num_eas = 0;
+	TALLOC_FREE(eas);
+
+	/* Get the EA list on the symlink. Should return empty list. */
+	status = cli_get_ea_list_path(cli,
+				sname,
+				frame,
+				&num_eas,
+				&eas);
+
+	if (!NT_STATUS_IS_OK(status)) {
+		printf("cli_get_ea_list_path failed (%s)\n",
+			nt_errstr(status));
+		goto out;
+	}
+
+	if (num_eas != 0) {
+		printf("cli_get_ea_list_path failed (%s)\n",
+			nt_errstr(status));
+		goto out;
+	}
+
+	/* Set an EA on the symlink. Should fail. */
+	status = cli_set_ea_path(cli,
+				sname,
+				ea_name,
+				ea_value,
+				strlen(ea_value)+1);
+
+	if (!NT_STATUS_EQUAL(status, NT_STATUS_ACCESS_DENIED)) {
+		printf("cli_set_ea_path on a symlink gave %s. "
+			"Should be NT_STATUS_ACCESS_DENIED.\n",
+			nt_errstr(status));
+		goto out;
+	}
+
+	printf("EA symlink test passed\n");
+	correct = true;
+
+  out:
+
+	if (fnum != (uint16_t)-1) {
+		cli_close(cli, fnum);
+		fnum = (uint16_t)-1;
+	}
+
+	cli_setatr(cli, sname, 0, 0);
+	cli_posix_unlink(cli, sname);
+	cli_setatr(cli, fname, 0, 0);
+	cli_posix_unlink(cli, fname);
+
+	if (!torture_close_connection(cli)) {
+		correct = false;
+	}
+
+	TALLOC_FREE(frame);
+	return correct;
+}
 
 static uint32 open_attrs_table[] = {
 		FILE_ATTRIBUTE_NORMAL,
@@ -6756,10 +7196,9 @@ static void torture_createdel_created(struct tevent_req *subreq)
 
 	status = cli_ntcreate_recv(subreq, &fnum, NULL);
 	TALLOC_FREE(subreq);
-	if (!NT_STATUS_IS_OK(status)) {
+	if (tevent_req_nterror(req, status)) {
 		DEBUG(10, ("cli_ntcreate_recv returned %s\n",
 			   nt_errstr(status)));
-		tevent_req_nterror(req, status);
 		return;
 	}
 
@@ -6777,9 +7216,8 @@ static void torture_createdel_closed(struct tevent_req *subreq)
 	NTSTATUS status;
 
 	status = cli_close_recv(subreq);
-	if (!NT_STATUS_IS_OK(status)) {
+	if (tevent_req_nterror(req, status)) {
 		DEBUG(10, ("cli_close_recv returned %s\n", nt_errstr(status)));
-		tevent_req_nterror(req, status);
 		return;
 	}
 	tevent_req_done(req);
@@ -7260,7 +7698,8 @@ static size_t calc_expected_return(struct cli_state *cli, size_t len_requested)
 		len_requested &= 0xFFFF;
 	}
 
-	return MIN(len_requested, max_pdu - (MIN_SMB_SIZE + VWV(12)));
+	return MIN(len_requested,
+		   max_pdu - (MIN_SMB_SIZE + VWV(12) + 1 /* padding byte */));
 }
 
 static bool check_read_call(struct cli_state *cli,
@@ -8121,23 +8560,48 @@ static bool run_local_base64(int dummy)
 	return ret;
 }
 
+static void parse_fn(time_t timeout, DATA_BLOB blob, void *private_data)
+{
+	return;
+}
+
 static bool run_local_gencache(int dummy)
 {
 	char *val;
 	time_t tm;
 	DATA_BLOB blob;
+	char v;
+	struct memcache *mem;
+	int i;
+
+	mem = memcache_init(NULL, 0);
+	if (mem == NULL) {
+		d_printf("%s: memcache_init failed\n", __location__);
+		return false;
+	}
+	memcache_set_global(mem);
 
 	if (!gencache_set("foo", "bar", time(NULL) + 1000)) {
 		d_printf("%s: gencache_set() failed\n", __location__);
 		return False;
 	}
 
-	if (!gencache_get("foo", NULL, NULL)) {
+	if (!gencache_get("foo", NULL, NULL, NULL)) {
 		d_printf("%s: gencache_get() failed\n", __location__);
 		return False;
 	}
 
-	if (!gencache_get("foo", &val, &tm)) {
+	for (i=0; i<1000000; i++) {
+		gencache_parse("foo", parse_fn, NULL);
+	}
+
+	if (!gencache_get("foo", talloc_tos(), &val, &tm)) {
+		d_printf("%s: gencache_get() failed\n", __location__);
+		return False;
+	}
+	TALLOC_FREE(val);
+
+	if (!gencache_get("foo", talloc_tos(), &val, &tm)) {
 		d_printf("%s: gencache_get() failed\n", __location__);
 		return False;
 	}
@@ -8145,11 +8609,11 @@ static bool run_local_gencache(int dummy)
 	if (strcmp(val, "bar") != 0) {
 		d_printf("%s: gencache_get() returned %s, expected %s\n",
 			 __location__, val, "bar");
-		SAFE_FREE(val);
+		TALLOC_FREE(val);
 		return False;
 	}
 
-	SAFE_FREE(val);
+	TALLOC_FREE(val);
 
 	if (!gencache_del("foo")) {
 		d_printf("%s: gencache_del() failed\n", __location__);
@@ -8161,7 +8625,7 @@ static bool run_local_gencache(int dummy)
 		return False;
 	}
 
-	if (gencache_get("foo", &val, &tm)) {
+	if (gencache_get("foo", talloc_tos(), &val, &tm)) {
 		d_printf("%s: gencache_get() on deleted entry "
 			 "succeeded\n", __location__);
 		return False;
@@ -8175,7 +8639,7 @@ static bool run_local_gencache(int dummy)
 		return False;
 	}
 
-	if (!gencache_get_data_blob("foo", &blob, NULL, NULL)) {
+	if (!gencache_get_data_blob("foo", talloc_tos(), &blob, NULL, NULL)) {
 		d_printf("%s: gencache_get_data_blob() failed\n", __location__);
 		return False;
 	}
@@ -8199,10 +8663,24 @@ static bool run_local_gencache(int dummy)
 		return False;
 	}
 
-	if (gencache_get_data_blob("foo", &blob, NULL, NULL)) {
+	if (gencache_get_data_blob("foo", talloc_tos(), &blob, NULL, NULL)) {
 		d_printf("%s: gencache_get_data_blob() on deleted entry "
 			 "succeeded\n", __location__);
 		return False;
+	}
+
+	v = 1;
+	blob.data = (uint8_t *)&v;
+	blob.length = sizeof(v);
+
+	if (!gencache_set_data_blob("blob", &blob, tm)) {
+		d_printf("%s: gencache_set_data_blob() failed\n",
+			 __location__);
+		return false;
+	}
+	if (gencache_get("blob", talloc_tos(), &val, &tm)) {
+		d_printf("%s: gencache_get succeeded\n", __location__);
+		return false;
 	}
 
 	return True;
@@ -8248,11 +8726,29 @@ static bool rbt_testval(struct db_context *db, const char *key,
 	return ret;
 }
 
+static int local_rbtree_traverse_read(struct db_record *rec, void *private_data)
+{
+	int *count2 = (int *)private_data;
+	(*count2)++;
+	return 0;
+}
+
+static int local_rbtree_traverse_delete(struct db_record *rec, void *private_data)
+{
+	int *count2 = (int *)private_data;
+	(*count2)++;
+	dbwrap_record_delete(rec);
+	return 0;
+}
+
 static bool run_local_rbtree(int dummy)
 {
 	struct db_context *db;
 	bool ret = false;
 	int i;
+	NTSTATUS status;
+	int count = 0;
+	int count2 = 0;
 
 	db = db_open_rbt(NULL);
 
@@ -8295,6 +8791,27 @@ static bool run_local_rbtree(int dummy)
 	}
 
 	ret = true;
+	count = 0; count2 = 0;
+	status = dbwrap_traverse_read(db, local_rbtree_traverse_read,
+				      &count2, &count);
+	printf("%s: read1: %d %d, %s\n", __func__, count, count2, nt_errstr(status));
+	if ((count != count2) || (count != 1000)) {
+		ret = false;
+	}
+	count = 0; count2 = 0;
+	status = dbwrap_traverse(db, local_rbtree_traverse_delete,
+				 &count2, &count);
+	printf("%s: delete: %d %d, %s\n", __func__, count, count2, nt_errstr(status));
+	if ((count != count2) || (count != 1000)) {
+		ret = false;
+	}
+	count = 0; count2 = 0;
+	status = dbwrap_traverse_read(db, local_rbtree_traverse_read,
+				      &count2, &count);
+	printf("%s: read2: %d %d, %s\n", __func__, count, count2, nt_errstr(status));
+	if ((count != count2) || (count != 0)) {
+		ret = false;
+	}
 
  done:
 	TALLOC_FREE(db);
@@ -8471,6 +8988,22 @@ static bool run_local_string_to_sid(int dummy) {
 		printf("allowing S-1-5-32-545-abc\n");
 		return false;
 	}
+	if (string_to_sid(&sid, "S-300-5-32-545")) {
+		printf("allowing S-300-5-32-545\n");
+		return false;
+	}
+	if (string_to_sid(&sid, "S-1-0xfffffffffffffe-32-545")) {
+		printf("allowing S-1-0xfffffffffffffe-32-545\n");
+		return false;
+	}
+	if (string_to_sid(&sid, "S-1-0xffffffffffff-5294967297-545")) {
+		printf("allowing S-1-0xffffffffffff-5294967297-545\n");
+		return false;
+	}
+	if (!string_to_sid(&sid, "S-1-0xfffffffffffe-32-545")) {
+		printf("could not parse S-1-0xfffffffffffe-32-545\n");
+		return false;
+	}
 	if (!string_to_sid(&sid, "S-1-5-32-545")) {
 		printf("could not parse S-1-5-32-545\n");
 		return false;
@@ -8480,6 +9013,35 @@ static bool run_local_string_to_sid(int dummy) {
 		       sid_string_tos(&sid));
 		return false;
 	}
+	return true;
+}
+
+static bool sid_to_string_test(const char *expected) {
+	char *str;
+	bool res = true;
+	struct dom_sid sid;
+
+	if (!string_to_sid(&sid, expected)) {
+		printf("could not parse %s\n", expected);
+		return false;
+	}
+
+	str = dom_sid_string(NULL, &sid);
+	if (strcmp(str, expected)) {
+		printf("Comparison failed (%s != %s)\n", str, expected);
+		res = false;
+	}
+	TALLOC_FREE(str);
+	return res;
+}
+
+static bool run_local_sid_to_string(int dummy) {
+	if (!sid_to_string_test("S-1-0xffffffffffff-1-1-1-1-1-1-1-1-1-1-1-1"))
+		return false;
+	if (!sid_to_string_test("S-1-545"))
+		return false;
+	if (!sid_to_string_test("S-255-3840-1-1-1-1"))
+		return false;
 	return true;
 }
 
@@ -8866,7 +9428,7 @@ static bool run_local_wbclient(int dummy)
 
 	BlockSignals(True, SIGPIPE);
 
-	ev = tevent_context_init_byname(talloc_tos(), "epoll");
+	ev = tevent_context_init(talloc_tos());
 	if (ev == NULL) {
 		goto fail;
 	}
@@ -9011,7 +9573,8 @@ static bool run_local_dbtrans(int dummy)
 	TDB_DATA value;
 
 	db = db_open(talloc_tos(), "transtest.tdb", 0, TDB_DEFAULT,
-		     O_RDWR|O_CREAT, 0600, DBWRAP_LOCK_ORDER_1);
+		     O_RDWR|O_CREAT, 0600, DBWRAP_LOCK_ORDER_1,
+		     DBWRAP_FLAG_NONE);
 	if (db == NULL) {
 		printf("Could not open transtest.db\n");
 		return false;
@@ -9458,6 +10021,9 @@ static struct {
 	{"OPEN", run_opentest, 0},
 	{"POSIX", run_simple_posix_open_test, 0},
 	{"POSIX-APPEND", run_posix_append, 0},
+	{"POSIX-SYMLINK-ACL", run_acl_symlink_test, 0},
+	{"POSIX-SYMLINK-ACL", run_acl_symlink_test, 0},
+	{"POSIX-SYMLINK-EA", run_ea_symlink_test, 0},
 	{"CASE-INSENSITIVE-CREATE", run_case_insensitive_create, 0},
 	{"ASYNC-ECHO", run_async_echo, 0},
 	{ "UID-REGRESSION-TEST", run_uid_regression_test, 0},
@@ -9469,6 +10035,7 @@ static struct {
 	{"XCOPY", run_xcopy, 0},
 	{"RENAME", run_rename, 0},
 	{"DELETE", run_deletetest, 0},
+	{"WILDDELETE", run_wild_deletetest, 0},
 	{"DELETE-LN", run_deletetest_ln, 0},
 	{"PROPERTIES", run_properties, 0},
 	{"MANGLE", torture_mangle, 0},
@@ -9513,18 +10080,25 @@ static struct {
 	{ "CLEANUP2", run_cleanup2 },
 	{ "CLEANUP3", run_cleanup3 },
 	{ "CLEANUP4", run_cleanup4 },
+	{ "OPLOCK-CANCEL", run_oplock_cancel },
 	{ "LOCAL-SUBSTITUTE", run_local_substitute, 0},
 	{ "LOCAL-GENCACHE", run_local_gencache, 0},
 	{ "LOCAL-TALLOC-DICT", run_local_talloc_dict, 0},
 	{ "LOCAL-CTDB-CONN", run_ctdb_conn, 0},
-	{ "LOCAL-MSG", run_msg_test, 0},
 	{ "LOCAL-DBWRAP-WATCH1", run_dbwrap_watch1, 0 },
+	{ "LOCAL-MESSAGING-READ1", run_messaging_read1, 0 },
+	{ "LOCAL-MESSAGING-READ2", run_messaging_read2, 0 },
+	{ "LOCAL-MESSAGING-READ3", run_messaging_read3, 0 },
+	{ "LOCAL-MESSAGING-READ4", run_messaging_read4, 0 },
+	{ "LOCAL-MESSAGING-FDPASS1", run_messaging_fdpass1, 0 },
+	{ "LOCAL-MESSAGING-FDPASS2", run_messaging_fdpass2, 0 },
 	{ "LOCAL-BASE64", run_local_base64, 0},
 	{ "LOCAL-RBTREE", run_local_rbtree, 0},
 	{ "LOCAL-MEMCACHE", run_local_memcache, 0},
 	{ "LOCAL-STREAM-NAME", run_local_stream_name, 0},
 	{ "LOCAL-WBCLIENT", run_local_wbclient, 0},
 	{ "LOCAL-string_to_sid", run_local_string_to_sid, 0},
+	{ "LOCAL-sid_to_string", run_local_sid_to_string, 0},
 	{ "LOCAL-binary_to_sid", run_local_binary_to_sid, 0},
 	{ "LOCAL-DBTRANS", run_local_dbtrans, 0},
 	{ "LOCAL-TEVENT-SELECT", run_local_tevent_select, 0},
@@ -9537,6 +10111,8 @@ static struct {
 	{ "local-tdb-opener", run_local_tdb_opener, 0 },
 	{ "local-tdb-writer", run_local_tdb_writer, 0 },
 	{ "LOCAL-DBWRAP-CTDB", run_local_dbwrap_ctdb, 0 },
+	{ "LOCAL-BENCH-PTHREADPOOL", run_bench_pthreadpool, 0 },
+	{ "qpathinfo-bufsize", run_qpathinfo_bufsize, 0 },
 	{NULL, NULL, 0}};
 
 /*
@@ -9611,7 +10187,7 @@ static void usage(void)
 
 	printf("\t-d debuglevel\n");
 	printf("\t-U user%%pass\n");
-	printf("\t-k               use kerberos\n");
+	printf("\t-k                    use kerberos\n");
 	printf("\t-N numprocs\n");
 	printf("\t-n my_netbios_name\n");
 	printf("\t-W workgroup\n");
@@ -9619,12 +10195,13 @@ static void usage(void)
 	printf("\t-O socket_options\n");
 	printf("\t-m maximum protocol\n");
 	printf("\t-L use oplocks\n");
-	printf("\t-c CLIENT.TXT   specify client load file for NBENCH\n");
+	printf("\t-c CLIENT.TXT         specify client load file for NBENCH\n");
 	printf("\t-A showall\n");
 	printf("\t-p port\n");
 	printf("\t-s seed\n");
 	printf("\t-b unclist_filename   specify multiple shares for multiple connections\n");
-	printf("\t-f filename   filename to test\n");
+	printf("\t-f filename           filename to test\n");
+	printf("\t-e                    encrypt\n");
 	printf("\n\n");
 
 	printf("tests are:");

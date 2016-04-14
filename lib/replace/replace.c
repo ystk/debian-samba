@@ -84,7 +84,7 @@ size_t rep_strlcpy(char *d, const char *s, size_t bufsize)
    be one more than the maximum resulting string length */
 size_t rep_strlcat(char *d, const char *s, size_t bufsize)
 {
-	size_t len1 = strlen(d);
+	size_t len1 = strnlen(d, bufsize);
 	size_t len2 = strlen(s);
 	size_t ret = len1 + len2;
 
@@ -464,6 +464,26 @@ char *rep_strcasestr(const char *haystack, const char *needle)
 		}
 	}
 	return NULL;
+}
+#endif
+
+#ifndef HAVE_STRSEP
+char *rep_strsep(char **pps, const char *delim)
+{
+	char *ret = *pps;
+	char *p = *pps;
+
+	if (p == NULL) {
+		return NULL;
+	}
+	p += strcspn(p, delim);
+	if (*p == '\0') {
+		*pps = NULL;
+	} else {
+		*p = '\0';
+		*pps = p + 1;
+	}
+	return ret;
 }
 #endif
 

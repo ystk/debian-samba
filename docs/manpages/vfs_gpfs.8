@@ -2,12 +2,12 @@
 .\"     Title: vfs_gpfs
 .\"    Author: [see the "AUTHOR" section]
 .\" Generator: DocBook XSL Stylesheets v1.78.1 <http://docbook.sf.net/>
-.\"      Date: 02/21/2015
+.\"      Date: 03/30/2016
 .\"    Manual: System Administration tools
-.\"    Source: Samba 4.0
+.\"    Source: Samba 4.2
 .\"  Language: English
 .\"
-.TH "VFS_GPFS" "8" "02/21/2015" "Samba 4\&.0" "System Administration tools"
+.TH "VFS_GPFS" "8" "03/30/2016" "Samba 4\&.2" "System Administration tools"
 .\" -----------------------------------------------------------------
 .\" * Define some portability stuff
 .\" -----------------------------------------------------------------
@@ -79,11 +79,11 @@ Lease support on GPFS
 .sp
 .RE
 .PP
-NOTE:This module follows the posix\-acl behaviour and hence allows permission stealing via chown\&. Samba might allow at a later point in time, to restrict the chown via this module as such restrictions are the responsibility of the underlying filesystem than of Samba\&.
+NOTE:
+This module follows the posix\-acl behaviour and hence allows permission stealing via chown\&. Samba might allow at a later point in time, to restrict the chown via this module as such restrictions are the responsibility of the underlying filesystem than of Samba\&.
 .PP
 This module makes use of the smb\&.conf parameter
-\m[blue]\fBacl map full control = acl map full control\fR\m[]
-When set to yes (the default), this parameter will add in the FILE_DELETE_CHILD bit on a returned ACE entry for a file (not a directory) that already contains all file permissions except for FILE_DELETE and FILE_DELETE_CHILD\&. This can prevent Windows applications that request GENERIC_ALL access from getting ACCESS_DENIED errors when running against a filesystem with NFSv4 compatible ACLs\&.
+\m[blue]\fBacl map full control\fR\m[]\&. When set to yes (the default), this parameter will add in the FILE_DELETE_CHILD bit on a returned ACE entry for a file (not a directory) that already contains all file permissions except for FILE_DELETE and FILE_DELETE_CHILD\&. This can prevent Windows applications that request GENERIC_ALL access from getting ACCESS_DENIED errors when running against a filesystem with NFSv4 compatible ACLs\&.
 .PP
 This module is stackable\&.
 .PP
@@ -182,6 +182,37 @@ no(default)
 .\}
 yes
 \- Announce HSM\&.
+.RE
+.sp
+.RE
+.RE
+.PP
+gpfs:recalls = [ yes | no ]
+.RS 4
+When this option is set to no, an attempt to open an offline file will be rejected with access denied\&. This helps preventing recall storms triggered by careless applications like Finder and Explorer\&.
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+yes(default)
+\- Open files that are offline\&. This will recall the files from HSM\&.
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+no
+\- Reject access to offline files with access denied\&. This will prevent recalls of files from HSM\&. Using this setting also requires gpfs:hsm to be set to yes\&.
 .RE
 .sp
 .RE
@@ -416,6 +447,37 @@ no
 .RE
 .RE
 .PP
+gpfs:settimes = [ yes | no ]
+.RS 4
+Use the gpfs_set_times API when changing the timestamps of a file or directory\&. If the GPFS API is not available the old method of using utime and the GPFS winattr call will be used instead\&.
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+yes(default)
+\- Use gpfs_set_times\&. Fall back to utime and winattr when it is not available\&.
+.RE
+.sp
+.RS 4
+.ie n \{\
+\h'-04'\(bu\h'+03'\c
+.\}
+.el \{\
+.sp -1
+.IP \(bu 2.3
+.\}
+no
+\- Do not use gpfs_set_times\&.
+.RE
+.sp
+.RE
+.RE
+.PP
 nfs4:mode = [ simple | special ]
 .RS 4
 Controls substitution of special IDs (OWNER@ and GROUP@) on GPFS\&. The use of mode simple is recommended\&. In this mode only non inheriting ACL entries for the file owner and group are mapped to special IDs\&.
@@ -608,7 +670,7 @@ library was open source and could be used at run time\&.
 .PP
 At build time, only the header file
 gpfs_gpl\&.h
-is required , which is a symlink to
+is required, which is a symlink to
 gpfs\&.h
 in gpfs versions newer than 3\&.2\&.1 PTF8\&.
 .SH "VERSION"

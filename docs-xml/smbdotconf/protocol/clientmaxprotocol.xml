@@ -2,6 +2,7 @@
 		 context="G"
 		 type="enum"
 		 developer="1"
+		 function="_client_max_protocol"
 		 xmlns:samba="http://www.samba.org/samba/DTD/samba-doc">
 <description>
     <para>The value of the parameter (a string) is the highest 
@@ -60,6 +61,9 @@
 		<listitem>
 		    <para><constant>SMB3_00</constant>: Windows 8 SMB3 version. (mostly the same as SMB2_24)</para>
 		</listitem>
+		<listitem>
+		    <para><constant>SMB3_02</constant>: Windows 8.1 SMB3 version.</para>
+		</listitem>
 	    </itemizedlist>
 	    <para>By default SMB3 selects the SMB3_00 variant.</para>
 	</listitem>
@@ -68,11 +72,18 @@
     <para>Normally this option should not be set as the automatic 
     negotiation phase in the SMB protocol takes care of choosing 
     the appropriate protocol.</para>
+
+    <para>The value <constant>default</constant> refers to <constant>NT1</constant>.</para>
+
+    <para>IPC$ connections for DCERPC e.g. in winbindd, are handled by the
+    <smbconfoption name="client ipc max protocol"/> option.</para>
 </description>
 
 <related>server max protocol</related>
-<related>client mn protocol</related>
+<related>client min protocol</related>
+<related>client ipc min protocol</related>
+<related>client ipc max protocol</related>
 
-<value type="default">SMB3</value>
+<value type="default">default</value>
 <value type="example">LANMAN1</value>
 </samba:parameter>

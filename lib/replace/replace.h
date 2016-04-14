@@ -41,6 +41,10 @@
 #include <stdarg.h>
 #include <errno.h>
 
+#ifndef HAVE_DECL_EWOULDBLOCK
+#define EWOULDBLOCK EAGAIN
+#endif
+
 #if defined(_MSC_VER) || defined(__MINGW32__)
 #include "win32_replace.h"
 #endif
@@ -343,6 +347,11 @@ void rep_setlinebuf(FILE *);
 #ifndef HAVE_STRCASESTR
 #define strcasestr rep_strcasestr
 char *rep_strcasestr(const char *haystack, const char *needle);
+#endif
+
+#ifndef HAVE_STRSEP
+#define strsep rep_strsep
+char *rep_strsep(char **pps, const char *delim);
 #endif
 
 #ifndef HAVE_STRTOK_R
@@ -898,6 +907,11 @@ int usleep(useconds_t);
 #define setproctitle rep_setproctitle
 void rep_setproctitle(const char *fmt, ...) PRINTF_ATTRIBUTE(1, 2);
 #endif
+
+bool nss_wrapper_enabled(void);
+bool nss_wrapper_hosts_enabled(void);
+bool socket_wrapper_enabled(void);
+bool uid_wrapper_enabled(void);
 
 /* Needed for Solaris atomic_add_XX functions. */
 #if defined(HAVE_SYS_ATOMIC_H)
