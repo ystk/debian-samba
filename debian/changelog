@@ -1,3 +1,27 @@
+samba (2:4.2.10+dfsg-0+deb8u3) jessie-security; urgency=high
+
+  * Non-maintainer upload by the Security Team.
+
+  [ Salvatore Bonaccorso ]
+  * Add missing Breaks+Replaces for samba-libs binary package.
+    The 2:4.2.10+dfsg-0+deb8u2 update moved some libraries back to the
+    samba-libs binary package from the samba binary package but did not add
+    respective Breaks and Replaces package relations. (Closes: #821002)
+  * Add Patchset for regression introduced by CVE-2016-2110.
+    NetAPP SMB servers don't negotiate NTLMSSP_SIGN. (Closes: #822937)
+
+  [ Steven Chamberlain ]
+  * ctdb: Fix detection of gnukfreebsd (Closes: #802621)
+    GNU/kFreeBSD's platform name is 'gnukfreebsd', not just 'kfreebsd'.
+
+  [ Andrew Bartlett ]
+  * Add back better NEWS item for 2:4.2.10+dfsg-0+deb8u1
+
+  [ Salvatore Bonaccorso ]
+  * s3:smbd: fix anonymous authentication if signing is mandatory
+
+ -- Salvatore Bonaccorso <carnil@debian.org>  Wed, 01 Jun 2016 17:05:31 +0200
+
 samba (2:4.2.10+dfsg-0+deb8u2) jessie-security; urgency=high
 
   * Non-maintainer upload by the Security Team.

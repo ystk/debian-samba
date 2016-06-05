@@ -21,3 +21,6 @@ security-2016-04-12-prerequisite-v4-2-regression-fixes.metze01.txt
 disable-socketwrapper.diff
 sockets-with-htons.patch
 unprivate-samba-debug.patch
+CVE-2016-2110-NTLMSSP-regression.patch
+ctdb-Fix-detection-of-gnukfreebsd.patch
+s3-smbd-fix-anonymous-authentication-if-signing-is-m.patch
