@@ -3166,8 +3166,8 @@ static NTSTATUS open_file_ntcreate(connection_struct *conn,
 	}
 
 	if (info != FILE_WAS_OPENED) {
-		/* Files should be initially set as archive */
-		if (lp_map_archive(SNUM(conn)) ||
+		/* Overwritten files should be initially set as archive */
+		if ((info == FILE_WAS_OVERWRITTEN && lp_map_archive(SNUM(conn))) ||
 		    lp_store_dos_attributes(SNUM(conn))) {
 			if (!posix_open) {
 				if (file_set_dosmode(conn, smb_fname,
@@ -3621,8 +3621,18 @@ static NTSTATUS open_directory(connection_struct *conn,
 		return status;
 	}
 
-	/* Ensure there was no race condition. */
-	if (!check_same_stat(&smb_dname->st, &fsp->fsp_name->st)) {
+	if(!S_ISDIR(fsp->fsp_name->st.st_ex_mode)) {
+		DEBUG(5,("open_directory: %s is not a directory !\n",
+			 smb_fname_str_dbg(smb_dname)));
+                fd_close(fsp);
+                file_free(req, fsp);
+		return NT_STATUS_NOT_A_DIRECTORY;
+	}
+
+	/* Ensure there was no race condition.  We need to check
+	 * dev/inode but not permissions, as these can change
+	 * legitimately */
+	if (!check_same_dev_ino(&smb_dname->st, &fsp->fsp_name->st)) {
 		DEBUG(5,("open_directory: stat struct differs for "
 			"directory %s.\n",
 			smb_fname_str_dbg(smb_dname)));
