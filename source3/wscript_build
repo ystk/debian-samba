@@ -1146,6 +1146,14 @@ bld.SAMBA3_BINARY('smbspool',
                  libsmb
                  samba3core''')
 
+bld.SAMBA3_BINARY('smbspool_krb5_wrapper',
+                 source='client/smbspool_krb5_wrapper.c',
+                 deps='''
+                 DYNCONFIG
+                 cups
+                 ''',
+                 enabled=bld.CONFIG_SET('HAVE_CUPS'))
+
 bld.SAMBA3_BINARY('testparm',
                  source='utils/testparm.c',
                  deps='''
@@ -1448,13 +1456,13 @@ bld.SAMBA3_BINARY('vlp',
 
 bld.SAMBA3_PYTHON('pysmbd',
                   source='smbd/pysmbd.c',
-                  deps='smbd_base pyrpc_util',
+                  deps='smbd_base pyrpc_util pytalloc-util',
                   realname='samba/samba3/smbd.so'
                   )
 
 bld.SAMBA3_PYTHON('pylibsmb',
                   source='libsmb/pylibsmb.c',
-                  deps='smbclient samba-credentials',
+                  deps='smbclient samba-credentials pycredentials',
                   realname='samba/samba3/libsmb_samba_internal.so'
                   )
 

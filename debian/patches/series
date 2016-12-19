@@ -17,10 +17,8 @@ Fix-privacy-breach-on-google.com.patch
 decrease-min-ldb-version.patch
 backupkey.patch
 fix_pam_smbpass.patch
-security-2016-04-12-prerequisite-v4-2-regression-fixes.metze01.txt
 disable-socketwrapper.diff
-sockets-with-htons.patch
 unprivate-samba-debug.patch
-CVE-2016-2110-NTLMSSP-regression.patch
 ctdb-Fix-detection-of-gnukfreebsd.patch
-s3-smbd-fix-anonymous-authentication-if-signing-is-m.patch
+s3-libsmb-Fix-error-where-short-name-length-was-read.patch
+security-2016-12-19.patch

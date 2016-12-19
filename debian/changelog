@@ -1,3 +1,33 @@
+samba (2:4.2.14+dfsg-0+deb8u2) jessie-security; urgency=high
+
+  * This is a security release in order to address the following defects:
+    - CVE-2016-2123 (Samba NDR Parsing ndr_pull_dnsp_name Heap-based Buffer
+      Overflow Remote Code Execution Vulnerability).
+    -  CVE-2016-2125 (Unconditional privilege delegation to Kerberos servers in
+      trusted realms).
+    -  CVE-2016-2126 (Flaws in Kerberos PAC validation can trigger privilege
+       elevation).
+  * Fix smbclient compatibility with Windows 10 (Closes: #820794)
+
+ -- Mathieu Parent <sathieu@debian.org>  Thu, 08 Dec 2016 21:12:25 +0100
+
+samba (2:4.2.14+dfsg-0+deb8u1) jessie; urgency=high
+
+  * New upstream release.
+   + Fixes CVE-2016-2119: Client side SMB2/3 required signing can be downgraded.
+   + Various fixes for regressions introduced by the 4.2.10 security fixes.
+   Closes: #820965, #827141
+   + Fixes for segfault with clustering. Closes: #824177
+   + Bump tevent dependency up to 0.9.28.
+  * Drop obsolete patch security-2016-04-12-prerequisite-v4-2-regression-
+    fixes.metze01.txt.
+  * Drop patch sockets-with-htons.patch; applied upstream.
+  * Drop patch CVE-2016-2110-NTLMSSP-regression.patch; fixed upstream.
+  * Drop patch s3-smbd-fix-anonymous-authentication-if-signing-is-
+    m.patch: fixed upstream.
+
+ -- Jelmer Vernooĳ <jelmer@debian.org>  Sun, 04 Sep 2016 14:21:35 +0000
+
 samba (2:4.2.10+dfsg-0+deb8u3) jessie-security; urgency=high
 
   * Non-maintainer upload by the Security Team.
