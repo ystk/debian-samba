@@ -22,3 +22,4 @@ unprivate-samba-debug.patch
 ctdb-Fix-detection-of-gnukfreebsd.patch
 s3-libsmb-Fix-error-where-short-name-length-was-read.patch
 security-2016-12-19.patch
+CVE-2017-2619.patch

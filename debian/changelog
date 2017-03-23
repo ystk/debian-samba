@@ -1,3 +1,70 @@
+samba (2:4.2.14+dfsg-0+deb8u4) jessie-security; urgency=high
+
+  * Non-maintainer upload by the Security Team.
+  * Add additional changes required for the CVE-2017-2619 fix
+    - s3/smbd: re-open directory after dptr_CloseDir()
+    - s4/torture: add SMB2_FIND tests with SMB2_CONTINUE_FLAG_REOPEN flag
+
+ -- Salvatore Bonaccorso <carnil@debian.org>  Tue, 21 Mar 2017 20:57:54 +0100
+
+samba (2:4.2.14+dfsg-0+deb8u3) jessie-security; urgency=high
+
+  * This is a security release in order to address the following defects:
+    - CVE-2017-2619: symlink race permits opening files outside share directory
+  * CVE-2017-2619 requires the following changes:
+    - s3: vfs: dirsort doesn't handle opendir of "." correctly.
+    - s3: smbd: Correctly canonicalize any incoming shadow copy path.
+    - s3: lib: Add canonicalize_absolute_path().
+    - s3: smbd: Make set_conn_connectpath() call canonicalize_absolute_path().
+    - s3: VFS: shadow_copy2: Correctly initialize timestamp and stripped
+      variables.
+    - s3: VFS: shadow_copy2: Ensure pathnames for parameters are correctly
+      relative and terminated.
+    - s3: VFS: shadow_copy2: Fix length comparison to ensure we don't overstep
+      a length.
+    - s3: VFS: shadow_copy2: Add two new variables to the config data. Not yet
+      used.
+    - s3: VFS: shadow_copy2: Add a wrapper function to call the original
+      shadow_copy2_strip_snapshot().
+    - s3: VFS: shadow_copy2: Change a parameter name.
+    - s3: VFS: shadow_copy2: Add two currently unused functions to make
+      pathnames absolute or relative to $cwd.
+    - s3: VFS: shadow_copy2: Fix chdir to store off the needed private
+      variables.
+    - vfs_shadow_copy2: add shadow_copy2_do_convert()
+    - vfs_shadow_copy2: fix case where snapshots are outside the share
+    - s3: VFS: Allow shadow_copy2_connectpath() to return the cached path
+      derived from $cwd.
+    - s3: VFS: Ensure shadow:format cannot contain a / path separator.
+    - s3: VFS: Add utility function check_for_converted_path().
+    - s3: VFS: shadow_copy2: Fix module to work with variable current working
+      directory.
+    - s3: VFS: shadow_copy2: Fix a memory leak in the connectpath function.
+    - s3: VFS: shadow_copy2: Fix usage of saved_errno to only set errno on
+      error.
+    - s3: VFS: Don't allow symlink, link or rename on already converted paths.
+    - s3: VFS: vfs_streams_xattr.c: Make streams_xattr_open() store the same
+      path as streams_xattr_recheck().
+    - vfs_streams_xattr: use fsp, not base_fsp
+    - s3: vfs: streams_depot. Use conn->connectpath not conn->cwd.
+    - s3: smbd: Create wrapper function for OpenDir in preparation for making
+      robust.
+    - s3: smbd: Opendir_internal() early return if SMB_VFS_OPENDIR failed.
+    - s3: smbd: Create and use open_dir_safely(). Use from OpenDir().
+    - s3: smbd: OpenDir_fsp() use early returns.
+    - s3: smbd: OpenDir_fsp() - Fix memory leak on error.
+    - s3: smbd: Move the reference counting and destructor setup to just before
+      retuning success.
+    - s3: smbd: Correctly fallback to open_dir_safely if FDOPENDIR not supported
+      on system.
+    - s3: smbd: Remove O_NOFOLLOW guards. We insist on O_NOFOLLOW existing.
+    - s3: smbd: Move special handling of symlink errno's into a utility
+      function.
+    - s3: smbd: Add the core functions to prevent symlink open races.
+    - s3: smbd: Use the new non_widelink_open() function.
+
+ -- Mathieu Parent <sathieu@debian.org>  Fri, 17 Mar 2017 22:14:34 +0100
+
 samba (2:4.2.14+dfsg-0+deb8u2) jessie-security; urgency=high
 
   * This is a security release in order to address the following defects:
