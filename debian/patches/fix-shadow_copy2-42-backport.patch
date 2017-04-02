@@ -1,0 +1,116 @@
+From fddffa9d84e5d3554f64f0935c7140fda785a477 Mon Sep 17 00:00:00 2001
+From: Uri Simchoni <uri@samba.org>
+Date: Wed, 24 Aug 2016 14:42:23 +0300
+Subject: [PATCH 1/2] vfs_shadow_copy: handle non-existant files and wildcards
+
+During path checking, the vfs connectpath_fn is called to
+determine the share's root, relative to the file being
+queried (for example, in snapshot file this may be other
+than the share's "usual" root directory). connectpath_fn
+must be able to answer this question even if the path does
+not exist and its parent does exist. The convention in this
+case is that this refers to a yet-uncreated file under the parent
+and all queries are relative to the parent.
+
+This also serves as a workaround for the case where connectpath_fn
+has to handle wildcards, as with the case of SMB1 trans2 findfirst.
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=12172
+
+Signed-off-by: Uri Simchoni <uri@samba.org>
+Reviewed-by: Jeremy Allison <jra@samba.org>
+
+Autobuild-User(master): Jeremy Allison <jra@samba.org>
+Autobuild-Date(master): Thu Aug 25 05:35:29 CEST 2016 on sn-devel-144
+
+(back-ported from commit f41f439335efb352d03a842c370212a0af77262a)
+---
+ source3/modules/vfs_shadow_copy2.c | 31 ++++++++++++++++++++++++++++++-
+ 1 file changed, 30 insertions(+), 1 deletion(-)
+
+diff --git a/source3/modules/vfs_shadow_copy2.c b/source3/modules/vfs_shadow_copy2.c
+index c6fffab..2772a7f 100644
+--- a/source3/modules/vfs_shadow_copy2.c
++++ b/source3/modules/vfs_shadow_copy2.c
+@@ -2151,6 +2151,7 @@ static const char *shadow_copy2_connectpath(struct vfs_handle_struct *handle,
+ 	char *tmp = NULL;
+ 	char *result = NULL;
+ 	int saved_errno = 0;
++	char *parent_dir = NULL;
+ 	size_t rootpath_len = 0;
+ 	struct shadow_copy2_config *config = NULL;
+ 
+@@ -2176,7 +2177,34 @@ static const char *shadow_copy2_connectpath(struct vfs_handle_struct *handle,
+ 	tmp = shadow_copy2_do_convert(talloc_tos(), handle, stripped, timestamp,
+ 				      &rootpath_len);
+ 	if (tmp == NULL) {
+-		goto done;
++		if (errno != ENOENT) {
++			goto done;
++		}
++
++		/*
++		 * If the converted path does not exist, and converting
++		 * the parent yields something that does exist, then
++		 * this path refers to something that has not been
++		 * created yet, relative to the parent path.
++		 * The snapshot finding is relative to the parent.
++		 * (usually snapshots are read/only but this is not
++		 * necessarily true).
++		 * This code also covers getting a wildcard in the
++		 * last component, because this function is called
++		 * prior to sanitizing the path, and in SMB1 we may
++		 * get wildcards in path names.
++		 */
++		if (!parent_dirname(talloc_tos(), stripped, &parent_dir,
++				    NULL)) {
++			errno = ENOMEM;
++			goto done;
++		}
++
++		tmp = shadow_copy2_do_convert(talloc_tos(), handle, parent_dir,
++					      timestamp, &rootpath_len);
++		if (tmp == NULL) {
++			goto done;
++		}
+ 	}
+ 
+ 	DEBUG(10,("converted path is [%s] root path is [%.*s]\n", tmp,
+@@ -2203,6 +2231,7 @@ done:
+ 	}
+ 	TALLOC_FREE(tmp);
+ 	TALLOC_FREE(stripped);
++	TALLOC_FREE(parent_dir);
+ 	if (saved_errno != 0) {
+ 		errno = saved_errno;
+ 	}
+-- 
+2.9.3
+
+
+From 9e8cb52cda24ac82c192a061d7952a63c4a5cc57 Mon Sep 17 00:00:00 2001
+From: Uri Simchoni <uri@samba.org>
+Date: Tue, 28 Mar 2017 08:14:24 +0300
+Subject: [PATCH 2/2] vfs_shadow_copy2: fix crash in 4.2.x backport
+
+Signed-off-by: Uri Simchoni <uri@samba.org>
+---
+ source3/modules/vfs_shadow_copy2.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/source3/modules/vfs_shadow_copy2.c b/source3/modules/vfs_shadow_copy2.c
+index 2772a7f..7e38928 100644
+--- a/source3/modules/vfs_shadow_copy2.c
++++ b/source3/modules/vfs_shadow_copy2.c
+@@ -2146,7 +2146,7 @@ static int shadow_copy2_get_real_filename(struct vfs_handle_struct *handle,
+ static const char *shadow_copy2_connectpath(struct vfs_handle_struct *handle,
+ 					    const char *fname)
+ {
+-	time_t timestamp;
++	time_t timestamp = 0;
+ 	char *stripped = NULL;
+ 	char *tmp = NULL;
+ 	char *result = NULL;
+-- 
+2.9.3
+

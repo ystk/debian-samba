@@ -1,0 +1,208 @@
+From 5d4ef6ff0970c93fed49e51a01e63cb67d49d087 Mon Sep 17 00:00:00 2001
+From: Jeremy Allison <jra@samba.org>
+Date: Mon, 27 Mar 2017 10:46:47 -0700
+Subject: [PATCH 1/3] s3: smbd: Fix incorrect logic exposed by fix for the
+ security bug 12496 (CVE-2017-2619).
+
+In a UNIX filesystem, the names "." and ".." by definition can *never*
+be symlinks - they are already reserved names.
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=12721
+
+Signed-off-by: Jeremy Allison <jra@samba.org>
+Reviewed-by: Uri Simchoni <uri@samba.org>
+(cherry picked from commit ae17bebd250bdde5614b2ac17e53512f19fe9b68)
+---
+ source3/smbd/vfs.c | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/source3/smbd/vfs.c b/source3/smbd/vfs.c
+index 4d660122f5a..f084b1d1930 100644
+--- a/source3/smbd/vfs.c
++++ b/source3/smbd/vfs.c
+@@ -1291,8 +1291,11 @@ NTSTATUS check_reduced_name(connection_struct *conn, const char *fname)
+ 			/* fname can't have changed in resolved_path. */
+ 			const char *p = &resolved_name[rootdir_len];
+ 
+-			/* *p can be '\0' if fname was "." */
+-			if (*p == '\0' && ISDOT(fname)) {
++			/*
++			 * UNIX filesystem semantics, names consisting
++			 * only of "." or ".." CANNOT be symlinks.
++			 */
++			if (ISDOT(fname) || ISDOTDOT(fname)) {
+ 				goto out;
+ 			}
+ 
+-- 
+2.12.2.564.g063fe858b8-goog
+
+
+From 71500662d1098d17657b0148a0aa06cd69482c7d Mon Sep 17 00:00:00 2001
+From: Jeremy Allison <jra@samba.org>
+Date: Mon, 27 Mar 2017 17:04:58 -0700
+Subject: [PATCH 2/3] s3: smbd: Fix "follow symlink = no" regression part 2.
+
+Add an extra paramter to cwd_name to check_reduced_name().
+
+If cwd_name == NULL then fname is a client given path relative
+to the root path of the share.
+
+If cwd_name != NULL then fname is a client given path relative
+to cwd_name. cwd_name is relative to the root path of the share.
+
+Not yet used, logic added in the next commit.
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=12721
+
+Signed-off-by: Jeremy Allison <jra@samba.org>
+Reviewed-by: Ralph Boehme <slow@samba.org>
+(cherry picked from commit 83e30cb48859b412b76572b6a3ba84d8fde167af)
+---
+ source3/smbd/filename.c |  2 +-
+ source3/smbd/open.c     |  2 +-
+ source3/smbd/proto.h    |  4 +++-
+ source3/smbd/vfs.c      | 10 +++++++++-
+ 4 files changed, 14 insertions(+), 4 deletions(-)
+
+diff --git a/source3/smbd/filename.c b/source3/smbd/filename.c
+index 3593155ce4e..03773c82403 100644
+--- a/source3/smbd/filename.c
++++ b/source3/smbd/filename.c
+@@ -1222,7 +1222,7 @@ NTSTATUS check_name(connection_struct *conn, const char *name)
+ 	}
+ 
+ 	if (!lp_widelinks(SNUM(conn)) || !lp_follow_symlinks(SNUM(conn))) {
+-		status = check_reduced_name(conn,name);
++		status = check_reduced_name(conn, NULL, name);
+ 		if (!NT_STATUS_IS_OK(status)) {
+ 			DEBUG(5,("check_name: name %s failed with %s\n",name,
+ 						nt_errstr(status)));
+diff --git a/source3/smbd/open.c b/source3/smbd/open.c
+index 84177528511..13aaae3b023 100644
+--- a/source3/smbd/open.c
++++ b/source3/smbd/open.c
+@@ -539,7 +539,7 @@ static int non_widelink_open(struct connection_struct *conn,
+ 	}
+ 
+ 	/* Ensure the relative path is below the share. */
+-	status = check_reduced_name(conn, final_component);
++	status = check_reduced_name(conn, parent_dir, final_component);
+ 	if (!NT_STATUS_IS_OK(status)) {
+ 		saved_errno = map_errno_from_nt_status(status);
+ 		goto out;
+diff --git a/source3/smbd/proto.h b/source3/smbd/proto.h
+index abfb5435493..032f75de166 100644
+--- a/source3/smbd/proto.h
++++ b/source3/smbd/proto.h
+@@ -1171,7 +1171,9 @@ const char *vfs_readdirname(connection_struct *conn, void *p,
+ 			    SMB_STRUCT_STAT *sbuf, char **talloced);
+ int vfs_ChDir(connection_struct *conn, const char *path);
+ char *vfs_GetWd(TALLOC_CTX *ctx, connection_struct *conn);
+-NTSTATUS check_reduced_name(connection_struct *conn, const char *fname);
++NTSTATUS check_reduced_name(connection_struct *conn,
++			const char *cwd_name,
++			const char *fname);
+ NTSTATUS check_reduced_name_with_privilege(connection_struct *conn,
+ 			const char *fname,
+ 			struct smb_request *smbreq);
+diff --git a/source3/smbd/vfs.c b/source3/smbd/vfs.c
+index f084b1d1930..15896f80b12 100644
+--- a/source3/smbd/vfs.c
++++ b/source3/smbd/vfs.c
+@@ -1163,9 +1163,17 @@ NTSTATUS check_reduced_name_with_privilege(connection_struct *conn,
+ /*******************************************************************
+  Reduce a file name, removing .. elements and checking that
+  it is below dir in the heirachy. This uses realpath.
++
++ If cwd_name == NULL then fname is a client given path relative
++ to the root path of the share.
++
++ If cwd_name != NULL then fname is a client given path relative
++ to cwd_name. cwd_name is relative to the root path of the share.
+ ********************************************************************/
+ 
+-NTSTATUS check_reduced_name(connection_struct *conn, const char *fname)
++NTSTATUS check_reduced_name(connection_struct *conn,
++				const char *cwd_name,
++				const char *fname)
+ {
+ 	char *resolved_name = NULL;
+ 	bool allow_symlinks = true;
+-- 
+2.12.2.564.g063fe858b8-goog
+
+
+From e3fd46264b82ffc22424ee7364b3fd2c0fc14a7e Mon Sep 17 00:00:00 2001
+From: Jeremy Allison <jra@samba.org>
+Date: Mon, 27 Mar 2017 17:09:38 -0700
+Subject: [PATCH 3/3] s3: smbd: Fix "follow symlink = no" regression part 2.
+
+Use the cwd_name parameter to reconstruct the original
+client name for symlink testing.
+
+BUG: https://bugzilla.samba.org/show_bug.cgi?id=12721
+
+Signed-off-by: Jeremy Allison <jra@samba.org>
+Reviewed-by: Ralph Boehme <slow@samba.org>
+(cherry picked from commit e182a4d39e86c9694e255efdf6ee2ea3ccb9af4a)
+---
+ source3/smbd/vfs.c | 23 +++++++++++++++++++++++
+ 1 file changed, 23 insertions(+)
+
+diff --git a/source3/smbd/vfs.c b/source3/smbd/vfs.c
+index 15896f80b12..6c46fe54364 100644
+--- a/source3/smbd/vfs.c
++++ b/source3/smbd/vfs.c
+@@ -1176,6 +1176,7 @@ NTSTATUS check_reduced_name(connection_struct *conn,
+ 				const char *fname)
+ {
+ 	char *resolved_name = NULL;
++	char *new_fname = NULL;
+ 	bool allow_symlinks = true;
+ 	bool allow_widelinks = false;
+ 
+@@ -1317,11 +1318,32 @@ NTSTATUS check_reduced_name(connection_struct *conn,
+ 			}
+ 
+ 			p++;
++
++			/*
++			 * If cwd_name is present and not ".",
++			 * then fname is relative to that, not
++			 * the root of the share. Make sure the
++			 * path we check is the one the client
++			 * sent (cwd_name+fname).
++			 */
++			if (cwd_name != NULL && !ISDOT(cwd_name)) {
++				new_fname = talloc_asprintf(talloc_tos(),
++							"%s/%s",
++							cwd_name,
++							fname);
++				if (new_fname == NULL) {
++					SAFE_FREE(resolved_name);
++					return NT_STATUS_NO_MEMORY;
++				}
++				fname = new_fname;
++			}
++
+ 			if (strcmp(fname, p)!=0) {
+ 				DEBUG(2, ("check_reduced_name: Bad access "
+ 					"attempt: %s is a symlink to %s\n",
+ 					  fname, p));
+ 				SAFE_FREE(resolved_name);
++				TALLOC_FREE(new_fname);
+ 				return NT_STATUS_ACCESS_DENIED;
+ 			}
+ 		}
+@@ -1332,6 +1354,7 @@ NTSTATUS check_reduced_name(connection_struct *conn,
+ 	DEBUG(3,("check_reduced_name: %s reduced to %s\n", fname,
+ 		 resolved_name));
+ 	SAFE_FREE(resolved_name);
++	TALLOC_FREE(new_fname);
+ 	return NT_STATUS_OK;
+ }
+ 
+-- 
+2.12.2.564.g063fe858b8-goog
+

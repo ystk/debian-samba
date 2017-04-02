@@ -1,3 +1,31 @@
+samba (2:4.2.14+dfsg-0+deb8u5) jessie-security; urgency=high
+
+  * This is a security release in order to fix regressions from CVE-2017-2619
+  * Fix "follow symlink = no" (Closes: #858564)
+    - s3: smbd: Fix incorrect logic exposed by fix for the security bug 12496
+      (CVE-2017-2619).
+    - s3: smbd: Fix "follow symlink = no" regression part 2.
+    - s3: smbd: Fix "follow symlink = no" regression part 2.
+  * Fix shadow_copy2 (Closes: #858648, #858590)
+    - vfs_shadow_copy: handle non-existant files and wildcards
+    - vfs_shadow_copy2: fix crash in 4.2.x backport
+    - vfs_shadow_copy2: add a blackbox test suite
+    - s3: libsmb: Correctly align create contexts in a create call.
+    - s3: libsmb: Add return args to clistr_is_previous_version_path().
+    - s3: libsmb: Add cli_smb2_shadow_copy_data() function that gets shadow copy
+      info over SMB2.
+    - s3: libsmb: Plumb new SMB2 shadow copy call into cli_shadow_copy_data().
+    - s3: libsmb: Add the capability to find a @GMT- path in an SMB2 create and
+      transform to a timewarp token.
+    - s2-selftest: run shadow_copy2 test both in NT1 and SMB3 modes
+    - selftest: add content to files created during shadow_copy2 test
+    - selftest: check file readability in shadow_copy2 test
+    - selftest: test listing directories inside snapshots
+  * Fix `net ads join` freeze when run a second time (Closes: #859101) since 4.2
+    - libads: Fix deadlock when re-joining a domain and updating keytab
+
+ -- Mathieu Parent <sathieu@debian.org>  Sat, 01 Apr 2017 11:10:22 +0200
+
 samba (2:4.2.14+dfsg-0+deb8u4) jessie-security; urgency=high
 
   * Non-maintainer upload by the Security Team.
