@@ -27,3 +27,4 @@ bug-12721-4.2.patch
 fix-shadow_copy2-42-backport.patch
 shadow_copy2_tests_42.patch
 Fix-deadlock-when-re-joining-a-domain.patch
+CVE-2017-7494.patch
