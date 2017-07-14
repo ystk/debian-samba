@@ -1,3 +1,11 @@
+samba (2:4.2.14+dfsg-0+deb8u7) jessie-security; urgency=high
+
+  * This is a security release in order to address the following defect:
+    - CVE-2017-11103: Orpheus' Lyre KDC-REP service name validation
+      (Closes: #868209)
+
+ -- Mathieu Parent <sathieu@debian.org>  Thu, 13 Jul 2017 15:00:29 +0200
+
 samba (2:4.2.14+dfsg-0+deb8u6) jessie-security; urgency=high
 
   * Non-maintainer upload by the Security Team.
