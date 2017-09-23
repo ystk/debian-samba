@@ -29,3 +29,6 @@ shadow_copy2_tests_42.patch
 Fix-deadlock-when-re-joining-a-domain.patch
 CVE-2017-7494.patch
 CVE-2017-11103-Orpheus-Lyre-KDC-REP-service-name-val.patch
+CVE-2017-12150-v4-4.patches.metze02.txt
+CVE-2017-12151-v4-4.patches.metze02.txt
+CVE-2017-12163-all-metze01.patch.txt
