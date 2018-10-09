@@ -1,3 +1,12 @@
+samba (2:4.2.14+dfsg-0+deb8u10) jessie-security; urgency=medium
+
+  * Non-maintainer upload for the LTS team.
+  * Confidential attribute disclosure from the AD LDAP server (CVE-2018-10919)
+  * Insufficient input validation on client directory listing in libsmbclient
+    (CVE-2018-10858)
+
+ -- Holger Levsen <holger@debian.org>  Mon, 08 Oct 2018 19:22:22 +0100
+
 samba (2:4.2.14+dfsg-0+deb8u9) jessie-security; urgency=high
 
   * This is a security release in order to address the following defects:
