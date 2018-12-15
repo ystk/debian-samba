@@ -36,3 +36,6 @@ s3-smbd-Chain-code-can-return-uninitialized-memory-w.patch
 s3-smbd-Fix-SMB1-use-after-free-crash-bug.-CVE-2017-.patch
 CVE-2018-10858.patch
 CVE-2018-10919.patch
+CVE-2018-14629.patch
+CVE-2018-14629-2.patch
+CVE-2018-16851.patch

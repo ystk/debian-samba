@@ -1,3 +1,11 @@
+samba (2:4.2.14+dfsg-0+deb8u11) jessie-security; urgency=medium
+
+  * Non-maintainer upload by the LTS team.
+  * CVE-2018-14629: infinite recursion in LDAP server.
+  * CVE-2018-16851: NULL pointer dereference in AD DC LDAP server.
+
+ -- Emilio Pozuelo Monfort <pochu@debian.org>  Fri, 14 Dec 2018 13:36:46 +0100
+
 samba (2:4.2.14+dfsg-0+deb8u10) jessie-security; urgency=medium
 
   * Non-maintainer upload for the LTS team.
