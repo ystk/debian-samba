@@ -1,3 +1,33 @@
+samba (2:4.2.14+dfsg-0+deb8u12) jessie-security; urgency=medium
+
+  * Non-maintainer upload by the LTS team.
+  * CVE-2019-3880: s3: rpc: winreg: Remove implementations of
+    SaveKey/RestoreKey.
+  * CVE-2018-1057:
+    - s4:dsdb/tests: add a test for password change with empty delete
+    - s4:dsdb/password_hash: add a helper variable for LDB_FLAG_MOD_TYPE
+    - s4:dsdb/password_hash: add a helper variable for passwordAttr->num_values
+    - s4:dsdb/acl: only call dsdb_acl_debug() if we checked the acl in
+      acl_check_password_rights()
+    - s4:dsdb/acl: remove unused else branches in acl_check_password_rights()
+    - s4:dsdb/acl: check for internal controls before other checks
+    - vulnerability: s4:dsdb/acl: add check for
+      DSDB_CONTROL_PASSWORD_HASH_VALUES_OID control
+    - vulnerability: s4:dsdb/acl: add a NULL check for talloc_new() in
+      acl_check_password_rights()
+    - vulnerability: s4/dsdb: correctly detect password resets
+    - vulnerability: s4:dsdb/acl: run password checking only once
+    - vulnerability: s4:dsdb/samdb: define
+      DSDB_CONTROL_PASSWORD_ACL_VALIDATION_OID control
+    - s4:dsdb: use DSDB_CONTROL_PASSWORD_ACL_VALIDATION_OID
+    - vulnerability: s4:dsdb/acl: changing dBCSPwd is only allowed with a
+      control
+  * CVE-2018-1050: s3: RPC: spoolss server. Protect against null
+    pointer derefs.
+  * CVE-2017-9461: s3: smbd: Don't loop infinitely on bad-symlink resolution.
+
+ -- Mike Gabriel <sunweaver@debian.org>  Mon, 08 Apr 2019 23:50:58 +0200
+
 samba (2:4.2.14+dfsg-0+deb8u11) jessie-security; urgency=medium
 
   * Non-maintainer upload by the LTS team.
