@@ -1,3 +1,36 @@
+samba (2:4.2.14+dfsg-0+deb8u14) jessie-security; urgency=high
+
+  * Non-maintainer upload by the ELTS Team.
+  * Fix CVE-2020-10704: An unauthorized user can trigger a denial of service
+    via a stack overflow in the AD DC LDAP server
+  * Fix CVE-2020-10745: Denial of service resulting from abuse of compression
+    of replies to NetBIOS over TCP/IP name resolution and DNS packets causing
+    excessive CPU load on the Samba AD DC.
+  * Fix CVE-2020-14303: Denial of service resulting from CPU spin and and
+    inability to process further requests once the AD DC NBT server receives
+    an empty (zero-length) UDP packet to port 137.
+  * Fix CVE-2020-1472: 
+    - Unauthenticated domain controller compromise by subverting Netlogon
+      cryptography.
+      + switch "client schannel" default to "yes" instead of "auto".
+      + switch "server schannel" default to "yes" instead of "auto".
+    - Unauthenticated domain controller compromise by subverting Netlogon
+      cryptography (ZeroLogon).
+      + For compatibility reasons, allow specifying an insecure netlogon
+        configuration per machine. See the following link for examples:
+        https://www.samba.org/samba/security/CVE-2020-1472.html
+      + Add additional server checks for the protocol attack in the
+        client-specified challenge to provide some protection when
+        'server schannel = no/auto' and avoid the false-positive results
+        when running the proof-of-concept exploit.
+  * Fix CVE-2020-14318: Missing handle permissions check in ChangeNotify
+  * Fix CVE-2020-14323: Unprivileged user can crash winbind via invalid
+    lookupsids DoS
+  * Fix CVE-2020-14383: DNS server crash via invalid records resulting from
+    uninitialized variables
+
+ -- Roberto C. Sanchez <roberto@debian.org>  Sat, 21 Nov 2020 21:13:28 -0500
+
 samba (2:4.2.14+dfsg-0+deb8u13) jessie-security; urgency=medium
 
   * Non-maintainer upload by the LTS team.

@@ -1,0 +1,216 @@
+From ff4fb6935a32e33ef01c97d4ee103bc11ac31da0 Mon Sep 17 00:00:00 2001
+From: Alexander Bokovoy <ab@samba.org>
+Date: Fri, 31 Mar 2017 12:44:58 +0300
+Subject: [PATCH] _netr_ServerPasswordSet2: use info level 26 to set plain text
+ machine password
+
+To support password change for machine or trusted domain accounts in Active
+Directory environment we need to pass down actual plain text password
+instead of NT hashes. This would allow a backend like ipasam to update
+Kerberos keys as well as NT hashes.
+
+By calling samr_SetUserInfo2 info level 26 we ensure PASSDB layer can
+actually get the plain text password. If PASSDB backend implements
+pdb_update_sam_account() callback, it then gets the plain text password
+from samr_SetUserInfo2.
+
+A plain text password is a data blob represented as up to 256 WCHARs. It
+is UTF-16 coded on wire and we have its length from the buffer.
+SetUserInfo2 SAMR call chain in decode_pw_buffer() does explicitly
+expect 512+4 bytes in the buffer. It then calls convert_string_talloc()
+to convert it to UNIX charset passing the correct value of the plaintext
+password length. However, convert_string_talloc() expects the length of
+input string *including* the terminating null and we pass just the
+string length.
+
+convert_string_talloc() then explicitly null-terminates the resulting
+string by adding two nulls. In most cases UNIX charset is UTF-8, so we
+get null-terminated UTF-8 string down to PASSDB layer.
+
+MS-SAMR does not limit what does the password should contain.  It says
+it is 'userPassword' value. Either 'userPassword' or 'unicodePwd' cannot
+contain null characters according to MS-ADTS 3.1.1.3.1.5 because they
+must be proper UTF-8 and UTF-16 strings accordingly.
+
+We are talking to our own SAMR service here.
+
+Signed-off-by: Alexander Bokovoy <ab@samba.org>
+Reviewed-by: Andrew Bartlett <abartlet@samba.org>
+---
+ source3/rpc_server/netlogon/srv_netlog_nt.c | 79 +++++++++++++++++----
+ 1 file changed, 64 insertions(+), 15 deletions(-)
+
+--- a/source3/rpc_server/netlogon/srv_netlog_nt.c
++++ b/source3/rpc_server/netlogon/srv_netlog_nt.c
+@@ -33,6 +33,7 @@
+ #include "../librpc/gen_ndr/ndr_lsa_c.h"
+ #include "rpc_client/cli_lsarpc.h"
+ #include "rpc_client/init_lsa.h"
++#include "rpc_client/init_samr.h"
+ #include "rpc_server/rpc_ncacn_np.h"
+ #include "../libcli/security/security.h"
+ #include "../libcli/security/dom_sid.h"
+@@ -1095,14 +1096,27 @@ static NTSTATUS netr_creds_server_step_c
+ 	return status;
+ }
+ 
++
+ /*************************************************************************
+  *************************************************************************/
+ 
++struct _samr_Credentials_t {
++	enum {
++		CRED_TYPE_NT_HASH,
++		CRED_TYPE_PLAIN_TEXT,
++	} cred_type;
++	union {
++		struct samr_Password *nt_hash;
++		const char *password;
++	} creds;
++};
++
++
+ static NTSTATUS netr_set_machine_account_password(TALLOC_CTX *mem_ctx,
+ 						  struct auth_session_info *session_info,
+ 						  struct messaging_context *msg_ctx,
+ 						  const char *account_name,
+-						  struct samr_Password *nt_hash)
++						  struct _samr_Credentials_t *cr)
+ {
+ 	NTSTATUS status;
+ 	NTSTATUS result = NT_STATUS_OK;
+@@ -1112,9 +1126,11 @@ static NTSTATUS netr_set_machine_account
+ 	uint32_t acct_ctrl;
+ 	union samr_UserInfo *info;
+ 	struct samr_UserInfo18 info18;
++	struct samr_UserInfo26 info26;
+ 	DATA_BLOB in,out;
+ 	int rc;
+ 	DATA_BLOB session_key;
++	enum samr_UserInfoLevel infolevel;
+ 
+ 	ZERO_STRUCT(user_handle);
+ 
+@@ -1186,22 +1202,44 @@ static NTSTATUS netr_set_machine_account
+ 		goto out;
+ 	}
+ 
+-	ZERO_STRUCT(info18);
++	switch(cr->cred_type) {
++		case CRED_TYPE_NT_HASH:
++			ZERO_STRUCT(info18);
++
++			infolevel = UserInternal1Information;
++
++			in = data_blob_const(cr->creds.nt_hash, 16);
++			out = data_blob_talloc_zero(mem_ctx, 16);
++			sess_crypt_blob(&out, &in, &session_key, true);
++			memcpy(info18.nt_pwd.hash, out.data, out.length);
++
++			info18.nt_pwd_active = true;
++
++			info->info18 = info18;
++		break;
++		case CRED_TYPE_PLAIN_TEXT:
++			ZERO_STRUCT(info26);
+ 
+-	in = data_blob_const(nt_hash->hash, 16);
+-	out = data_blob_talloc_zero(mem_ctx, 16);
+-	sess_crypt_blob(&out, &in, &session_key, true);
+-	memcpy(info18.nt_pwd.hash, out.data, out.length);
++			infolevel = UserInternal5InformationNew;
+ 
+-	info18.nt_pwd_active = true;
++			init_samr_CryptPasswordEx(cr->creds.password,
++						  &session_key,
++						  &info26.password);
+ 
+-	info->info18 = info18;
++			info26.password_expired = PASS_DONT_CHANGE_AT_NEXT_LOGON;
++			info->info26 = info26;
++		break;
++		default:
++			status = NT_STATUS_INTERNAL_ERROR;
++			goto out;
++		break;
++	}
+ 
+ 	become_root();
+ 	status = dcerpc_samr_SetUserInfo2(h,
+ 					  mem_ctx,
+ 					  &user_handle,
+-					  UserInternal1Information,
++					  infolevel,
+ 					  info,
+ 					  &result);
+ 	unbecome_root();
+@@ -1231,6 +1269,7 @@ NTSTATUS _netr_ServerPasswordSet(struct
+ 	NTSTATUS status = NT_STATUS_OK;
+ 	int i;
+ 	struct netlogon_creds_CredentialState *creds = NULL;
++	struct _samr_Credentials_t cr = { CRED_TYPE_NT_HASH, {0}};
+ 
+ 	DEBUG(5,("_netr_ServerPasswordSet: %d\n", __LINE__));
+ 
+@@ -1265,11 +1304,12 @@ NTSTATUS _netr_ServerPasswordSet(struct
+ 		DEBUG(100,("%02X ", r->in.new_password->hash[i]));
+ 	DEBUG(100,("\n"));
+ 
++	cr.creds.nt_hash = r->in.new_password;
+ 	status = netr_set_machine_account_password(p->mem_ctx,
+ 						   p->session_info,
+ 						   p->msg_ctx,
+ 						   creds->account_name,
+-						   r->in.new_password);
++						   &cr);
+ 	return status;
+ }
+ 
+@@ -1284,7 +1324,7 @@ NTSTATUS _netr_ServerPasswordSet2(struct
+ 	struct netlogon_creds_CredentialState *creds = NULL;
+ 	DATA_BLOB plaintext;
+ 	struct samr_CryptPassword password_buf;
+-	struct samr_Password nt_hash;
++	struct _samr_Credentials_t cr = { CRED_TYPE_PLAIN_TEXT, {0}};
+ 
+ 	become_root();
+ 	status = netr_creds_server_step_check(p, p->mem_ctx,
+@@ -1307,6 +1347,10 @@ NTSTATUS _netr_ServerPasswordSet2(struct
+ 		return status;
+ 	}
+ 
++	DEBUG(3,("_netr_ServerPasswordSet2: Server Password Seti2 by remote "
++		 "machine:[%s] on account [%s]\n",
++		 r->in.computer_name, creds->computer_name));
++
+ 	memcpy(password_buf.data, r->in.new_password->data, 512);
+ 	SIVAL(password_buf.data, 512, r->in.new_password->length);
+ 
+@@ -1316,18 +1360,23 @@ NTSTATUS _netr_ServerPasswordSet2(struct
+ 		netlogon_creds_arcfour_crypt(creds, password_buf.data, 516);
+ 	}
+ 
+-	if (!extract_pw_from_buffer(p->mem_ctx, password_buf.data, &plaintext)) {
++	if (!decode_pw_buffer(p->mem_ctx,
++			      password_buf.data,
++			      (char**) &plaintext.data,
++			      &plaintext.length,
++			      CH_UTF16)) {
++		DEBUG(2,("_netr_ServerPasswordSet2: unable to extract password "
++			 "from a buffer. Rejecting auth request as a wrong password\n"));
+ 		TALLOC_FREE(creds);
+ 		return NT_STATUS_WRONG_PASSWORD;
+ 	}
+ 
+-	mdfour(nt_hash.hash, plaintext.data, plaintext.length);
+-
++	cr.creds.password = (const char*) plaintext.data;
+ 	status = netr_set_machine_account_password(p->mem_ctx,
+ 						   p->session_info,
+ 						   p->msg_ctx,
+ 						   creds->account_name,
+-						   &nt_hash);
++						   &cr);
+ 	TALLOC_FREE(creds);
+ 	return status;
+ }
